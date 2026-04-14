@@ -88,6 +88,7 @@ CREATED ──► AWAITING_AUD ──► AUD_RECEIVED ──► PROCESSING_NGN
 
 Special states:
   FLOAT_INSUFFICIENT — NGN float too low, transfer paused until topped up
+  FLOAT_INSUFFICIENT → AUD_RECEIVED when float is restored (bidirectional pause/resume)
 ```
 
 ## Critical Design Decisions

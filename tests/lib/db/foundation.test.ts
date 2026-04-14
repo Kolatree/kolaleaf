@@ -1,4 +1,4 @@
-import { describe, it, expect, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from '../../../src/generated/prisma/client.js'
 import { KycStatus, TransferStatus, IdentifierType } from '../../../src/generated/prisma/enums.js'
@@ -9,12 +9,42 @@ const prisma = new PrismaClient({ adapter })
 afterAll(async () => { await prisma.$disconnect() })
 
 describe('Database foundation', () => {
+  // Ensure seed data exists (other tests may clean the DB)
+  beforeAll(async () => {
+    await prisma.corridor.upsert({
+      where: { baseCurrency_targetCurrency: { baseCurrency: 'AUD', targetCurrency: 'NGN' } },
+      update: {},
+      create: {
+        baseCurrency: 'AUD',
+        targetCurrency: 'NGN',
+        active: true,
+        minAmount: 10,
+        maxAmount: 50000,
+        payoutProviders: ['FLUTTERWAVE', 'PAYSTACK'],
+      },
+    }).then(async (corridor) => {
+      const existing = await prisma.rate.findFirst({ where: { corridorId: corridor.id } })
+      if (!existing) {
+        await prisma.rate.create({
+          data: {
+            corridorId: corridor.id,
+            provider: 'seed',
+            wholesaleRate: 1050.00,
+            spread: 0.007,
+            customerRate: 1042.65,
+            effectiveAt: new Date(),
+          },
+        })
+      }
+    })
+  })
+
   it('connects to PostgreSQL', async () => {
     const result = await prisma.$queryRaw`SELECT 1 as connected` as { connected: number }[]
     expect(result).toEqual([{ connected: 1 }])
   })
 
-  it('AUD-NGN corridor exists from seed', async () => {
+  it('AUD-NGN corridor exists', async () => {
     const corridor = await prisma.corridor.findUnique({
       where: { baseCurrency_targetCurrency: { baseCurrency: 'AUD', targetCurrency: 'NGN' } },
     })

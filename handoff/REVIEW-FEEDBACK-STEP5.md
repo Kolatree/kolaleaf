@@ -1,0 +1,31 @@
+# Review Feedback — Step 5: Flutterwave + Paystack NGN Payout
+Date: 2026-04-14
+Ready for Builder: NO
+
+## Must Fix
+
+1. **`src/lib/payments/payout/webhooks.ts:33`** — Flutterwave webhook signature verification uses plain string equality (`signature !== webhookSecret`). This is not timing-safe and is vulnerable to timing attacks. An attacker who can measure response times can brute-force the webhook secret one character at a time. **How to fix:** Use `crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(webhookSecret))` wrapped in a try/catch (for length mismatch), same pattern as the Monoova `verify-signature.ts`. This is a money transmitter — webhook forgery means an attacker can trigger false payout confirmations.
+
+2. **`src/lib/payments/payout/webhooks.ts:106`** — Paystack webhook signature verification also uses plain string equality (`signature !== expectedSignature`). Same timing attack vulnerability. **How to fix:** Use `crypto.timingSafeEqual(Buffer.from(expectedSignature, 'hex'), Buffer.from(signature, 'hex'))` wrapped in try/catch. The HMAC-SHA512 computation is correct, but the comparison leaks timing information.
+
+3. **`src/lib/payments/payout/orchestrator.ts:155-163`** — The failover path sets `retryCount` to 0 at line 131, then overwrites it to -1 at line 162, relying on the state machine incrementing it back to 0. This is fragile and confusing — two separate `prisma.transfer.update` calls for the same field in the same code path, with a comment explaining why it needs to be -1. If the state machine's increment logic ever changes, this silently breaks. **How to fix:** Set `retryCount` to -1 in a single update (remove the line 131 update that sets it to 0), or better: add an optional `skipRetryIncrement` flag to `transitionTransfer` for failover scenarios. Either way, the double-write must go — it is a race condition waiting to happen and the -1 value has no business meaning outside this workaround.
+
+## Should Fix
+
+1. **`src/lib/payments/payout/webhooks.ts:5-8`** — The `getOrchestrator` function uses a dynamic import with a suspicious cast: `(mod as unknown as { getOrchestrator: () => unknown }).getOrchestrator()`. The orchestrator module exports `PayoutOrchestrator` as a class, not a `getOrchestrator` function. This code path will throw at runtime when called from a real webhook (not mocked in tests). The tests mock the entire `../orchestrator` module so this bug is hidden. **Recommendation:** Fix the import to actually construct or retrieve a `PayoutOrchestrator` instance, or export a singleton/factory from `orchestrator.ts`.
+
+2. **`src/lib/payments/payout/orchestrator.ts:129-136`** — The failover path resets `retryCount` and switches `payoutProvider` before calling `this.fallback.initiatePayout`. If the Paystack API call at line 140 throws, the transfer is left in `NGN_RETRY` state with provider already switched to PAYSTACK and retryCount reset. There is no rollback. **Recommendation:** Move the provider/retryCount update to after the Paystack `initiatePayout` call succeeds (just before the state transition at line 165). This matches the pattern used in `initiatePayout` where the update happens after the provider call.
+
+3. **`src/lib/payments/payout/float-monitor.ts:65-75`** — The 11-line stream-of-consciousness comment explaining why `AUD_RECEIVED` is the target state should be removed or condensed to a single line. The code is clear with the transition map update. The comment reads like debugging notes left in production code. **Recommendation:** Replace with a one-line comment: `// FLOAT_INSUFFICIENT -> AUD_RECEIVED: re-queue for payout pickup`.
+
+4. **`src/lib/payments/payout/flutterwave.ts:33`** — `params.amount.toNumber()` converts a Decimal to a JavaScript number for the Flutterwave API body. For very large NGN amounts this could lose precision. NGN amounts in the hundreds of millions are plausible for business transfers. **Recommendation:** Use `params.amount.toFixed(2)` and let the JSON serializer handle it as a string, or verify Flutterwave's API accepts string amounts. Log to BUILD-LOG if deferred.
+
+5. **`src/lib/payments/payout/webhooks.ts:48-56` and `119-128`** — Webhook events are stored before processing, then updated to `processed: true` after. If the orchestrator call throws, the event stays as `processed: false` — but there is no retry mechanism to pick up these unprocessed events. The Monoova webhook handler (Step 4) stores the event only after processing, with a separate error path. The inconsistency is not a bug today, but when the reconciliation worker (future step) looks for unprocessed events, these two patterns will produce different semantics. **Recommendation:** Log to BUILD-LOG so the reconciliation step accounts for both patterns.
+
+## Escalate to Architect
+
+1. **`FLOAT_INSUFFICIENT -> AUD_RECEIVED` transition** — The transition was added to `transitions.ts:7` and the tests pass. However, the CLAUDE.md state machine diagram shows `FLOAT_INSUFFICIENT` as a special state with no explicit transitions drawn. The brief says to transition back to `AUD_RECEIVED` so the payout queue picks them up. This is logically sound — it avoids duplicating the payout initiation logic. But it means `FLOAT_INSUFFICIENT` is no longer a holding state; it is a bidirectional pause. Arch should confirm this is the intended design and update the state machine diagram in CLAUDE.md accordingly.
+
+## Cleared
+
+Both FlutterwaveProvider and PaystackProvider implement the `PayoutProvider` interface correctly. Paystack kobo conversion (`amount.mul(100).round().toNumber()`) at `paystack.ts:30` is correct — verified by test at `paystack.test.ts:84` asserting 250000.50 NGN becomes 25000050 kobo. Failover logic: Flutterwave 3x fail switches to Paystack, Paystack 3x fail escalates to NEEDS_MANUAL — correct per brief. Webhook idempotency via `WebhookEvent` unique constraint works for both providers. Float monitoring: pause moves AUD_RECEIVED to FLOAT_INSUFFICIENT, resume moves back to AUD_RECEIVED. Manual admin retry from NEEDS_MANUAL records ADMIN actor with actorId in the audit trail. All money is handled as Decimal — no floating point arithmetic in business logic (the `toNumber()` calls are only at the API boundary). All 45 payout tests pass. Full suite: 166/166 pass across 22 test files.

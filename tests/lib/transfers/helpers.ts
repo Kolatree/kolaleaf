@@ -80,8 +80,11 @@ export async function createTestTransfer(
 }
 
 export async function cleanupTestData() {
+  await prisma.complianceReport.deleteMany({})
+  await prisma.webhookEvent.deleteMany({})
   await prisma.transferEvent.deleteMany({})
   await prisma.transfer.deleteMany({})
+  await prisma.referral.deleteMany({})
   await prisma.recipient.deleteMany({})
   await prisma.authEvent.deleteMany({})
   await prisma.session.deleteMany({})

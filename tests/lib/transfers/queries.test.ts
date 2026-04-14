@@ -28,8 +28,7 @@ beforeAll(async () => {
 })
 
 afterEach(async () => {
-  await prisma.transferEvent.deleteMany({})
-  await prisma.transfer.deleteMany({})
+  await cleanupTestData()
 })
 
 afterAll(async () => {

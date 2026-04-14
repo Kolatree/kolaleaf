@@ -7,6 +7,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     fileParallelism: false,
+    pool: 'forks',
     sequence: { concurrent: false },
   },
   resolve: {

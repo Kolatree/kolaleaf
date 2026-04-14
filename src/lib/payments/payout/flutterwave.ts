@@ -4,14 +4,14 @@ import type {
   PayoutParams,
   PayoutResult,
   PayoutStatusResult,
-} from './types.js'
+} from './types'
 import {
   PayoutError,
   InsufficientBalanceError,
   InvalidBankError,
   ProviderTimeoutError,
   RateLimitError,
-} from './types.js'
+} from './types'
 
 interface FlutterwaveConfig {
   secretKey: string
@@ -41,16 +41,16 @@ export class FlutterwaveProvider implements PayoutProvider {
 
     return {
       providerRef: String(response.data.id),
-      status: response.data.status,
+      status: String(response.data.status),
     }
   }
 
   async getPayoutStatus(providerRef: string): Promise<PayoutStatusResult> {
     const response = await this.request('GET', `/transfers/${providerRef}`)
 
-    const result: PayoutStatusResult = { status: response.data.status }
+    const result: PayoutStatusResult = { status: String(response.data.status) }
     if (response.data.status === 'FAILED' && response.data.complete_message) {
-      result.failureReason = response.data.complete_message
+      result.failureReason = String(response.data.complete_message)
     }
     return result
   }
@@ -66,7 +66,7 @@ export class FlutterwaveProvider implements PayoutProvider {
       if (wallet) return new Decimal(wallet.available_balance)
     }
     // Single wallet response
-    return new Decimal(wallets.available_balance)
+    return new Decimal(String(wallets.available_balance))
   }
 
   private async request(

@@ -3,7 +3,7 @@ export type {
   PayoutParams,
   PayoutResult,
   PayoutStatusResult,
-} from './types.js'
+} from './types'
 export {
   PayoutError,
   InsufficientBalanceError,
@@ -11,9 +11,9 @@ export {
   ProviderTimeoutError,
   RateLimitError,
   generatePayoutReference,
-} from './types.js'
-export { FlutterwaveProvider } from './flutterwave.js'
-export { PaystackProvider } from './paystack.js'
-export { PayoutOrchestrator } from './orchestrator.js'
-export { handleFlutterwaveWebhook, handlePaystackWebhook } from './webhooks.js'
-export { FloatMonitor } from './float-monitor.js'
+} from './types'
+export { FlutterwaveProvider } from './flutterwave'
+export { PaystackProvider } from './paystack'
+export { PayoutOrchestrator } from './orchestrator'
+export { handleFlutterwaveWebhook, handlePaystackWebhook } from './webhooks'
+export { FloatMonitor } from './float-monitor'

@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { TransferStatus } from '../../../src/generated/prisma/enums.js'
+import { TransferStatus } from '../../../src/generated/prisma/enums'
 import {
   VALID_TRANSITIONS,
   TERMINAL_STATES,
   isValidTransition,
-} from '../../../src/lib/transfers/transitions.js'
+} from '../../../src/lib/transfers/transitions'
 
 describe('VALID_TRANSITIONS', () => {
   it('defines transitions for all 13 TransferStatus values', () => {

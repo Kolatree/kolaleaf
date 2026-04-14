@@ -1,20 +1,20 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import Decimal from 'decimal.js'
-import { createTransfer } from '../../../src/lib/transfers/create.js'
+import { createTransfer } from '../../../src/lib/transfers/create'
 import {
   KycNotVerifiedError,
   InvalidCorridorError,
   AmountOutOfRangeError,
   DailyLimitExceededError,
   RecipientNotOwnedError,
-} from '../../../src/lib/transfers/errors.js'
+} from '../../../src/lib/transfers/errors'
 import {
   prisma,
   createTestUser,
   createTestRecipient,
   getTestCorridorId,
   cleanupTestData,
-} from './helpers.js'
+} from './helpers'
 
 let verifiedUserId: string
 let recipientId: string

@@ -1,17 +1,17 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
-import { cancelTransfer } from '../../../src/lib/transfers/cancel.js'
+import { cancelTransfer } from '../../../src/lib/transfers/cancel'
 import {
   InvalidTransitionError,
   NotTransferOwnerError,
   TransferNotFoundError,
-} from '../../../src/lib/transfers/errors.js'
+} from '../../../src/lib/transfers/errors'
 import {
   prisma,
   createTestUser,
   createTestRecipient,
   createTestTransfer,
   cleanupTestData,
-} from './helpers.js'
+} from './helpers'
 
 let userId: string
 let recipientId: string

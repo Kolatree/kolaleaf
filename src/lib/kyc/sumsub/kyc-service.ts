@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/db/client'
 import { logAuthEvent } from '@/lib/auth/audit'
-import type { SumsubClient } from './client.js'
+import type { SumsubClient } from './client'
 import type { KycStatus } from '@/generated/prisma/client'
 
 interface InitiateKycResult {

@@ -1,4 +1,4 @@
-import { prisma } from '../db/client.js'
+import { prisma } from '../db/client'
 
 const STALE_ALERT_HOURS = 12
 const BLOCK_TRANSFERS_HOURS = 24

@@ -1,18 +1,18 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
-import { TransferStatus } from '../../../src/generated/prisma/enums.js'
-import { transitionTransfer } from '../../../src/lib/transfers/state-machine.js'
+import { TransferStatus } from '../../../src/generated/prisma/enums'
+import { transitionTransfer } from '../../../src/lib/transfers/state-machine'
 import {
   InvalidTransitionError,
   ConcurrentModificationError,
   TransferNotFoundError,
-} from '../../../src/lib/transfers/errors.js'
+} from '../../../src/lib/transfers/errors'
 import {
   prisma,
   createTestUser,
   createTestRecipient,
   createTestTransfer,
   cleanupTestData,
-} from './helpers.js'
+} from './helpers'
 
 let userId: string
 let recipientId: string

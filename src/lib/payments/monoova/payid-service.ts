@@ -1,9 +1,9 @@
 import Decimal from 'decimal.js'
-import { prisma } from '../../db/client.js'
-import { transitionTransfer } from '../../transfers/state-machine.js'
-import { TransferNotFoundError } from '../../transfers/errors.js'
-import type { MonoovaClient } from './client.js'
-import type { Transfer } from '../../../generated/prisma/client.js'
+import { prisma } from '../../db/client'
+import { transitionTransfer } from '../../transfers/state-machine'
+import { TransferNotFoundError } from '../../transfers/errors'
+import type { MonoovaClient } from './client'
+import type { Transfer } from '../../../generated/prisma/client'
 
 const AMOUNT_TOLERANCE = new Decimal('0.01')
 

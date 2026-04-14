@@ -1,11 +1,11 @@
-import { prisma } from '../../db/client.js'
-import { transitionTransfer } from '../../transfers/state-machine.js'
-import { TransferStatus, ActorType, PayoutProvider as PayoutProviderEnum } from '../../../generated/prisma/enums.js'
-import type { Transfer } from '../../../generated/prisma/client.js'
-import type { PayoutProvider } from './types.js'
-import { generatePayoutReference } from './types.js'
-import { FlutterwaveProvider } from './flutterwave.js'
-import { PaystackProvider } from './paystack.js'
+import { prisma } from '../../db/client'
+import { transitionTransfer } from '../../transfers/state-machine'
+import { TransferStatus, ActorType, PayoutProvider as PayoutProviderEnum } from '../../../generated/prisma/enums'
+import type { Transfer } from '../../../generated/prisma/client'
+import type { PayoutProvider } from './types'
+import { generatePayoutReference } from './types'
+import { FlutterwaveProvider } from './flutterwave'
+import { PaystackProvider } from './paystack'
 
 const MAX_RETRIES = 3
 

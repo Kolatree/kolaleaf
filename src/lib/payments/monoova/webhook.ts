@@ -1,7 +1,7 @@
 import Decimal from 'decimal.js'
-import { prisma } from '../../db/client.js'
-import { verifyMonoovaSignature } from './verify-signature.js'
-import { handlePaymentReceived } from './payid-service.js'
+import { prisma } from '../../db/client'
+import { verifyMonoovaSignature } from './verify-signature'
+import { handlePaymentReceived } from './payid-service'
 
 interface MonoovaWebhookPayload {
   eventId: string

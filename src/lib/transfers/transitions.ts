@@ -1,4 +1,4 @@
-import { TransferStatus } from '../../generated/prisma/enums.js'
+import { TransferStatus } from '../../generated/prisma/enums'
 
 export const VALID_TRANSITIONS: Record<TransferStatus, TransferStatus[]> = {
   CREATED:            ['AWAITING_AUD', 'CANCELLED'],

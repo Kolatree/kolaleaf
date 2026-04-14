@@ -1,6 +1,6 @@
-import { prisma } from '../db/client.js'
-import type { Transfer, TransferEvent } from '../../generated/prisma/client.js'
-import type { TransferStatus } from '../../generated/prisma/enums.js'
+import { prisma } from '../db/client'
+import type { Transfer, TransferEvent } from '../../generated/prisma/client'
+import type { TransferStatus } from '../../generated/prisma/enums'
 
 export async function getTransfer(
   transferId: string,

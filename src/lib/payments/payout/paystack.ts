@@ -3,8 +3,8 @@ import type {
   PayoutParams,
   PayoutResult,
   PayoutStatusResult,
-} from './types.js'
-import { PayoutError } from './types.js'
+} from './types'
+import { PayoutError } from './types'
 
 interface PaystackConfig {
   secretKey: string

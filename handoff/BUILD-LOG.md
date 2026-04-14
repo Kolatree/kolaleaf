@@ -5,9 +5,9 @@
 
 ## Current Status
 
-**Active step:** 1 -- Project Scaffold + Database Schema
-**Last cleared:** N/A (first step)
-**Pending deploy:** NO (scaffold only, no deployment target yet)
+**Active step:** 9 -- API Routes + Pages (Full Stack)
+**Last cleared:** Step 8
+**Pending deploy:** NO
 
 ---
 
@@ -35,6 +35,42 @@ Decisions made:
 - Docker Postgres on port 5433 (5432 occupied by existing porizo-postgres container)
 - Generated Prisma client gitignored, regenerated via postinstall hook
 - Used `prisma-client` generator (Prisma 7 default) instead of deprecated `prisma-client-js`
+
+Reviewer findings: [pending review]
+Deploy: N/A
+
+---
+
+### Step 9 -- API Routes + Pages (Full Stack) -- REVIEW PENDING
+*Date: 2026-04-14*
+
+Files changed:
+- `src/lib/auth/middleware.ts` -- auth middleware (cookie parsing, session validation, requireAuth/requireKyc)
+- `src/app/api/auth/{register,login,logout,verify-2fa}/route.ts` -- auth API routes
+- `src/app/api/transfers/route.ts`, `[id]/route.ts`, `[id]/cancel/route.ts` -- transfer CRUD + cancel
+- `src/app/api/recipients/route.ts`, `[id]/route.ts` -- recipient CRUD + delete
+- `src/app/api/webhooks/{monoova,flutterwave,paystack,sumsub}/route.ts` -- webhook handlers (raw body)
+- `src/app/api/kyc/{initiate,status}/route.ts` -- KYC endpoints
+- `src/app/api/rates/[corridorId]/route.ts` -- public rate endpoint
+- `src/app/(auth)/layout.tsx`, `login/page.tsx`, `register/page.tsx` -- auth pages
+- `src/app/(dashboard)/layout.tsx`, `_components/bottom-nav.tsx` -- dashboard shell
+- `src/app/(dashboard)/{send,activity,recipients,account}/page.tsx` -- 4 dashboard pages
+- `src/app/globals.css` -- Kolaleaf theme colors (purple-to-green gradient)
+- `src/app/layout.tsx`, `src/app/page.tsx` -- branding + redirect to /send
+- `tests/lib/auth/middleware.test.ts` -- 7 auth middleware tests
+- `tests/app/api/auth/{register,login}.test.ts` -- 11 auth route tests
+- `tests/app/api/webhooks/monoova.test.ts` -- 4 webhook tests
+- `tests/app/api/rates/corridor.test.ts` -- 2 rate tests
+- All `src/lib/**/*.ts` -- stripped .js import extensions for Turbopack compatibility
+- `src/lib/payments/payout/webhooks.ts`, `flutterwave.ts` -- type fixes for Prisma Json + unknown
+- `src/lib/transfers/state-machine.ts` -- metadata cast for Prisma Json type
+
+Decisions made:
+- Custom cookie-based auth (kolaleaf_session, HttpOnly, SameSite=Lax, Max-Age=900)
+- Webhook routes use request.text() for raw body signature verification
+- Dashboard layout does server-side session check, redirects to /login if unauthenticated
+- Send page polls rates every 60s with Decimal.js math
+- Cleaned .js extensions from all TS imports (Turbopack doesn't resolve .ts → .js)
 
 Reviewer findings: [pending review]
 Deploy: N/A

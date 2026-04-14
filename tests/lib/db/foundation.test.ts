@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { PrismaPg } from '@prisma/adapter-pg'
-import { PrismaClient } from '../../../src/generated/prisma/client.js'
-import { KycStatus, TransferStatus, IdentifierType } from '../../../src/generated/prisma/enums.js'
+import { PrismaClient } from '../../../src/generated/prisma/client'
+import { KycStatus, TransferStatus, IdentifierType } from '../../../src/generated/prisma/enums'
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
 const prisma = new PrismaClient({ adapter })

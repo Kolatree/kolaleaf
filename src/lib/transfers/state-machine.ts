@@ -1,12 +1,12 @@
-import { TransferStatus, ActorType } from '../../generated/prisma/enums.js'
-import { prisma } from '../db/client.js'
-import { isValidTransition } from './transitions.js'
+import { TransferStatus, ActorType } from '../../generated/prisma/enums'
+import { prisma } from '../db/client'
+import { isValidTransition } from './transitions'
 import {
   InvalidTransitionError,
   ConcurrentModificationError,
   TransferNotFoundError,
-} from './errors.js'
-import type { Transfer } from '../../generated/prisma/client.js'
+} from './errors'
+import type { Transfer } from '../../generated/prisma/client'
 
 interface TransitionParams {
   transferId: string
@@ -72,7 +72,7 @@ export async function transitionTransfer(params: TransitionParams): Promise<Tran
         toStatus: effectiveToStatus,
         actor,
         actorId,
-        metadata: metadata ?? undefined,
+        metadata: (metadata as object) ?? undefined,
       },
     })
 

@@ -1,1 +1,1 @@
-export * from './monoova/index.js'
+export * from './monoova/index'

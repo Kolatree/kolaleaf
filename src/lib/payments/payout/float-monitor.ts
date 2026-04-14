@@ -1,7 +1,7 @@
 import Decimal from 'decimal.js'
-import { prisma } from '../../db/client.js'
-import { transitionTransfer } from '../../transfers/state-machine.js'
-import { TransferStatus, ActorType } from '../../../generated/prisma/enums.js'
+import { prisma } from '../../db/client'
+import { transitionTransfer } from '../../transfers/state-machine'
+import { TransferStatus, ActorType } from '../../../generated/prisma/enums'
 
 interface FloatBalanceProvider {
   name: string

@@ -1,9 +1,9 @@
 import crypto, { timingSafeEqual } from 'crypto'
-import { prisma } from '../../db/client.js'
+import { prisma } from '../../db/client'
 
 // Lazy import to allow mocking in tests
 async function getOrchestrator() {
-  const mod = await import('./orchestrator.js')
+  const mod = await import('./orchestrator')
   return mod.getOrchestrator()
 }
 
@@ -52,7 +52,7 @@ export async function handleFlutterwaveWebhook(
       provider: 'FLUTTERWAVE',
       eventId,
       eventType: body.event,
-      payload: body as unknown as Record<string, unknown>,
+      payload: body as object,
       processed: false,
     },
   })
@@ -126,7 +126,7 @@ export async function handlePaystackWebhook(
       provider: 'PAYSTACK',
       eventId,
       eventType: body.event,
-      payload: body as unknown as Record<string, unknown>,
+      payload: body as object,
       processed: false,
     },
   })

@@ -1,6 +1,6 @@
-import { prisma } from '../../db/client.js'
-import { verifySumsubSignature } from './verify-signature.js'
-import { handleKycApproved, handleKycRejected } from './kyc-service.js'
+import { prisma } from '../../db/client'
+import { verifySumsubSignature } from './verify-signature'
+import { handleKycApproved, handleKycRejected } from './kyc-service'
 
 interface SumsubWebhookPayload {
   applicantId: string

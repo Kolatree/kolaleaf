@@ -1,8 +1,8 @@
 import Decimal from 'decimal.js'
-import { prisma } from '../db/client.js'
-import type { FxRateProvider } from './fx-fetcher.js'
-import { calculateCustomerRate } from './spread.js'
-import type { Rate } from '../../generated/prisma/client.js'
+import { prisma } from '../db/client'
+import type { FxRateProvider } from './fx-fetcher'
+import { calculateCustomerRate } from './spread'
+import type { Rate } from '../../generated/prisma/client'
 
 const STALE_THRESHOLD_HOURS = 12
 

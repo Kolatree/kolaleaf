@@ -1,8 +1,8 @@
-export { VALID_TRANSITIONS, TERMINAL_STATES, isValidTransition } from './transitions.js'
-export { transitionTransfer } from './state-machine.js'
-export { createTransfer } from './create.js'
-export { cancelTransfer } from './cancel.js'
-export { getTransfer, listTransfers, getTransferWithEvents } from './queries.js'
+export { VALID_TRANSITIONS, TERMINAL_STATES, isValidTransition } from './transitions'
+export { transitionTransfer } from './state-machine'
+export { createTransfer } from './create'
+export { cancelTransfer } from './cancel'
+export { getTransfer, listTransfers, getTransferWithEvents } from './queries'
 export {
   InvalidTransitionError,
   ConcurrentModificationError,
@@ -13,4 +13,4 @@ export {
   DailyLimitExceededError,
   RecipientNotOwnedError,
   NotTransferOwnerError,
-} from './errors.js'
+} from './errors'

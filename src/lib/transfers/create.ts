@@ -1,13 +1,13 @@
 import Decimal from 'decimal.js'
-import { prisma } from '../db/client.js'
+import { prisma } from '../db/client'
 import {
   KycNotVerifiedError,
   InvalidCorridorError,
   AmountOutOfRangeError,
   DailyLimitExceededError,
   RecipientNotOwnedError,
-} from './errors.js'
-import type { Transfer } from '../../generated/prisma/client.js'
+} from './errors'
+import type { Transfer } from '../../generated/prisma/client'
 
 interface CreateTransferParams {
   userId: string

@@ -1,13 +1,13 @@
-import { prisma } from '../db/client.js'
-import { isValidTransition } from './transitions.js'
+import { prisma } from '../db/client'
+import { isValidTransition } from './transitions'
 import {
   InvalidTransitionError,
   ConcurrentModificationError,
   TransferNotFoundError,
   NotTransferOwnerError,
-} from './errors.js'
-import type { Transfer } from '../../generated/prisma/client.js'
-import type { TransferStatus } from '../../generated/prisma/enums.js'
+} from './errors'
+import type { Transfer } from '../../generated/prisma/client'
+import type { TransferStatus } from '../../generated/prisma/enums'
 
 interface CancelParams {
   transferId: string

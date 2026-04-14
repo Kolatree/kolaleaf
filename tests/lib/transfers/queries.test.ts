@@ -3,15 +3,15 @@ import {
   getTransfer,
   listTransfers,
   getTransferWithEvents,
-} from '../../../src/lib/transfers/queries.js'
-import { transitionTransfer } from '../../../src/lib/transfers/state-machine.js'
+} from '../../../src/lib/transfers/queries'
+import { transitionTransfer } from '../../../src/lib/transfers/state-machine'
 import {
   prisma,
   createTestUser,
   createTestRecipient,
   createTestTransfer,
   cleanupTestData,
-} from './helpers.js'
+} from './helpers'
 
 let userId: string
 let recipientId: string

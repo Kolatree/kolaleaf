@@ -1,1 +1,5 @@
-export {}
+export { DefaultFxRateProvider } from './fx-fetcher.js'
+export type { FxRateProvider } from './fx-fetcher.js'
+export { calculateCustomerRate, calculateReceiveAmount } from './spread.js'
+export { RateService } from './rate-service.js'
+export { StalenessMonitor } from './staleness-monitor.js'

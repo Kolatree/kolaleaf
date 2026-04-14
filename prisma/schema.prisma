@@ -73,8 +73,9 @@ model User {
   totpEnabled   Boolean          @default(false)
   backupCodes   String[]         @default([])
   kycStatus     KycStatus        @default(PENDING)
-  kycProviderId String?
-  dailyLimit    Decimal          @default(10000) @db.Decimal(12, 2)
+  kycProviderId        String?
+  kycRejectionReasons  String[]         @default([])
+  dailyLimit           Decimal          @default(10000) @db.Decimal(12, 2)
   referralCode  String           @unique @default(cuid())
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt

@@ -1,19 +1,41 @@
-# Review Feedback -- Step 1
+# Review Feedback -- Steps 2 + 3
 Date: 2026-04-14
-Ready for Builder: YES
+Ready for Builder: NO
+
+---
 
 ## Must Fix
 
-None.
+1. **prisma/schema.prisma:225 -- AuthEvent onDelete: Cascade will destroy audit trail on user deletion.** The AuthEvent model has `onDelete: Cascade` on the User relation. CLAUDE.md states: "All authentication events, state transitions, and admin actions must be logged immutably. Records retained 7 years per the AML/CTF Act." If a user is deleted, every authentication event (LOGIN, LOGIN_FAILED, REGISTER) is destroyed. This violates AUSTRAC's 7-year retention requirement. Change to `onDelete: Restrict` (or `SetNull` with userId made optional, depending on architect's preference). This applies to the migration SQL as well -- the FK constraint currently reads `ON DELETE CASCADE`.
+
+---
 
 ## Should Fix
 
-1. **package.json:14-16** -- Vestigial seed config. The `"prisma": {"seed": "npx tsx prisma/seed.ts"}` block in package.json is a Prisma 5/6 pattern. Prisma 7 reads seed config from `prisma.config.ts` (line 10), where Bob already has it correctly. The package.json entry is dead config. Remove it to avoid confusion when a future developer wonders which one is authoritative.
+1. **src/lib/auth/login.ts:22-24 -- Timing side-channel on identifier lookup.** When an identifier is not found, the function returns immediately with "Invalid credentials." When the identifier exists but the password is wrong, a `bcrypt.compare` runs first (~250ms at cost 12). An attacker can measure response time to enumerate which email/phone identifiers are registered. For a remittance platform, this leaks which users hold accounts. Fix: run a dummy `bcrypt.compare` against a pre-computed hash when the identifier is not found, so both paths take the same time.
+
+2. **src/lib/auth/totp.ts:17-26 -- Backup codes stored as plaintext.** Bob flagged this himself in REVIEW-REQUEST-STEP2.md. The `generateBackupCodes` function returns plaintext codes that are stored in `User.backupCodes` as a `String[]`. If the database is breached, these codes are immediately usable. They should be bcrypt-hashed before storage, with only the plaintext shown to the user once at generation time. Verification would then compare user input against each stored hash. This is a standard practice for backup codes.
+
+3. **src/lib/transfers/create.ts:95-98 -- Decimal values pass through toNumber().** `sendAmount.toNumber()`, `receiveAmount.toNumber()`, etc. convert `decimal.js` values to JavaScript floats before passing to Prisma. For the current value ranges (max 50,000 AUD, rates ~1042) this is safe, but it is a latent precision risk. Prisma accepts string values for Decimal fields. Prefer `sendAmount.toString()` or pass the Decimal object directly, which Prisma coerces correctly. This prevents future surprises if amounts or rates grow.
+
+4. **src/lib/transfers/state-machine.ts:189 -- Happy-path test expects 6 events but createTestTransfer already creates 1.** The test at `tests/lib/transfers/state-machine.test.ts:194` expects 6 events (1 initial from helper + 5 transitions). This is correct but tightly coupled to the helper's implementation. If the helper changes, this test breaks silently. Not blocking, but worth a comment in the test.
+
+---
 
 ## Escalate to Architect
 
-1. **Recipient cascade rule contradiction in the brief.** The architect's Prisma schema (ARCHITECT-BRIEF.md line 154) specifies `onDelete: Cascade` on the Recipient-to-User relation. But the Flags section (ARCHITECT-BRIEF.md line 412) says: "Do NOT cascade on Transfer or Recipient." Bob followed the schema and applied Cascade. The migration SQL confirms `ON DELETE CASCADE` on Recipient (migration.sql:214). For an AUSTRAC-registered remittance platform, cascading deletion of recipients when a user is deleted could destroy audit trail data that regulators require. Architect needs to clarify which is the intended behavior.
+1. **AuthEvent cascade rule -- Architect must decide the deletion strategy.** The immediate fix is changing `onDelete: Cascade` to `onDelete: Restrict` on AuthEvent, which means users with auth events can never be deleted. This is correct for compliance but means the system needs a separate "soft delete" or anonymization strategy for user account closure. Architect should specify: (a) Should we use `Restrict` and handle user closure via a `deactivated` flag? (b) Or use `SetNull` to preserve events but sever the FK link? Either way, the cascade must not destroy records.
+
+2. **Registration creates session before email verification.** `register.ts` creates a session immediately on registration without verifying the email identifier. The `loginUser` function correctly blocks unverified identifiers for subsequent logins. So the user gets one 15-minute session, then cannot log in again until verified. Is this the intended flow? If so, the registration session should be flagged as "limited" or "unverified" in a future step. If not, the session should not be created until the email is verified.
+
+---
 
 ## Cleared
 
-All 12 models, 7 enums, field types, Decimal precision on all money fields, defaults, unique constraints, and cascade rules match the architect's schema exactly. Prisma 7 adaptations (generator, adapter, config location, enum imports) are correct and well-documented. `.env` is gitignored, no hardcoded secrets, no payment SDKs installed, TypeScript strict mode is on, ESLint and Vitest are configured, all 6 tests pass. Directory structure matches the spec with all 6 placeholder modules. The port 5433 deviation is local-dev only and documented. Step 1 is clear.
+**Step 2 -- Auth (7 files, 37 tests):**
+Password hashing (bcrypt cost 12), session management (256-bit tokens, 15-min expiry, create/validate/revoke/revokeAll/cleanExpired), TOTP 2FA (otplib, secret generation, verification), multi-identifier identity (add/verify/find/list), registration (user + identifier + password + session + referral), login (identifier lookup + password verify + 2FA flag + audit), and audit logging (auth events with metadata). All 37 tests pass. Schema migration adds `passwordHash`, `totpSecret`, `totpEnabled`, `backupCodes` to User and creates `AuthEvent` model. Code is clean, well-structured, and follows established patterns.
+
+**Step 3 -- Transfer State Machine (7 files, 51 tests):**
+Transition map covers all 13 states with correct valid/invalid paths matching CLAUDE.md state diagram. State machine uses Prisma `$transaction` with optimistic locking via `updateMany` + status condition. Retry logic correctly caps at 3 and forces NEEDS_MANUAL. Daily limit calculation correctly excludes CANCELLED/EXPIRED/REFUNDED and uses UTC dates. All math uses decimal.js. Domain errors are well-defined (9 error classes). Cancellation is owner-only from CREATED/AWAITING_AUD only. Queries are ownership-scoped with cursor pagination. All 51 tests pass. The createTransfer function correctly gates on KYC verification, recipient ownership, corridor validity, amount range, and daily limit.
+
+**Combined: 94 tests pass, 0 failures.**

@@ -1,1 +1,7 @@
-export {}
+export { hashPassword, verifyPassword } from './password'
+export { createSession, validateSession, revokeSession, revokeAllUserSessions, cleanExpiredSessions } from './sessions'
+export { generateTotpSecret, verifyTotpToken, generateBackupCodes } from './totp'
+export { addIdentifier, verifyIdentifier, findUserByIdentifier, getUserIdentifiers } from './identity'
+export { registerUser } from './register'
+export { loginUser } from './login'
+export { logAuthEvent } from './audit'

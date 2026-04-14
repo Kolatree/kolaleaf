@@ -6,6 +6,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    fileParallelism: false,
+    sequence: { concurrent: false },
   },
   resolve: {
     alias: {

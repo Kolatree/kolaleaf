@@ -1,0 +1,115 @@
+import Decimal from 'decimal.js'
+import { prisma } from '../db/client.js'
+import {
+  KycNotVerifiedError,
+  InvalidCorridorError,
+  AmountOutOfRangeError,
+  DailyLimitExceededError,
+  RecipientNotOwnedError,
+} from './errors.js'
+import type { Transfer } from '../../generated/prisma/client.js'
+
+interface CreateTransferParams {
+  userId: string
+  recipientId: string
+  corridorId: string
+  sendAmount: Decimal
+  exchangeRate: Decimal
+  fee: Decimal
+}
+
+export async function createTransfer(params: CreateTransferParams): Promise<Transfer> {
+  const { userId, recipientId, corridorId, sendAmount, exchangeRate, fee } = params
+
+  return prisma.$transaction(async (tx) => {
+    // 1. Validate user exists and KYC is VERIFIED
+    const user = await tx.user.findUniqueOrThrow({ where: { id: userId } })
+    if (user.kycStatus !== 'VERIFIED') {
+      throw new KycNotVerifiedError(userId)
+    }
+
+    // 2. Validate recipient exists and belongs to user
+    const recipient = await tx.recipient.findUnique({ where: { id: recipientId } })
+    if (!recipient || recipient.userId !== userId) {
+      throw new RecipientNotOwnedError(recipientId, userId)
+    }
+
+    // 3. Validate corridor exists and is active
+    const corridor = await tx.corridor.findUnique({ where: { id: corridorId } })
+    if (!corridor) {
+      throw new InvalidCorridorError(`Corridor ${corridorId} not found`)
+    }
+    if (!corridor.active) {
+      throw new InvalidCorridorError(`Corridor ${corridorId} is not active`)
+    }
+
+    // 4. Validate sendAmount is within corridor min/max
+    const min = new Decimal(corridor.minAmount.toString())
+    const max = new Decimal(corridor.maxAmount.toString())
+    if (sendAmount.lt(min)) {
+      throw new AmountOutOfRangeError(
+        `Send amount ${sendAmount} is below minimum ${min} for corridor`
+      )
+    }
+    if (sendAmount.gt(max)) {
+      throw new AmountOutOfRangeError(
+        `Send amount ${sendAmount} is above maximum ${max} for corridor`
+      )
+    }
+
+    // 5. Validate daily limit
+    const todayStart = new Date()
+    todayStart.setUTCHours(0, 0, 0, 0)
+    const todayEnd = new Date()
+    todayEnd.setUTCHours(23, 59, 59, 999)
+
+    const todaysTransfers = await tx.transfer.findMany({
+      where: {
+        userId,
+        createdAt: { gte: todayStart, lte: todayEnd },
+        status: { notIn: ['CANCELLED', 'EXPIRED', 'REFUNDED'] },
+      },
+      select: { sendAmount: true },
+    })
+
+    const todayTotal = todaysTransfers.reduce(
+      (sum, t) => sum.plus(new Decimal(t.sendAmount.toString())),
+      new Decimal(0)
+    )
+    const dailyLimit = new Decimal(user.dailyLimit.toString())
+    const projectedTotal = todayTotal.plus(sendAmount)
+
+    if (projectedTotal.gt(dailyLimit)) {
+      throw new DailyLimitExceededError(userId, dailyLimit.toString(), projectedTotal.toString())
+    }
+
+    // 6. Calculate receiveAmount
+    const receiveAmount = sendAmount.mul(exchangeRate)
+
+    // 7. Create the transfer
+    const transfer = await tx.transfer.create({
+      data: {
+        userId,
+        recipientId,
+        corridorId,
+        sendAmount: sendAmount.toString(),
+        receiveAmount: receiveAmount.toString(),
+        exchangeRate: exchangeRate.toString(),
+        fee: fee.toString(),
+        status: 'CREATED',
+      },
+    })
+
+    // 8. Create initial TransferEvent (null -> CREATED)
+    await tx.transferEvent.create({
+      data: {
+        transferId: transfer.id,
+        fromStatus: 'CREATED',
+        toStatus: 'CREATED',
+        actor: 'USER',
+      },
+    })
+
+    return transfer
+  })
+}

@@ -68,6 +68,10 @@ enum ReportType {
 model User {
   id            String           @id @default(cuid())
   fullName      String
+  passwordHash  String?
+  totpSecret    String?
+  totpEnabled   Boolean          @default(false)
+  backupCodes   String[]         @default([])
   kycStatus     KycStatus        @default(PENDING)
   kycProviderId String?
   dailyLimit    Decimal          @default(10000) @db.Decimal(12, 2)
@@ -80,6 +84,7 @@ model User {
   transfers     Transfer[]
   referredBy    Referral?        @relation("referred")
   referrals     Referral[]       @relation("referrer")
+  authEvents    AuthEvent[]
 }
 
 model UserIdentifier {
@@ -208,6 +213,16 @@ model ComplianceReport {
   reportedAt DateTime?
   austracRef String?
   createdAt  DateTime   @default(now())
+}
+
+model AuthEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  event     String
+  ip        String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
 }
 
 model WebhookEvent {

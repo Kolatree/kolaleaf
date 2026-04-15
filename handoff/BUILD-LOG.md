@@ -5,13 +5,138 @@
 
 ## Current Status
 
-**Active step:** 15c -- Schema migration foundation for auth/verification/2FA (review pending)
+**Active step:** 15d -- Resend integration + email verification + password reset (review pending)
 **Last cleared:** Step 15b
 **Pending deploy:** NO
 
 ---
 
 ## Step History
+
+### Step 15d -- Resend integration + email verification + password reset flows -- REVIEW PENDING
+*Date: 2026-04-15*
+
+Ships the first outbound-email infrastructure (Resend), the email-verification flow
+(signup → email → click → flipped), the password-reset flow (forgot → email → reset →
+force-logout), and a new `requireEmailVerified` gate on transfer creation. Email
+enumeration prevented on `request-password-reset`; all tokens stored only as sha256(raw).
+
+Files changed:
+- `package.json` / `package-lock.json` -- added `resend` dependency (only new dep).
+- `.env` / `.env.example` -- added `RESEND_API_KEY`, `EMAIL_FROM`, `APP_URL`; `.env.example`
+  created fresh (no prior file). `RESEND_API_KEY` blank in dev — emails console.log with
+  `[email-dev]` prefix instead of calling Resend.
+- `src/lib/auth/tokens.ts` (new) -- `generateVerificationToken()` returns
+  `{ raw, hash }` (32 random bytes hex + sha256(raw)); `hashToken(raw)` shared helper.
+  Reusable for email-verification AND password-reset.
+- `src/lib/auth/password.ts` -- added `validatePasswordComplexity()` helper so register
+  and reset share the same gate (length >= 8, matching existing register contract).
+- `src/lib/auth/middleware.ts` -- added `requireEmailVerified(request)`; throws
+  `AuthError(403, 'email_unverified')` when the user's primary EMAIL identifier is
+  unverified. Additive — existing routes that don't call it keep working.
+- `src/lib/auth/login.ts` -- removed the `!identRecord.verified` gate. Users MUST be
+  able to sign in with an unverified email so they can request a fresh verification
+  link; money-moving routes are gated by `requireEmailVerified` instead.
+- `src/lib/auth/register.ts` -- new users now created with `UserIdentifier.verified=false`
+  (was `true`). The `/api/auth/verify-email` flow flips it on first click.
+- `src/lib/email/client.ts` (new) -- Resend init; in production throws if
+  `RESEND_API_KEY` or `EMAIL_FROM` missing (fail-fast at deploy rather than first email).
+- `src/lib/email/send.ts` (new) -- `sendEmail({to,subject,html,text})` wrapper.
+  Dev/test fallback: `[email-dev]` stdout log. Returns `{ok,id?,error?}`.
+- `src/lib/email/templates/verify-email.ts` (new) -- `renderVerificationEmail(...)`
+  returning `{subject, html, text}`. Brand-aware (purple→green gradient), HTML
+  inline-styled for email-client compat, with HTML-escaped dynamic values.
+- `src/lib/email/templates/password-reset.ts` (new) -- `renderPasswordResetEmail(...)`
+  with optional IP + user-agent context block so users can spot a foreign request.
+- `src/lib/email/index.ts` (new) -- barrel.
+- `src/app/api/auth/register/route.ts` -- after successful registration,
+  fire-and-forget a verification email. Signup still succeeds even if Resend is down;
+  the user can use `/api/auth/resend-verification` later. Decision commented inline.
+- `src/app/api/auth/verify-email/route.ts` (new) -- public `GET` endpoint, no auth.
+  Hash the raw token, look up by `tokenHash`, reject expired/used/missing with a
+  generic "link expired or already used" HTML page. On success: mark token used, flip
+  `UserIdentifier.verified`+`verifiedAt`, render success page. Minimal inline CSS — this
+  is a one-shot page, not part of the Variant D shell.
+- `src/app/api/auth/resend-verification/route.ts` (new) -- `requireAuth`. Rate-limited
+  to 5 requests per user per hour (returns 429 silently when exceeded); returns 200
+  with `{alreadyVerified:true}` short-circuit if the email is already verified;
+  otherwise invalidates prior unused tokens and sends a fresh one.
+- `src/app/api/auth/request-password-reset/route.ts` (new) -- public. ALWAYS returns
+  the same generic 200 response (`"If an account exists with that email, we've sent
+  a reset link."`) whether the email exists, is rate-limited, or the send fails —
+  email-enumeration defence. Rate limit: 3 per user per hour, silent. Captures IP +
+  user-agent in the email body + persists them on the token row for audit.
+- `src/app/api/auth/reset-password/route.ts` (new) -- public. Validates token, hashes
+  new password via the shared bcrypt helper, marks token used, and
+  `prisma.session.deleteMany({where:{userId}})` to force-logout everywhere. Logs a
+  `PASSWORD_RESET` AuthEvent. Invalid/expired/used tokens collapse to a single generic
+  "Invalid or expired reset link" 400.
+- `src/app/api/transfers/route.ts` -- added `await requireEmailVerified(request)`
+  before `requireKyc`. `AuthError('email_unverified')` is surfaced to the client as
+  `{error:'email_unverified', message:'Please verify your email before sending money.'}`
+  with a 403.
+- `src/lib/auth/__tests__/login.test.ts` -- `createVerifiedUser` helper now flips the
+  identifier to verified after `registerUser` (register no longer pre-verifies). The
+  old "throws on unverified identifier" test rewritten to assert the opposite (login
+  now succeeds; verified gate moved downstream).
+- `src/lib/auth/__tests__/register.test.ts` -- identifier assertion updated to
+  `verified=false` + `verifiedAt=null` post-15d.
+- New tests: `tests/lib/auth/tokens.test.ts` (6), `tests/lib/email/send.test.ts` (4),
+  `tests/lib/email/templates/verify-email.test.ts` (4),
+  `tests/lib/email/templates/password-reset.test.ts` (5),
+  `tests/app/api/auth/resend-verification.test.ts` (5),
+  `tests/app/api/auth/verify-email.test.ts` (5),
+  `tests/app/api/auth/request-password-reset.test.ts` (5),
+  `tests/app/api/auth/reset-password.test.ts` (7).
+
+Decisions:
+- **Unverified-at-signup is the whole point.** Registration now lands new users with
+  `UserIdentifier.verified=false`. If registration continued to auto-verify, the whole
+  15d verification flow would be toothless. This means login had to stop gating on
+  verified (users need to be able to request a new link after an expired one) — the
+  real gate lives on transfer creation where it matters.
+- **Token storage: hash-only.** Raw tokens never touch the database. Only the
+  sha256 hex is stored in `EmailVerificationToken.tokenHash` and
+  `PasswordResetToken.tokenHash` (both already uniquely indexed from 15c). A DB leak
+  cannot be replayed as active tokens.
+- **Fire-and-forget on signup email.** The verification email is dispatched with a
+  `.catch(console.error)` chain after the signup response is built; a Resend outage
+  MUST NOT fail the signup (the `/resend-verification` endpoint is a fallback).
+- **Email enumeration prevention on password reset.** `request-password-reset` always
+  returns the same 200 body whether the email exists or not, whether rate-limited or
+  not, whether Resend succeeded or not. Timing difference is minimal — the rare "user
+  exists" branch does one extra DB write, but the happy path is the same shape.
+- **Force-logout on password change.** `session.deleteMany({where:{userId}})` after
+  a successful reset. Security baseline — no exceptions.
+- **Generic error page.** `/verify-email` collapses all failure modes (missing token,
+  wrong token, expired, already used) into one page. We don't leak "this token
+  existed but was consumed" vs "this token never existed."
+- **Dev-mode email.** No SMTP round trip required; `[email-dev]` stdout dump is the
+  inner loop. Production is fail-fast: `client.ts` throws at import if
+  `RESEND_API_KEY`/`EMAIL_FROM` missing, so a broken deploy goes red immediately
+  rather than silently failing to send verification emails to real users.
+- **Rate limits are silent.** 5/hour on `/resend-verification` (429 — user can see
+  why), 3/hour on `/request-password-reset` (200 generic — attacker cannot probe).
+
+Verification:
+- `npx tsc --noEmit` — 0 errors.
+- `npm test -- --run` — 436/436 passing (392 baseline + 44 new).
+- `npm run dev` smoke:
+    - `POST /api/auth/register {email:"smoke-TS@test.com",...}` → 201, dev log shows
+      `[email-dev] Subject: Verify your Kolaleaf email` with a verification URL.
+    - `POST /api/auth/request-password-reset {email:"smoke-TS@test.com"}` → 200 with
+      generic message, dev log shows `[email-dev] Subject: Reset your Kolaleaf password`
+      including IP (`::1`) and user-agent (`curl/8.7.1`) context and a reset URL.
+    - `POST /api/auth/request-password-reset {email:"nonexistent@test.com"}` → 200
+      with identical generic message, no `[email-dev]` log.
+
+Known Gaps (out of 15d scope):
+- `login.ts` now no longer blocks non-EMAIL unverified identifiers either. Per the
+  brief, phone verification is 15g scope; the minimal safe default was to drop the
+  universal gate. 15g will reintroduce a type-aware gate if needed.
+- `validatePasswordComplexity` is currently just length>=8 to match the existing
+  register contract. Richer rules (upper/lower/digit/symbol) would break existing
+  users on reset; leave as-is until Arch explicitly bumps the policy.
 
 ### Step 15c -- Schema migration foundation for auth/verification/2FA -- REVIEW PENDING
 *Date: 2026-04-15*

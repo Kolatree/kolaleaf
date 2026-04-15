@@ -35,6 +35,25 @@ export async function requireKyc(request: Request): Promise<{ userId: string }> 
   return { userId }
 }
 
+/**
+ * Blocks the request if the user's primary EMAIL identifier is unverified.
+ *
+ * Additive check — existing routes that don't call this keep working. Intended
+ * for money-moving endpoints (transfer creation) where an unverified account
+ * is a compliance and fraud risk.
+ */
+export async function requireEmailVerified(request: Request): Promise<{ userId: string }> {
+  const { userId } = await requireAuth(request)
+  const email = await prisma.userIdentifier.findFirst({
+    where: { userId, type: 'EMAIL' },
+    orderBy: { createdAt: 'asc' },
+  })
+  if (!email || !email.verified) {
+    throw new AuthError(403, 'email_unverified')
+  }
+  return { userId }
+}
+
 export class AuthError extends Error {
   public readonly statusCode: number
   constructor(statusCode: number, message: string) {

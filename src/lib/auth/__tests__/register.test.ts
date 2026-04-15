@@ -41,8 +41,10 @@ describe('registration service', () => {
     expect(identifiers).toHaveLength(1)
     expect(identifiers[0].type).toBe('EMAIL')
     expect(identifiers[0].identifier).toBe('reg2@example.com')
-    expect(identifiers[0].verified).toBe(true)
-    expect(identifiers[0].verifiedAt).toBeInstanceOf(Date)
+    // Step 15d: new users start unverified. The verification email flips this
+    // via /api/auth/verify-email on first click.
+    expect(identifiers[0].verified).toBe(false)
+    expect(identifiers[0].verifiedAt).toBeNull()
   })
 
   it('creates a session upon registration', async () => {

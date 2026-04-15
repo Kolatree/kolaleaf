@@ -1,60 +1,51 @@
-# Review Feedback — Step 15c
+# Review Feedback — Step 15d
 Date: 2026-04-15
 Ready for Builder: YES
 
+Reviewer: Richard
+Scope: Resend integration + email verification + password reset flows.
+Verified: `npx tsc --noEmit` → clean. `npm test -- --run` on the 8 new test files → 44/44 green. File list in REVIEW-REQUEST.md matches the working tree (12 new, 12 modified; no drift, no extras).
+
+---
+
 ## Must Fix
-None.
+
+None. The security bar for this wave is cleared.
+
+---
 
 ## Should Fix
-None. Bob's evidence and my independent pass agree end-to-end.
+
+These do not block the step. Log to BUILD-LOG.md with a target step, or fix inline if it takes under five minutes. None of them would justify rolling back 15d.
+
+- `src/app/api/auth/reset-password/route.ts:42-55` — password update, token-mark-used, and session delete are three separate statements. If the Node process dies between `user.update` and `passwordResetToken.update`, the password is rotated but the reset token is still replayable until its 1-hour TTL. Wrap the three writes (user.update, passwordResetToken.update, session.deleteMany) in `prisma.$transaction([...])` so the token is consumed atomically with the password change. The AuthEvent write can stay outside the transaction.
+
+- `src/app/api/auth/verify-email/route.ts:31-34` — `updateMany` silently writes zero rows if the identifier referenced by the token no longer exists (e.g. user replaced their email between issuance and click). The route still renders the success page, giving the user false reassurance that a no-longer-present identifier is "verified." Inspect the result (`{ count }`) and fall through to `expiredPage()` when count === 0.
+
+- `src/app/api/auth/verify-email/route.ts` (whole file) — no `AuthEvent` is written on successful email verification. `src/app/api/auth/reset-password/route.ts:57-63` correctly logs `PASSWORD_RESET`; this route should match with an `EMAIL_VERIFIED` event (userId, identifier, timestamp) for AML/CTF parity. CLAUDE.md is explicit that every authentication event, state transition, and admin action must be logged immutably. Email verification qualifies.
+
+- `src/app/api/auth/request-password-reset/route.ts:39-48` — timing asymmetry: the "no account" branch skips the rate-limit count, token invalidation, token create, and sendEmail. Under load, an attacker can distinguish existing vs missing emails from response latency (a few ms of DB writes). The enumeration-safe response body is correct; the timing side channel is the gap. Not urgent — consider a constant-time pad (e.g. a small randomized delay on the no-account branch). Log to BUILD-LOG and revisit.
+
+- `src/app/api/auth/request-password-reset/route.ts:40-42` — the lookup uses `findUnique({ where: { identifier: email } })` then filters on `type === 'EMAIL'` after the fact. If the project ever adds a non-EMAIL identifier that collides with an email string (unlikely but the schema allows it), the wrong branch is taken. Filter on `type: 'EMAIL'` at the DB layer with `findFirst` for defence in depth. Low priority.
+
+- `src/lib/auth/middleware.ts:47-50` — `requireEmailVerified` uses `findFirst` ordered by `createdAt: 'asc'`, i.e. the oldest EMAIL identifier. If a user adds a second email later, this middleware gates on the original — which may not be the one they're currently trying to verify from `resend-verification`. Consistent today (resend-verification also picks the oldest), but fragile. Step 15g (phone identifiers) should flip both to an explicit primary flag. Flag for 15g, not 15d.
+
+- `src/app/api/auth/register/route.ts:26-27` — the inline `length < 8` check duplicates `validatePasswordComplexity()` from `src/lib/auth/password.ts`. Bob added the helper in 15d but did not route the register route through it. Either route both through the helper, or keep the duplication and write a comment explaining why. Nuisance, not a defect.
+
+---
 
 ## Escalate to Architect
-None.
 
-## Verified Working
+1. **Password complexity baseline.** Bob flagged this in Open Questions. Current bar is `length >= 8`. For an AUSTRAC-registered money transmitter, `length >= 8` with no character class requirement is below industry norm. Two paths: (a) leave it and cover with TOTP 2FA once phone is wired in 15g, (b) raise to NIST 800-63B (min 12 chars + breach-dictionary check) with a one-time force-reset for existing users. Product + compliance decision. Arch and the Project Owner decide before 15g.
 
-**1. Migration is purely additive.**
-`prisma/migrations/20260415113525_auth_verification_2fa/migration.sql` — walked line by line. Contains only:
-- 1 × `CREATE TYPE` (TwoFactorMethod: NONE/TOTP/SMS)
-- 4 × `ADD COLUMN` on User (twoFactorMethod NOT NULL DEFAULT 'NONE', twoFactorSecret nullable, twoFactorBackupCodes TEXT[] DEFAULT ARRAY[]::TEXT[], twoFactorEnabledAt nullable)
-- 4 × `CREATE TABLE` (EmailVerificationToken, PasswordResetToken, PhoneVerificationCode, TwoFactorChallenge)
-- 2 × `CREATE UNIQUE INDEX` (tokenHash on Email + Password reset)
-- 8 × `CREATE INDEX` (userId + expiresAt on all four new tables)
-- 4 × `ADD CONSTRAINT ... FOREIGN KEY ... ON DELETE CASCADE ON UPDATE CASCADE`
+2. **Phone-identifier login gate.** Bob flagged this. The universal `!verified` gate was removed, not narrowed. When 15g adds phone identifiers, you will want to decide whether phone verification is also optional-at-login (user signs in on an unverified phone, gets a code) or required-at-login. Same question, different corridor. Log for 15g.
 
-No `DROP`, no `ALTER ... RENAME`, no `ALTER ... DROP COLUMN`. `grep -E "DROP|RENAME"` returns nothing. Safe to deploy against existing data.
-
-**2. Defaults are safe for existing users.**
-- New enum `twoFactorMethod` defaults to `NONE` — existing rows pick this up.
-- `twoFactorBackupCodes` defaults to empty array `ARRAY[]::TEXT[]` — no NULL issues.
-- `twoFactorSecret` + `twoFactorEnabledAt` are nullable — no backfill needed.
-No migration risk for existing User rows.
-
-**3. No application code touched.**
-`git diff HEAD -- src/ tests/` returns nothing. Only schema, migration, and handoff docs changed. `src/generated/prisma/**` is correctly gitignored, so Bob's regeneration does not pollute the diff.
-
-**4. Brief compliance — schema additions match.**
-- `prisma/schema.prisma:63-67` — `TwoFactorMethod` enum (NONE, TOTP, SMS). Correct.
-- `prisma/schema.prisma:78-82` — 4 new User fields with correct defaults. Correct.
-- `prisma/schema.prisma:96-100` — 4 back-relations added. Correct.
-- `prisma/schema.prisma:252-313` — 4 new models, each with `@@index([userId])`, `@@index([expiresAt])`, and `onDelete: Cascade`. Correct.
-
-**5. `UserIdentifier.verified` remains source of truth.**
-`grep -E "emailVerified|phoneVerified" prisma/schema.prisma` → no matches. `UserIdentifier.verified` + `verifiedAt` (schema.prisma:110-111) unchanged. Correct — no duplicate state introduced on User.
-
-**6. Legacy 2FA coexistence — intentional, documented, not a blocker.**
-`User.totpSecret` (line 78), `User.totpEnabled` (line 79), `User.backupCodes` (line 80) all still present on the User model. Not renamed, not dropped, no semantic change. Arch's carry-forward note in `ARCHITECT-BRIEF.md:169-175` ("logged 15c → addressed in 15f") explicitly authorizes this coexistence and schedules the removal for Step 15f with the application-code migration. Behavioural safety confirmed: new fields default to `NONE` / empty so existing `login.ts` / `verify-2fa/route.ts` paths are untouched.
-
-**7. Specific per-model checks.**
-- `EmailVerificationToken.tokenHash @unique` — yes (migration:66).
-- `PasswordResetToken.tokenHash @unique` — yes (migration:75).
-- `PhoneVerificationCode.codeHash` — present, NOT unique — correct for short numeric codes that may reissue.
-- `TwoFactorChallenge.codeHash String?` — nullable. Correct for the TOTP path which stores no code.
-- `TwoFactorChallenge.method` — schema cannot enforce "not NONE"; enforcement is app-layer intent. Acceptable per Bob's read in Request #6.
-- Index coverage: each of the four new tables has exactly `@@index([userId])` + `@@index([expiresAt])`. Two singles are the right call — PK lookups dominate, and the cleanup sweep is a range scan on `expiresAt` alone. A composite would only help a query like `WHERE userId = ? AND expiresAt < now()`, which isn't the planned shape. Agreed with Bob.
-- Cascade-on-user-delete on all four FKs — correct from a compliance standpoint. Pending tokens/codes/challenges are ephemeral artifacts; the immutable audit log (AuthEvent, transferEvent) remains on `onDelete: Restrict` elsewhere, preserving AUSTRAC 7-year retention.
+---
 
 ## Cleared
-Schema-only Step 15c: 1 new enum, 4 new User columns, 4 new models, 8 single-column indexes, 2 unique constraints, 4 cascade FKs. Purely additive, no application code changes, legacy 2FA fields correctly left in place for the 15f follow-up.
 
-Step 15c is clear.
+Reviewed `src/lib/auth/tokens.ts` (32-byte entropy, sha256 hash-only at rest, raw only in URL), `src/lib/email/{client,send,templates}.ts` (fail-fast in production, dev `[email-dev]` fallback, HTML escaping on user-controlled recipient names, IPs, and user-agents), all four new auth routes (token reuse blocked, expiry enforced, enumeration-safe response body on password-reset, force-logout on password change, 403 not 401 on unverified transfers, error body does not leak which identifier is unverified), the registration flow (fire-and-forget with `.catch` — no unhandled rejection, signup succeeds if Resend is down), the login relaxation (gate removed with a comment pointing at `requireEmailVerified`), the new `requireEmailVerified` middleware, the `POST /api/transfers` wiring (verify before KYC), and all 8 new test files (44/44 passing).
+
+Token security: verified. Enumeration prevention: response body verified, timing side channel logged above. Token reuse: blocked at the SQL predicate level. Force-logout: `session.deleteMany` runs on reset. Hash-only storage: confirmed — raw token never written.
+
+Step 15d is clear. Arch — proceed.

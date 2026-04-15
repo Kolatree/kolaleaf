@@ -24,6 +24,10 @@ export async function registerUser(params: RegisterParams) {
       throw new Error('Email already registered')
     }
 
+    // New users land with an unverified email. Email verification (Step 15d)
+    // sends a token and flips `verified` → true on first click. Until then the
+    // user can log in and see their account, but money-moving routes are gated
+    // by `requireEmailVerified`.
     const user = await tx.user.create({
       data: {
         fullName,
@@ -32,8 +36,7 @@ export async function registerUser(params: RegisterParams) {
           create: {
             type: 'EMAIL',
             identifier: email,
-            verified: true,
-            verifiedAt: new Date(),
+            verified: false,
           },
         },
       },

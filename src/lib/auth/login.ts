@@ -29,9 +29,10 @@ export async function loginUser(params: LoginParams) {
     throw new Error('Invalid credentials')
   }
 
-  if (!identRecord.verified) {
-    throw new Error('Identifier not verified')
-  }
+  // NOTE: We deliberately do NOT gate login on identifier.verified anymore.
+  // Users must be able to sign in with an unverified email so they can request
+  // a fresh verification link. The real enforcement for money-moving actions
+  // lives in `requireEmailVerified` (see src/lib/auth/middleware.ts).
 
   const user = identRecord.user
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import Decimal from 'decimal.js'
 import { createTransfer, listTransfers } from '@/lib/transfers'
-import { requireKyc, requireAuth, AuthError } from '@/lib/auth/middleware'
+import { requireKyc, requireAuth, requireEmailVerified, AuthError } from '@/lib/auth/middleware'
 
 export async function POST(request: Request) {
   let body: {
@@ -33,6 +33,11 @@ export async function POST(request: Request) {
   }
 
   try {
+    // Email verification must land before KYC — an unverified email means we
+    // can't safely contact the user about their transfer (failure, refund,
+    // compliance holds). This is additive: existing callers who are already
+    // KYC-verified will also have been email-verified at signup.
+    await requireEmailVerified(request)
     const { userId } = await requireKyc(request)
 
     const transfer = await createTransfer({
@@ -47,6 +52,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ transfer }, { status: 201 })
   } catch (error) {
     if (error instanceof AuthError) {
+      if (error.message === 'email_unverified') {
+        return NextResponse.json(
+          {
+            error: 'email_unverified',
+            message: 'Please verify your email before sending money.',
+          },
+          { status: 403 },
+        )
+      }
       return NextResponse.json({ error: error.message }, { status: error.statusCode })
     }
     const message = error instanceof Error ? error.message : 'Transfer creation failed'

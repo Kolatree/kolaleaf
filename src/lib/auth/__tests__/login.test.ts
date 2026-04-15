@@ -27,7 +27,12 @@ describe('login service', () => {
       email,
       password,
     })
-    // Registration now creates email as verified
+    // Registration creates email as UNVERIFIED (Step 15d). Flip it here so
+    // tests that want a ready-to-use account can call this helper.
+    await prisma.userIdentifier.updateMany({
+      where: { userId: user.id, type: 'EMAIL' },
+      data: { verified: true, verifiedAt: new Date() },
+    })
     return user
   }
 
@@ -61,10 +66,12 @@ describe('login service', () => {
     ).rejects.toThrow('Invalid credentials')
   })
 
-  it('throws on unverified identifier', async () => {
-    // Manually create user with unverified identifier (registration now auto-verifies email)
+  it('allows login with an unverified email (post-15d); action gates happen downstream', async () => {
+    // Step 15d removed the login-time gate on identifier.verified. Users must
+    // be able to sign in to request a fresh verification link; money-moving
+    // routes are gated by requireEmailVerified instead.
     const pw = await hashPassword('SomePass1!')
-    const user = await prisma.user.create({
+    await prisma.user.create({
       data: {
         fullName: 'LoginTest Unverified',
         passwordHash: pw,
@@ -73,9 +80,11 @@ describe('login service', () => {
         },
       },
     })
-    await expect(
-      loginUser({ identifier: 'unverified@example.com', password: 'SomePass1!' })
-    ).rejects.toThrow('Identifier not verified')
+    const result = await loginUser({
+      identifier: 'unverified@example.com',
+      password: 'SomePass1!',
+    })
+    expect(result.session.token).toMatch(/^[a-f0-9]{64}$/)
   })
 
   it('returns requires2FA when TOTP is enabled', async () => {

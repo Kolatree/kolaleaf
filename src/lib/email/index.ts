@@ -1,0 +1,6 @@
+export { sendEmail } from './send'
+export type { SendEmailParams, SendEmailResult } from './send'
+export { renderVerificationEmail } from './templates/verify-email'
+export type { VerificationEmailParams } from './templates/verify-email'
+export { renderPasswordResetEmail } from './templates/password-reset'
+export type { PasswordResetEmailParams } from './templates/password-reset'

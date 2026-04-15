@@ -91,7 +91,7 @@ describe('KYC Service', () => {
       const user = mockUser({ kycStatus: 'VERIFIED' })
       vi.mocked(prisma.user.findUniqueOrThrow).mockResolvedValue(user as any)
 
-      await expect(initiateKyc('user-001')).rejects.toThrow(
+      await expect(initiateKyc('user-001', mockSumsubClient)).rejects.toThrow(
         'KYC already verified'
       )
 
@@ -102,7 +102,7 @@ describe('KYC Service', () => {
       const user = mockUser({ kycStatus: 'IN_REVIEW' })
       vi.mocked(prisma.user.findUniqueOrThrow).mockResolvedValue(user as any)
 
-      await expect(initiateKyc('user-001')).rejects.toThrow(
+      await expect(initiateKyc('user-001', mockSumsubClient)).rejects.toThrow(
         'KYC already in review'
       )
     })
@@ -223,7 +223,7 @@ describe('KYC Service', () => {
       const user = mockUser({ kycStatus: 'PENDING' })
       vi.mocked(prisma.user.findUniqueOrThrow).mockResolvedValue(user as any)
 
-      await expect(retryKyc('user-001')).rejects.toThrow(
+      await expect(retryKyc('user-001', mockSumsubClient)).rejects.toThrow(
         'KYC retry only available for rejected applications'
       )
     })
@@ -235,7 +235,7 @@ describe('KYC Service', () => {
       })
       vi.mocked(prisma.user.findUniqueOrThrow).mockResolvedValue(user as any)
 
-      await expect(retryKyc('user-001')).rejects.toThrow(
+      await expect(retryKyc('user-001', mockSumsubClient)).rejects.toThrow(
         'No existing KYC application to retry'
       )
     })

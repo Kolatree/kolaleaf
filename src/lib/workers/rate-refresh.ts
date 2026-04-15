@@ -13,30 +13,42 @@ interface CorridorRefreshResult {
 }
 
 export async function refreshAllCorridorRates(): Promise<CorridorRefreshResult[]> {
-  const rateService = new RateService(new DefaultFxRateProvider())
+  console.log('[worker/rate-refresh] start')
+  try {
+    const rateService = new RateService(new DefaultFxRateProvider())
 
-  const corridors = await prisma.corridor.findMany({
-    where: { active: true },
-  })
+    const corridors = await prisma.corridor.findMany({
+      where: { active: true },
+    })
 
-  const results: CorridorRefreshResult[] = []
+    const results: CorridorRefreshResult[] = []
 
-  for (const corridor of corridors) {
-    try {
-      const rate = await rateService.refreshRate(corridor.id, DEFAULT_SPREAD)
-      results.push({
-        corridorId: corridor.id,
-        success: true,
-        rate: rate.customerRate.toNumber(),
-      })
-    } catch (err) {
-      results.push({
-        corridorId: corridor.id,
-        success: false,
-        error: err instanceof Error ? err.message : 'Unknown error',
-      })
+    for (const corridor of corridors) {
+      try {
+        const rate = await rateService.refreshRate(corridor.id, DEFAULT_SPREAD)
+        results.push({
+          corridorId: corridor.id,
+          success: true,
+          rate: rate.customerRate.toNumber(),
+        })
+      } catch (err) {
+        console.error(`[worker/rate-refresh] corridor=${corridor.id} failed`, err)
+        results.push({
+          corridorId: corridor.id,
+          success: false,
+          error: err instanceof Error ? err.message : 'Unknown error',
+        })
+      }
     }
-  }
 
-  return results
+    const succeeded = results.filter((r) => r.success).length
+    const failed = results.length - succeeded
+    console.log(
+      `[worker/rate-refresh] success corridors=${results.length} succeeded=${succeeded} failed=${failed}`,
+    )
+    return results
+  } catch (err) {
+    console.error('[worker/rate-refresh] failed', err)
+    throw err
+  }
 }

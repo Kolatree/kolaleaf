@@ -21,7 +21,8 @@ export async function GET(
       customerRate: rate.customerRate.toString(),
       effectiveAt: rate.effectiveAt.toISOString(),
     })
-  } catch {
+  } catch (err) {
+    console.error('[api/rates/[corridorId]]', err)
     return NextResponse.json({ error: 'Failed to get rate' }, { status: 500 })
   }
 }

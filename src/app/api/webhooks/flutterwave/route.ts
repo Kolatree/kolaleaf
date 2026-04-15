@@ -13,7 +13,8 @@ export async function POST(request: Request) {
   try {
     rawBody = await request.text()
     JSON.parse(rawBody)
-  } catch {
+  } catch (err) {
+    console.error('[webhooks/flutterwave] invalid payload', err)
     return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
   }
 

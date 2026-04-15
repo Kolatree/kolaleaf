@@ -434,3 +434,36 @@ export function DashboardShell({ active, hero, children }: DashboardShellProps) 
     </div>
   );
 }
+
+// Inline alert banner for admin surfaces. Uses Variant D tokens. Minimal
+// API on purpose — admin pages render at most one or two of these per page.
+export function AdminAlert({
+  tone = 'warn',
+  children,
+}: {
+  tone?: 'warn' | 'error';
+  children: React.ReactNode;
+}) {
+  const palette =
+    tone === 'error'
+      ? { bg: 'rgba(176,0,32,0.08)', border: 'rgba(176,0,32,0.35)', text: '#b00020' }
+      : { bg: 'rgba(255,215,0,0.12)', border: 'rgba(255,215,0,0.45)', text: '#8a6d0a' };
+  return (
+    <div
+      role="alert"
+      data-testid="admin-alert"
+      className="mb-6"
+      style={{
+        background: palette.bg,
+        border: `1px solid ${palette.border}`,
+        borderRadius: radius.card,
+        padding: spacing.cardPad,
+        color: palette.text,
+        fontSize: '13px',
+        fontWeight: 600,
+      }}
+    >
+      {children}
+    </div>
+  );
+}

@@ -1,5 +1,5 @@
 export { DefaultFxRateProvider } from './fx-fetcher'
 export type { FxRateProvider } from './fx-fetcher'
 export { calculateCustomerRate, calculateReceiveAmount } from './spread'
-export { RateService } from './rate-service'
+export { RateService, getCurrentRateByPair } from './rate-service'
 export { StalenessMonitor } from './staleness-monitor'

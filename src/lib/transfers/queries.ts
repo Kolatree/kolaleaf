@@ -1,13 +1,52 @@
 import { prisma } from '../db/client'
 import type { Transfer, TransferEvent } from '../../generated/prisma/client'
 import type { TransferStatus } from '../../generated/prisma/enums'
+import { Prisma } from '../../generated/prisma/client'
+
+// User-safe Transfer projection. NEVER includes provider refs, retry counts,
+// or internal failure reasons — those are admin-only audit fields. Admin
+// routes should query `prisma.transfer` directly (see
+// `src/app/api/admin/transfers/[id]/route.ts`).
+export interface TransferUserView {
+  id: string
+  status: TransferStatus
+  sendAmount: Prisma.Decimal
+  sendCurrency: string
+  receiveAmount: Prisma.Decimal
+  receiveCurrency: string
+  exchangeRate: Prisma.Decimal
+  fee: Prisma.Decimal
+  createdAt: Date
+  updatedAt: Date
+  completedAt: Date | null
+  recipient: TransferListRecipient | null
+}
+
+// Single source of truth for which Transfer columns user-facing routes are
+// allowed to see. Reused by getTransfer and listTransfers so a future column
+// added to the schema doesn't silently leak.
+const USER_SAFE_TRANSFER_SELECT = {
+  id: true,
+  status: true,
+  sendAmount: true,
+  sendCurrency: true,
+  receiveAmount: true,
+  receiveCurrency: true,
+  exchangeRate: true,
+  fee: true,
+  createdAt: true,
+  updatedAt: true,
+  completedAt: true,
+  recipient: { select: { id: true, fullName: true, bankName: true } },
+} satisfies Prisma.TransferSelect
 
 export async function getTransfer(
   transferId: string,
   userId: string
-): Promise<Transfer | null> {
+): Promise<TransferUserView | null> {
   return prisma.transfer.findFirst({
     where: { id: transferId, userId },
+    select: USER_SAFE_TRANSFER_SELECT,
   })
 }
 

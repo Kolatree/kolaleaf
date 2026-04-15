@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/db/client'
+import { getCurrentRateByPair } from '@/lib/rates'
 
 // Public read-only rate endpoint.
 //
@@ -7,6 +7,10 @@ import { prisma } from '@/lib/db/client'
 // currency pair rather than cuid. Unauthenticated and cache-friendly so the
 // landing page and the send page share one source of truth without needing
 // to know the corridor's internal id.
+//
+// Goes through `getCurrentRateByPair` (which delegates to RateService) so
+// admin overrides and rate-ordering rules are honored uniformly across all
+// callers. Direct prisma access here was removed in Step 15b.
 //
 // IMPORTANT: do not expose `wholesaleRate`, `spread`, `provider`,
 // `adminOverride`, or `setById`. Those are internal treasury / audit fields.
@@ -26,22 +30,13 @@ export async function GET(request: Request) {
   const targetCurrency = rawTarget.trim().toUpperCase()
 
   try {
-    const corridor = await prisma.corridor.findFirst({
-      where: { baseCurrency, targetCurrency, active: true },
-    })
+    const result = await getCurrentRateByPair(baseCurrency, targetCurrency)
 
-    if (!corridor) {
+    if (!result) {
       return NextResponse.json({ error: 'corridor_not_found' }, { status: 404 })
     }
 
-    const rate = await prisma.rate.findFirst({
-      where: { corridorId: corridor.id },
-      orderBy: { effectiveAt: 'desc' },
-    })
-
-    if (!rate) {
-      return NextResponse.json({ error: 'corridor_not_found' }, { status: 404 })
-    }
+    const { corridor, rate } = result
 
     return NextResponse.json(
       {
@@ -57,7 +52,8 @@ export async function GET(request: Request) {
         },
       },
     )
-  } catch {
+  } catch (err) {
+    console.error('[api/rates/public]', err)
     return NextResponse.json({ error: 'Failed to get rate' }, { status: 500 })
   }
 }

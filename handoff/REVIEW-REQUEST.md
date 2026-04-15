@@ -1,122 +1,97 @@
-# Review Request — Step 15a (Webhook + Auth Security)
-*Bob did the substantive work; Arch wrote this handoff doc and fixed the test infrastructure.*
+# Review Request — Step 15b
 
-Ready for Review: YES
-
----
-
-## What Was Built
-
-Step 15a is the security-critical Wave 1 of Step 15: webhook signature verification corrected to use raw body, idempotency converted from read-then-write race to atomic create-as-lock, cron auth tightened to timing-safe, login route stops leaking raw error messages, admin transfer detail handles `P2025` cleanly. Plus test-infrastructure fixes so the suite is fully green for the first time in this codebase.
-
-This is one wave of a multi-wave Step 15 (15b–15l still to come). 15a is committed-ready by itself; it's a meaningful security checkpoint.
+**Author:** Bob (Builder)
+**Date:** 2026-04-15
+**Step:** 15b — FIX-NOW cleanup (items #3, #5, #6, #7, #8, #9 from the Step 15 audit)
+**Ready for Review:** YES
 
 ---
 
-## Files to Review
+## Scope
 
-### Webhook signature verification — sign against raw body, not re-serialized payload
+Six items from Arch's FIX-NOW triage that did not land in Step 15a:
 
-| File | Change |
-|------|--------|
-| `src/app/api/webhooks/monoova/route.ts` | Capture `rawBody` and pass through to handler. |
-| `src/app/api/webhooks/sumsub/route.ts` | Same. |
-| `src/app/api/webhooks/paystack/route.ts` | Same. |
-| `src/app/api/webhooks/flutterwave/route.ts` | Same. |
-| `src/lib/payments/monoova/webhook.ts` | `verifySignature(rawBody, signature)` — uses raw HTTP body for HMAC, not `JSON.stringify(payload)`. |
-| `src/lib/kyc/sumsub/webhook.ts` | Same shape — Sumsub signs raw HTTP body per their docs. |
-| `src/lib/payments/payout/webhooks.ts` | Same for Flutterwave + Paystack handlers. |
-| `src/lib/payments/monoova/__tests__/webhook.test.ts` | Updated fixtures: tests now provide a captured rawBody string and sign that, mirroring real provider behavior. |
-| `src/lib/kyc/sumsub/__tests__/webhook.test.ts` | Same. |
-| `src/lib/payments/payout/__tests__/webhooks.test.ts` | Same. |
-| `tests/app/api/webhooks/monoova.test.ts` | Same. |
-| `tests/security/webhook-security.test.ts` | Same. |
-| `tests/e2e/kyc-flow.test.ts` | Same. |
-| `tests/e2e/transfer-lifecycle.test.ts` | Same. |
+| # | Item | Files |
+|---|------|-------|
+| 3 | `getTransfer` user-safe projection | `src/lib/transfers/queries.ts`, `tests/lib/transfers/queries.test.ts` |
+| 5 | Observability on remaining bare catches + worker start/end logs | webhooks×4, rates×2, workers×2 |
+| 6 | `RateService` bypass on `/api/rates/public` | `src/lib/rates/rate-service.ts`, `src/lib/rates/index.ts`, `src/app/api/rates/public/route.ts` |
+| 7 | TS errors (4 sumsub + 2 queries.test.ts) | `src/lib/kyc/sumsub/__tests__/kyc-service.test.ts`, `tests/lib/transfers/queries.test.ts` |
+| 8 | Admin dashboard error banner | `src/components/design/KolaPrimitives.tsx`, `src/app/admin/page.tsx`, `tests/app/admin/page.test.tsx` (new) |
+| 9 | Send-page rate-load error surface | `src/app/(dashboard)/send/page.tsx` |
 
-### Webhook idempotency — atomic create-as-lock
-
-| File | Change |
-|------|--------|
-| `src/lib/payments/monoova/webhook.ts` | Replaced read-then-write idempotency with `try { create } catch (P2002) { return early }`. The unique constraint on `(provider, eventId)` is now the lock, not a post-hoc safety net. Also fixes the silent-skip-on-failed-row variant by only marking `processed: true` on successful processing. |
-| `src/lib/kyc/sumsub/webhook.ts` | Same pattern. |
-| `src/lib/payments/payout/webhooks.ts` | Same pattern for Flutterwave and Paystack. |
-
-### Cron auth tightening
-
-| File | Change |
-|------|--------|
-| `src/lib/auth/cron-auth.ts` | NEW. Centralizes `requireCronAuth(request)` using `crypto.timingSafeEqual` for bearer comparison. |
-| `src/app/api/cron/float/route.ts` | Use the new helper. |
-| `src/app/api/cron/rates/route.ts` | Same. |
-| `src/app/api/cron/reconciliation/route.ts` | Same. |
-| `src/app/api/cron/staleness/route.ts` | Same. |
-
-### Login error-leak fix + admin P2025 → 404
-
-| File | Change |
-|------|--------|
-| `src/app/api/auth/login/route.ts` | `console.error('[auth/login]', err)` for diagnostics; user-facing response is now generic `"Login failed"`. |
-| `src/app/api/admin/transfers/[id]/route.ts` | Catches `PrismaClientKnownRequestError` with code `P2025` and returns `{ error: 'not_found' }, status: 404`. No Prisma error message leaks to the client. |
-
-### Test infrastructure — make the suite truly green
-
-| File | Change |
-|------|--------|
-| `src/lib/referrals/__tests__/referral-service.test.ts` | Cleanup no longer deletes corridors or rates (they're seeded data shared with other test files; this test reuses the seed via findUnique-or-create). Inline comment explains why. |
-| `tests/lib/transfers/queries.test.ts` | `afterEach` scoped to wipe transfers/events only, preserving `beforeAll` user/recipient fixtures. Matches the pattern already used in `state-machine.test.ts`. |
-
-### Step 14 carry-forward (already cleared by Richard, included for completeness in this branch)
-
-| File | Notes |
-|------|-------|
-| `src/app/api/rates/public/route.ts` | New endpoint — 8/8 tests pass. |
-| `tests/app/api/rates/public.test.ts` | New tests. |
-| `src/app/(dashboard)/send/page.tsx` | URL swap. |
-| `src/app/_components/landing-page.tsx` | URL swap + comment. |
-| `src/lib/transfers/queries.ts` | `recipient` include + `TransferWithRecipient` type. |
-| `tests/lib/transfers/queries.test.ts:106-123` | New recipient-enrichment test. |
+No new dependencies. No migrations. No visual redesign. Decimal preserved for money.
 
 ---
 
-## Decisions Made
+## Files changed (read these)
 
-- **Atomic create-as-lock** is the only correct idempotency pattern under concurrent webhook delivery. Read-then-write is a race regardless of how fast the writer is. This is now consistent across all four webhook handlers.
-- **Raw body** is captured at the route layer (where Next.js gives us a Request with `text()` access) and passed by reference into the handler. Handlers no longer re-serialize before signing. Tests use a captured raw-body string and sign that — mirrors real provider behavior.
-- **timingSafeEqual** for cron bearer matches the webhook layer's existing pattern. Surface is small but consistency matters.
-- **Cleanup hygiene in tests** — the test suite was previously dependent on a fragile order. Now tests don't delete data they didn't create. AUD-NGN corridor/rate stay seeded across all files.
+### Item #3 — `getTransfer` projection
+- **`src/lib/transfers/queries.ts:1-50`** — added exported `TransferUserView` interface, `USER_SAFE_TRANSFER_SELECT` (typed via `satisfies Prisma.TransferSelect`), and reshaped `getTransfer` to use the explicit select. Stripped fields: `failureReason`, `payoutProviderRef`, `payoutProvider`, `payidProviderRef`, `payidReference`, `retryCount`. `listTransfers` and `getTransferWithEvents` untouched.
+- **`tests/lib/transfers/queries.test.ts:62-115`** — 2 new tests in the `getTransfer` describe block: one populates the internal fields then asserts they are absent from the projection; one asserts the recipient projection is the safe `{id, fullName, bankName}` shape.
+- **No admin-side changes needed:** admin `[id]` route uses `prisma.transfer.findUniqueOrThrow` directly (`src/app/api/admin/transfers/[id]/route.ts:15-22`), not `getTransfer`. Confirmed via tldr search.
+
+### Item #6 — RateService bypass
+- **`src/lib/rates/rate-service.ts:107-130`** — new exported helper `getCurrentRateByPair(base, target)`. Resolves the active corridor by pair, then delegates to `RateService.getCurrentRate(corridorId)`. Returns `{corridor, rate}` or null.
+- **`src/lib/rates/index.ts:4`** — re-export the helper.
+- **`src/app/api/rates/public/route.ts`** — refactored. Now imports `getCurrentRateByPair`; replaces the two direct prisma calls with a single helper call; bare `} catch {` replaced with logging.
+- **`tests/app/api/rates/public.test.ts:129-164`** — new test "honors admin-override rates" verifying that an admin-flagged most-recent rate flows through correctly. The 8 existing tests still pass unchanged because the mock surface (`prisma.rate.findFirst`) is what `RateService.getCurrentRate` calls under the hood.
+
+### Item #5 — Observability
+- **`src/app/api/webhooks/{monoova,sumsub,flutterwave,paystack}/route.ts`** — each `} catch {` for the JSON-parse path now `} catch (err)` + `console.error('[webhooks/<provider>] invalid payload', err)`. The main handler catch already logged from Step 15a.
+- **`src/app/api/rates/public/route.ts`**, **`src/app/api/rates/[corridorId]/route.ts`** — bare catches → `console.error('[api/rates/...]', err)`.
+- **`src/lib/workers/reconciliation.ts:18-104`** — wraps body in try/catch. Logs:
+  - start: `[worker/reconciliation] start`
+  - success: `[worker/reconciliation] success expired=N flagged=N retried=N`
+  - failure: `[worker/reconciliation] failed`, then re-throws.
+- **`src/lib/workers/rate-refresh.ts:15-49`** — same start/success/failure pattern. Per-corridor failures also log inside the inner catch.
+- All cron routes already had logs from Step 15a — no churn there.
+
+### Item #7 — TS errors
+- **`src/lib/kyc/sumsub/__tests__/kyc-service.test.ts:94, 105, 226, 238`** — pass `mockSumsubClient` as the second arg to `initiateKyc`/`retryKyc`. The mock is in scope from the outer describe.
+- **`tests/lib/transfers/queries.test.ts:125-127`** — `as Record<string, unknown>` was an unsafe cross-type cast; changed to a two-step `unknown as Record<string, unknown>` with a renamed local (`recipientFields` to avoid colliding with the existing `recipient` from `beforeAll`).
+- **Stale `.next/types/validator.ts`** — referenced a deleted `src/app/page.tsx`. Removed `.next/` so tsc's clean baseline is reproducible. Will regenerate on next build.
+- Net: `npx tsc --noEmit` now reports 0 errors with NO exclusions.
+
+### Item #8 — Admin dashboard error banner
+- **`src/components/design/KolaPrimitives.tsx:438-466`** — new `<AdminAlert tone='warn' | 'error'>` primitive. Inline-style with Variant D tokens. `data-testid="admin-alert"`. `role="alert"` for a11y.
+- **`src/app/admin/page.tsx`** — imports `AdminAlert`, computes `partialFailure = statsData === null || floatData === null || ratesData === null`, renders the banner above the rest of the dashboard. Copy: `"Admin data partially unavailable. Check server logs."`
+- **`tests/app/admin/page.test.tsx`** (new, 92 lines) — 2 tests:
+  1. mocks `fetch` so `/api/admin/stats` returns `ok: false` → asserts the alert text appears in the rendered tree
+  2. mocks all three fetches `ok: true` → asserts the alert text is absent
+- Uses a small `collectStrings` tree walker because the project does not depend on React Testing Library / jsdom (no new deps allowed). `next/headers` is mocked at the module level so the server component can run under vitest.
+
+### Item #9 — Send-page rate-load
+- **`src/app/(dashboard)/send/page.tsx:43-56`** — `fetchRate` now sets `setError('Could not load live rate. Please refresh.')` on both non-OK response and thrown error. On a successful poll, clears the error if and only if it is still that exact rate-load message (so a `handleSend` error from elsewhere is not wiped 60s later).
 
 ---
 
-## Verification Run
+## Verification
 
 ```
-npx tsc --noEmit             →  0 errors
-npm test -- --run            →  387 passed / 0 failed   ← FULL GREEN, first time in this codebase
+npx tsc --noEmit         → TypeScript compilation completed (0 errors)
+npm test -- --run        → 54 files, 392 tests, 0 failures (baseline 387, +5 new)
 ```
 
-This is a step up from the prior baseline ("4 known flaky in queries.test.ts") — those were not actually flaky; they were a real bug in the test cleanup pattern, now fixed.
+Targeted suites:
+- `tests/lib/transfers/queries.test.ts` — 11/11
+- `tests/app/api/rates/public.test.ts` — 9/9
+- `tests/app/admin/page.test.tsx` — 2/2 (new)
+- `src/lib/kyc/sumsub/__tests__/kyc-service.test.ts` — 13/13
+
+Grep audit: zero remaining bare `} catch {` in `src/app/api/{cron,webhooks,rates}` after the change.
 
 ---
 
-## Open Questions
+## Out of scope (per brief)
 
-None for this wave. The waves to come (15b–15l) will introduce real new behavior; this wave was about closing security gaps without changing user-visible APIs.
+- Removing `/api/rates/[corridorId]` route — Arch already decided KEEP-and-document.
+- Webhook queue/ack split — DEFER to Step 16.
+- `RateService` singleton consolidation — Known Gap.
+- New HTTP-level cron route tests — DEFER.
 
 ---
 
-## Known Gaps (logged in BUILD-LOG, addressed in later 15-waves)
+## Ready for Review: YES
 
-- `getTransfer` user-safe field projection — Wave 15b
-- `RateService` bypass on public route — Wave 15b
-- Observability (log every catch + worker start/end) — Wave 15b
-- Admin dashboard error banner — Wave 15b
-- Send-page rate-load error surface — Wave 15b
-- Webhook queue/ack split (BullMQ + Redis) — Wave 15i
-- Email verification + password reset (Resend) — Wave 15d
-- SMS 2FA + phone verification (Twilio) — Wave 15e
-- 2FA setup flow on /account — Wave 15f
-- Account self-service (change email/password) — Wave 15g
-- /activity/[id] transfer detail page — Wave 15h
-- Provider env-var validation + retry/backoff — Wave 15j
-- Public stub pages + mobile menu — Wave 15k
+Hand off to Richard. Nothing pending on Bob's side.

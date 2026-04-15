@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers'
-import { AdminShell, colors, radius, shadow, spacing, GRADIENT } from '@/components/design/KolaPrimitives'
+import { AdminShell, AdminAlert, colors, radius, shadow, spacing, GRADIENT } from '@/components/design/KolaPrimitives'
 
 async function fetchAdminJson(path: string, cookieHeader: string) {
   const base = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000'
@@ -47,6 +47,12 @@ export default async function AdminDashboard() {
   const rates: RateRow[] = ratesData?.rates ?? []
   const staleRates = rates.filter((r) => r.stale)
 
+  // Step 15b: surface partial-fetch failures rather than silently rendering
+  // dashes. fetchAdminJson returns null on any non-OK response or thrown
+  // request. Any null here means at least one upstream is broken.
+  const partialFailure =
+    statsData === null || floatData === null || ratesData === null
+
   return (
     <AdminShell active="Dashboard">
       <div className="flex items-baseline justify-between mb-6">
@@ -59,6 +65,12 @@ export default async function AdminDashboard() {
           </h1>
         </div>
       </div>
+
+      {partialFailure && (
+        <AdminAlert tone="warn">
+          Admin data partially unavailable. Check server logs.
+        </AdminAlert>
+      )}
 
       {/* Stat tiles */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8 kola-stagger">

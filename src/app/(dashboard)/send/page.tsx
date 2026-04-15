@@ -46,9 +46,14 @@ export default function SendPage() {
       if (res.ok) {
         const data = await res.json()
         setRate(data)
+        // Clear any prior rate-load error once a fresh quote arrives.
+        setError((prev) => (prev === 'Could not load live rate. Please refresh.' ? '' : prev))
+        return
       }
-    } catch {
-      // Rate fetch failed silently — will show loading state
+      setError('Could not load live rate. Please refresh.')
+    } catch (err) {
+      console.error('[send/page] rate fetch failed', err)
+      setError('Could not load live rate. Please refresh.')
     }
   }, [])
 

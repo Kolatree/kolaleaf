@@ -58,6 +58,55 @@ describe('getTransfer', () => {
     const result = await getTransfer('non-existent', userId)
     expect(result).toBeNull()
   })
+
+  it('omits internal fields from the user-safe projection', async () => {
+    // Ensure leaks like provider refs, retry counts, and failure reasons are
+    // never returned to user-facing routes (they ARE allowed in admin views,
+    // but admin uses prisma directly, not getTransfer).
+    const transfer = await createTestTransfer(userId, recipientId)
+    // Populate internal fields so we can prove they get stripped.
+    await prisma.transfer.update({
+      where: { id: transfer.id },
+      data: {
+        failureReason: 'should-not-leak',
+        payoutProviderRef: 'pp-ref-123',
+        payoutProvider: 'FLUTTERWAVE',
+        payidProviderRef: 'payid-ref-456',
+        payidReference: 'payid-789',
+        retryCount: 3,
+      },
+    })
+
+    const result = await getTransfer(transfer.id, userId)
+    expect(result).not.toBeNull()
+
+    const view = result as unknown as Record<string, unknown>
+    expect(view.failureReason).toBeUndefined()
+    expect(view.payoutProviderRef).toBeUndefined()
+    expect(view.payoutProvider).toBeUndefined()
+    expect(view.payidProviderRef).toBeUndefined()
+    expect(view.payidReference).toBeUndefined()
+    expect(view.retryCount).toBeUndefined()
+
+    // Sanity: the public fields ARE present.
+    expect(result!.id).toBe(transfer.id)
+    expect(result!.status).toBeDefined()
+    expect(result!.sendAmount).toBeDefined()
+  })
+
+  it('includes recipient projection without sensitive bank fields', async () => {
+    const transfer = await createTestTransfer(userId, recipientId)
+    const result = await getTransfer(transfer.id, userId)
+    expect(result).not.toBeNull()
+    expect(result!.recipient).toEqual({
+      id: recipientId,
+      fullName: expect.any(String),
+      bankName: expect.any(String),
+    })
+    const recip = result!.recipient as unknown as Record<string, unknown>
+    expect(recip.accountNumber).toBeUndefined()
+    expect(recip.bankCode).toBeUndefined()
+  })
 })
 
 describe('listTransfers', () => {
@@ -122,8 +171,9 @@ describe('listTransfers', () => {
       fullName: 'Test Recipient',
       bankName: 'GTBank',
     })
-    expect((t.recipient as Record<string, unknown>).accountNumber).toBeUndefined()
-    expect((t.recipient as Record<string, unknown>).bankCode).toBeUndefined()
+    const recipientFields = t.recipient as unknown as Record<string, unknown>
+    expect(recipientFields.accountNumber).toBeUndefined()
+    expect(recipientFields.bankCode).toBeUndefined()
   })
 })
 

@@ -2,7 +2,8 @@ import Decimal from 'decimal.js'
 import { prisma } from '../db/client'
 import type { FxRateProvider } from './fx-fetcher'
 import { calculateCustomerRate } from './spread'
-import type { Rate } from '../../generated/prisma/client'
+import { DefaultFxRateProvider } from './fx-fetcher'
+import type { Rate, Corridor } from '../../generated/prisma/client'
 
 const STALE_THRESHOLD_HOURS = 12
 
@@ -101,4 +102,30 @@ export class RateService {
       take: limit,
     })
   }
+}
+
+/**
+ * Resolve the current customer rate for a currency pair (active corridor only).
+ *
+ * Single source of truth for "what is the current customer rate?" used by
+ * both the public read-only endpoint (`/api/rates/public`) and any other
+ * caller that knows pair but not corridorId. Goes through `RateService` so
+ * admin overrides and ordering rules apply uniformly.
+ *
+ * Returns the corridor + rate pair, or null if either is missing/inactive.
+ */
+export async function getCurrentRateByPair(
+  baseCurrency: string,
+  targetCurrency: string,
+): Promise<{ corridor: Corridor; rate: Rate } | null> {
+  const corridor = await prisma.corridor.findFirst({
+    where: { baseCurrency, targetCurrency, active: true },
+  })
+  if (!corridor) return null
+
+  const rateService = new RateService(new DefaultFxRateProvider())
+  const rate = await rateService.getCurrentRate(corridor.id)
+  if (!rate) return null
+
+  return { corridor, rate }
 }

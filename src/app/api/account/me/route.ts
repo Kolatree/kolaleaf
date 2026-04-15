@@ -6,7 +6,13 @@ import { requireAuth, AuthError } from '@/lib/auth/middleware'
 //
 // Returns the authenticated user's account summary used by the /account page
 // client components. Kept intentionally small -- only the fields the UI
-// renders. Never returns the 2FA secret or backup-code hashes.
+// renders. Never returns the password hash, 2FA secret, or backup-code hashes.
+//
+// 15g extension: now also returns `fullName`, the primary `email` (with id +
+// verified flag), and any secondary EMAIL identifiers the user holds (id +
+// identifier + verified). Needed so the /account page can render the
+// name/email display, badge verified/unverified state, and offer Remove
+// buttons for secondary emails without leaking raw rows from the DB.
 export async function GET(request: Request) {
   try {
     const { userId } = await requireAuth(request)
@@ -17,8 +23,28 @@ export async function GET(request: Request) {
       orderBy: { createdAt: 'asc' },
     })
 
+    // All EMAIL identifiers for this user, oldest first. Primary = first
+    // verified; if none is verified (edge case: pre-verification account)
+    // fall back to first unverified. The rest are rendered as secondary with
+    // Remove controls.
+    const emails = await prisma.userIdentifier.findMany({
+      where: { userId, type: 'EMAIL' },
+      orderBy: { createdAt: 'asc' },
+    })
+    const primary = emails.find((e) => e.verified) ?? emails[0] ?? null
+    const secondary = emails.filter((e) => e.id !== primary?.id)
+
     return NextResponse.json({
       userId: user.id,
+      fullName: user.fullName,
+      email: primary
+        ? { id: primary.id, email: primary.identifier, verified: primary.verified }
+        : null,
+      secondaryEmails: secondary.map((e) => ({
+        id: e.id,
+        email: e.identifier,
+        verified: e.verified,
+      })),
       twoFactorMethod: user.twoFactorMethod,
       twoFactorEnabledAt: user.twoFactorEnabledAt?.toISOString() ?? null,
       hasVerifiedPhone: Boolean(phone),

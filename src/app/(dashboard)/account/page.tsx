@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardShell, colors, radius, shadow, spacing } from '@/components/design/KolaPrimitives'
 import { TwoFactorSection } from './_components/two-factor-section'
+import { AccountIdentitySection } from './_components/account-identity-section'
 
 interface KycStatus {
   status: string
@@ -77,6 +78,9 @@ export default function AccountPage() {
             Account
           </h1>
         </div>
+
+        {/* Profile + credentials */}
+        <AccountIdentitySection />
 
         {/* KYC */}
         <section style={{ background: colors.cardBg, borderRadius: radius.card, padding: spacing.cardPad, boxShadow: shadow.card }}>

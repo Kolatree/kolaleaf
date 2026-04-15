@@ -63,6 +63,12 @@ enum ReportType {
   IFTI
 }
 
+enum TwoFactorMethod {
+  NONE
+  TOTP
+  SMS
+}
+
 // ─── MODELS ─────────────────────────────────────────────
 
 model User {
@@ -72,6 +78,10 @@ model User {
   totpSecret    String?
   totpEnabled   Boolean          @default(false)
   backupCodes   String[]         @default([])
+  twoFactorMethod      TwoFactorMethod @default(NONE)
+  twoFactorSecret      String?
+  twoFactorBackupCodes String[]        @default([])
+  twoFactorEnabledAt   DateTime?
   kycStatus     KycStatus        @default(PENDING)
   kycProviderId        String?
   kycRejectionReasons  String[]         @default([])
@@ -86,6 +96,10 @@ model User {
   referredBy    Referral?        @relation("referred")
   referrals     Referral[]       @relation("referrer")
   authEvents    AuthEvent[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
+  phoneVerificationCodes  PhoneVerificationCode[]
+  twoFactorChallenges     TwoFactorChallenge[]
 }
 
 model UserIdentifier {
@@ -237,4 +251,63 @@ model WebhookEvent {
   createdAt   DateTime @default(now())
 
   @@unique([provider, eventId])
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  userId    String
+  email     String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  ip        String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PhoneVerificationCode {
+  id        String    @id @default(cuid())
+  userId    String
+  phone     String
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int       @default(0)
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model TwoFactorChallenge {
+  id         String          @id @default(cuid())
+  userId     String
+  codeHash   String?
+  method     TwoFactorMethod
+  expiresAt  DateTime
+  attempts   Int             @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime        @default(now())
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }

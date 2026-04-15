@@ -1,4 +1,4 @@
-# Review Feedback — Step 15b
+# Review Feedback — Step 15c
 Date: 2026-04-15
 Ready for Builder: YES
 
@@ -6,37 +6,55 @@ Ready for Builder: YES
 None.
 
 ## Should Fix
-- `src/components/design/KolaPrimitives.tsx:449-450` — AdminAlert uses raw `rgba(...)` and `#b00020` literals rather than named tokens. This matches the existing precedent on line 186 (also a raw `#b00020` error color), so it is NOT a blocker. When Variant D eventually gains `colors.warn` / `colors.error` / `colors.warnBg` tokens, fold this in too. Log it, do not fix inline.
-- `src/app/(dashboard)/send/page.tsx:54` — client-side `} catch {` without an err binding. Out of scope for #5 (which targeted `api/{cron,webhooks,rates}` and `lib/workers`). Fine to defer; mentioning only so it does not rot.
+None. Bob's evidence and my independent pass agree end-to-end.
 
 ## Escalate to Architect
 None.
 
 ## Verified Working
 
-**Item #3 — `getTransfer` projection.**
-`USER_SAFE_TRANSFER_SELECT` in `src/lib/transfers/queries.ts:28-41` explicitly enumerates public fields only; `failureReason`, `payoutProviderRef`, `payoutProvider`, `payidProviderRef`, `payidReference`, `retryCount` are absent. `src/app/api/transfers/[id]/route.ts:13` goes through `getTransfer` — projection applied. `src/app/api/admin/transfers/[id]/route.ts:15-22` uses `prisma.transfer.findUniqueOrThrow` directly — admin keeps full data. Two new tests in `tests/lib/transfers/queries.test.ts:62-109` populate the leaky fields and assert they are stripped; recipient projection verified as `{id, fullName, bankName}`.
+**1. Migration is purely additive.**
+`prisma/migrations/20260415113525_auth_verification_2fa/migration.sql` — walked line by line. Contains only:
+- 1 × `CREATE TYPE` (TwoFactorMethod: NONE/TOTP/SMS)
+- 4 × `ADD COLUMN` on User (twoFactorMethod NOT NULL DEFAULT 'NONE', twoFactorSecret nullable, twoFactorBackupCodes TEXT[] DEFAULT ARRAY[]::TEXT[], twoFactorEnabledAt nullable)
+- 4 × `CREATE TABLE` (EmailVerificationToken, PasswordResetToken, PhoneVerificationCode, TwoFactorChallenge)
+- 2 × `CREATE UNIQUE INDEX` (tokenHash on Email + Password reset)
+- 8 × `CREATE INDEX` (userId + expiresAt on all four new tables)
+- 4 × `ADD CONSTRAINT ... FOREIGN KEY ... ON DELETE CASCADE ON UPDATE CASCADE`
 
-**Item #6 — RateService bypass.**
-`getCurrentRateByPair` at `src/lib/rates/rate-service.ts:117-131` resolves the corridor then delegates to `RateService.getCurrentRate(corridorId)`. `src/app/api/rates/public/route.ts` now imports the helper; the response shape still only exposes `baseCurrency`, `targetCurrency`, `corridorId`, `customerRate`, `effectiveAt`. New test at `tests/app/api/rates/public.test.ts:129-163` asserts admin-override rate surfaces as `customerRate` and that `adminOverride` and `setById` do NOT leak. Note: `RateService.getCurrentRate` is `orderBy effectiveAt desc` — "admin-override ordering" is emergent (admin rates become the newest row via `setAdminRate`), not a separate code path. The test reflects this correctly.
+No `DROP`, no `ALTER ... RENAME`, no `ALTER ... DROP COLUMN`. `grep -E "DROP|RENAME"` returns nothing. Safe to deploy against existing data.
 
-**Item #5 — Observability.**
-`tldr search "} catch {" src/app/api/{cron,webhooks,rates}` and `src/lib/workers` — zero bare catches. All webhook JSON-parse and processing catches log with `[webhooks/<provider>]` prefix plus the error object. Rates routes log with `[api/rates/...]`. `src/lib/workers/reconciliation.ts:19,99-101,103-106` logs start / success (with counts) / failure and re-throws. `src/lib/workers/rate-refresh.ts:16,35,46-48,50-53` same pattern plus per-corridor failure logging inside the loop.
+**2. Defaults are safe for existing users.**
+- New enum `twoFactorMethod` defaults to `NONE` — existing rows pick this up.
+- `twoFactorBackupCodes` defaults to empty array `ARRAY[]::TEXT[]` — no NULL issues.
+- `twoFactorSecret` + `twoFactorEnabledAt` are nullable — no backfill needed.
+No migration risk for existing User rows.
 
-**Item #7 — TS errors.**
-`npx tsc --noEmit` → "TypeScript compilation completed" (0 errors). `src/lib/kyc/sumsub/__tests__/kyc-service.test.ts` at L94, L105, L226, L238 now passes `mockSumsubClient` as the second arg. `tests/lib/transfers/queries.test.ts:106,174` uses two-step `unknown as Record<string, unknown>` cast. Deleted `.next/` — gitignored build artefact, safe; regenerates on next build.
+**3. No application code touched.**
+`git diff HEAD -- src/ tests/` returns nothing. Only schema, migration, and handoff docs changed. `src/generated/prisma/**` is correctly gitignored, so Bob's regeneration does not pollute the diff.
 
-**Item #8 — AdminAlert.**
-`KolaPrimitives.tsx:440-469` — `role="alert"`, `data-testid="admin-alert"`, supports `tone='warn'|'error'`, consumes `radius.card` and `spacing.cardPad` tokens. `src/app/admin/page.tsx:53-54,69-73` computes `partialFailure` correctly (null means non-OK response OR thrown request) and renders the alert above stat tiles. Test at `tests/app/admin/page.test.tsx` mocks `next/headers` at module level and walks the React tree via `collectStrings`; both positive and negative cases are covered.
+**4. Brief compliance — schema additions match.**
+- `prisma/schema.prisma:63-67` — `TwoFactorMethod` enum (NONE, TOTP, SMS). Correct.
+- `prisma/schema.prisma:78-82` — 4 new User fields with correct defaults. Correct.
+- `prisma/schema.prisma:96-100` — 4 back-relations added. Correct.
+- `prisma/schema.prisma:252-313` — 4 new models, each with `@@index([userId])`, `@@index([expiresAt])`, and `onDelete: Cascade`. Correct.
 
-**Item #9 — Send-page rate-load error.**
-`src/app/(dashboard)/send/page.tsx:43-56` — both non-OK response and thrown error set `'Could not load live rate. Please refresh.'`. Successful poll clears that error ONLY if it matches that exact message (via functional `setError` with equality check), so a `handleSend` error from elsewhere survives the next rate poll. Behaviour matches the brief.
+**5. `UserIdentifier.verified` remains source of truth.**
+`grep -E "emailVerified|phoneVerified" prisma/schema.prisma` → no matches. `UserIdentifier.verified` + `verifiedAt` (schema.prisma:110-111) unchanged. Correct — no duplicate state introduced on User.
 
-**Scope audit.**
-`git diff --stat HEAD` shows exactly 19 modified files plus one new test directory (`tests/app/admin/`), all on Bob's list. No drift.
+**6. Legacy 2FA coexistence — intentional, documented, not a blocker.**
+`User.totpSecret` (line 78), `User.totpEnabled` (line 79), `User.backupCodes` (line 80) all still present on the User model. Not renamed, not dropped, no semantic change. Arch's carry-forward note in `ARCHITECT-BRIEF.md:169-175` ("logged 15c → addressed in 15f") explicitly authorizes this coexistence and schedules the removal for Step 15f with the application-code migration. Behavioural safety confirmed: new fields default to `NONE` / empty so existing `login.ts` / `verify-2fa/route.ts` paths are untouched.
 
-**Verification.**
-`npx tsc --noEmit` → 0 errors. `npm test -- --run` → 54 files, 392 tests, 0 failures. Matches Bob's claims.
+**7. Specific per-model checks.**
+- `EmailVerificationToken.tokenHash @unique` — yes (migration:66).
+- `PasswordResetToken.tokenHash @unique` — yes (migration:75).
+- `PhoneVerificationCode.codeHash` — present, NOT unique — correct for short numeric codes that may reissue.
+- `TwoFactorChallenge.codeHash String?` — nullable. Correct for the TOTP path which stores no code.
+- `TwoFactorChallenge.method` — schema cannot enforce "not NONE"; enforcement is app-layer intent. Acceptable per Bob's read in Request #6.
+- Index coverage: each of the four new tables has exactly `@@index([userId])` + `@@index([expiresAt])`. Two singles are the right call — PK lookups dominate, and the cleanup sweep is a range scan on `expiresAt` alone. A composite would only help a query like `WHERE userId = ? AND expiresAt < now()`, which isn't the planned shape. Agreed with Bob.
+- Cascade-on-user-delete on all four FKs — correct from a compliance standpoint. Pending tokens/codes/challenges are ephemeral artifacts; the immutable audit log (AuthEvent, transferEvent) remains on `onDelete: Restrict` elsewhere, preserving AUSTRAC 7-year retention.
 
 ## Cleared
-Step 15b (items #3, #5, #6, #7, #8, #9 from the Phase B FIX-NOW triage). Projection prevents user-facing leakage of internal treasury/audit fields. Public rate endpoint now goes through RateService uniformly. Observability is consistent across webhooks, rates, and workers. TS is clean with no exclusions. Admin partial-fetch failures surface visibly. Send-page rate errors surface correctly without wiping unrelated errors. Step 15b is clear.
+Schema-only Step 15c: 1 new enum, 4 new User columns, 4 new models, 8 single-column indexes, 2 unique constraints, 4 cascade FKs. Purely additive, no application code changes, legacy 2FA fields correctly left in place for the 15f follow-up.
+
+Step 15c is clear.

@@ -5,13 +5,59 @@
 
 ## Current Status
 
-**Active step:** 15b -- Bob's remaining FIX-NOW items (review pending)
-**Last cleared:** Step 15a
+**Active step:** 15c -- Schema migration foundation for auth/verification/2FA (review pending)
+**Last cleared:** Step 15b
 **Pending deploy:** NO
 
 ---
 
 ## Step History
+
+### Step 15c -- Schema migration foundation for auth/verification/2FA -- REVIEW PENDING
+*Date: 2026-04-15*
+
+Pure schema step. Adds the database foundation for the auth work landing in 15d-15g
+(email/phone verification, password reset, 2FA via TOTP/SMS). Zero application-logic
+changes. Additive migration only — no drops, no renames.
+
+Files changed:
+- `prisma/schema.prisma` -- added `TwoFactorMethod` enum (NONE/TOTP/SMS); extended `User`
+  with `twoFactorMethod` (default NONE), `twoFactorSecret?`, `twoFactorBackupCodes` (default []),
+  `twoFactorEnabledAt?`; added 4 new models: `EmailVerificationToken`, `PasswordResetToken`,
+  `PhoneVerificationCode`, `TwoFactorChallenge`; added 4 back-relations to `User`.
+- `prisma/migrations/20260415113525_auth_verification_2fa/migration.sql` -- generated
+  additive migration (CREATE TYPE, ADD COLUMN, CREATE TABLE, CREATE INDEX, ADD CONSTRAINT).
+- `src/generated/prisma/**` -- regenerated Prisma Client (7.7.0) with new models + enum.
+
+Decisions:
+- Email/phone verification status stays on `UserIdentifier.verified` + `verifiedAt` per the
+  brief's explicit constraint. No `User.emailVerified` / `User.phoneVerified` added.
+- Existing legacy 2FA fields (`totpSecret`, `totpEnabled`, `backupCodes`) are untouched. The
+  new `twoFactor*` fields are the go-forward surface; migrating legacy values is out of scope
+  for 15c and will be handled in 15d-15g (or a later consolidation step).
+- `PhoneVerificationCode` handles phone-add / phone-change flows. Per-login SMS 2FA codes
+  live in `TwoFactorChallenge.codeHash` (NULL for TOTP challenges).
+- `twoFactorSecret` stored plain for now per brief; encryption at rest planned for 15j.
+- `PhoneVerificationCode.attempts` and `TwoFactorChallenge.attempts` default 0; lock logic
+  belongs in application code (15d-15g), not the schema.
+- All 4 new models use `onDelete: Cascade` on the `User` FK so a deleted user's pending
+  verification/reset/challenge records are cleaned up automatically.
+- Indexes on `userId` and `expiresAt` for each new model — supports lookup-by-user and the
+  cleanup/expiry sweep job that will land in 15d-15g.
+
+Verification:
+- `npx prisma validate` -- schema valid.
+- `npx prisma generate` -- client regenerated cleanly.
+- `npx prisma migrate dev --name auth_verification_2fa --create-only` -- inspected SQL;
+  purely additive (no DROP, no RENAME).
+- `npx prisma migrate deploy` -- applied to local DB.
+- `docker exec kolaleaf-db psql -U postgres -d kolaleaf -c "\dt"` -- confirms all 4 new
+  tables present (EmailVerificationToken, PasswordResetToken, PhoneVerificationCode,
+  TwoFactorChallenge) alongside existing 13.
+- `\d "User"` -- confirms 4 new `twoFactor*` columns with correct defaults.
+- `npx tsc --noEmit` -- 0 errors (generated Prisma types additive, nothing breaks).
+- `npm test -- --run` -- 392/392 passing (same as 15b baseline; no regressions).
+- `npx prisma db seed` -- succeeds; seed does not touch the new tables.
 
 ### Step 15b -- FIX-NOW Cleanup (projection, RateService, observability, banner) -- REVIEW PENDING
 *Date: 2026-04-15*

@@ -166,6 +166,16 @@ Total: 26 findings (2 Critical, 11 Major, 10 Minor, 3 Polish)
 
 ---
 
+### Carry-forward note (logged 15c → addressed in 15f)
+
+The legacy 2FA columns (`User.totpSecret`, `User.totpEnabled`, `User.backupCodes`) already exist on the User model and are read by `src/lib/auth/login.ts` and `src/app/api/auth/verify-2fa/route.ts`, plus 2 tests. Step 15c added the new richer fields (`twoFactorMethod` enum, `twoFactorSecret`, `twoFactorBackupCodes`, `twoFactorEnabledAt`) alongside, NOT replacing.
+
+**Why this is safe in 15c:** new fields default to `NONE` / empty array, so existing application logic continues to read the legacy fields unchanged. No behaviour change. No backfill needed because no production users exist yet.
+
+**Step 15f scope addition:** when wiring the new 2FA setup UI, also (a) migrate `login.ts` and `verify-2fa/route.ts` to read from the new fields; (b) update the 2 tests; (c) add a follow-up migration that drops the legacy columns. Until then, legacy fields are deprecated-in-place.
+
+---
+
 ### Phase B — Arch triage (decisions locked)
 
 **FIX-NOW (10 items, must all land in Step 15):**

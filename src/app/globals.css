@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #1a1a2e;
+  --background: #f5f5f5;           /* page bg token */
+  --foreground: #1a1a2e;            /* ink token */
 }
 
 @theme inline {
@@ -16,10 +16,45 @@
   --color-kolaleaf-green-light: #7dd87d;
   --color-kolaleaf-gold: #ffd700;
   --color-kolaleaf-bg: #f0faf0;
+
+  --color-page: #f5f5f5;
+  --color-card: #ffffff;
+  --color-muted: #888888;
+  --color-border: #eeeeee;
+  --color-chip: #f0f0f0;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+
+/* Transitions + motion — respect prefers-reduced-motion */
+@keyframes kola-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes kola-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+.kola-page-enter   { animation: kola-fade-in 260ms ease-out both; }
+.kola-card-enter   { animation: kola-fade-in 320ms ease-out both; animation-delay: 60ms; }
+.kola-stagger > *  { animation: kola-fade-in 280ms ease-out both; }
+.kola-stagger > *:nth-child(2) { animation-delay:  40ms; }
+.kola-stagger > *:nth-child(3) { animation-delay:  80ms; }
+.kola-stagger > *:nth-child(4) { animation-delay: 120ms; }
+.kola-stagger > *:nth-child(5) { animation-delay: 160ms; }
+.kola-stagger > *:nth-child(6) { animation-delay: 200ms; }
+
+.kola-shimmer {
+  background: linear-gradient(90deg, rgba(240,250,240,0.4) 0%, rgba(125,216,125,0.25) 50%, rgba(240,250,240,0.4) 100%);
+  background-size: 200% 100%;
+  animation: kola-shimmer 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kola-page-enter, .kola-card-enter, .kola-stagger > *, .kola-shimmer { animation: none !important; }
 }

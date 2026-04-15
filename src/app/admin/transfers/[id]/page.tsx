@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
+import { AdminShell, colors, radius, shadow, spacing, GRADIENT } from '@/components/design/KolaPrimitives'
 
 interface TransferEvent {
   id: string
@@ -58,15 +59,15 @@ export default function AdminTransferDetailPage({
 
   useEffect(() => {
     fetchTransfer()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   async function handleRetry() {
     setActionLoading(true)
     setError(null)
     const res = await fetch(`/api/admin/transfers/${id}/retry`, { method: 'POST' })
-    if (res.ok) {
-      await fetchTransfer()
-    } else {
+    if (res.ok) await fetchTransfer()
+    else {
       const data = await res.json()
       setError(data.error ?? 'Retry failed')
     }
@@ -77,117 +78,175 @@ export default function AdminTransferDetailPage({
     setActionLoading(true)
     setError(null)
     const res = await fetch(`/api/admin/transfers/${id}/refund`, { method: 'POST' })
-    if (res.ok) {
-      await fetchTransfer()
-    } else {
+    if (res.ok) await fetchTransfer()
+    else {
       const data = await res.json()
       setError(data.error ?? 'Refund failed')
     }
     setActionLoading(false)
   }
 
-  if (!transfer && !error) {
-    return <p className="text-gray-500">Loading...</p>
-  }
-
-  if (error && !transfer) {
-    return <p className="text-red-600">{error}</p>
-  }
-
-  if (!transfer) return null
-
   return (
-    <div>
-      <div className="mb-4">
-        <Link href="/admin/transfers" className="text-sm text-blue-600 hover:underline">
-          &larr; Back to transfers
-        </Link>
-      </div>
+    <AdminShell active="Transfers">
+      <Link href="/admin/transfers" className="inline-block mb-4" style={{ fontSize: '12px', color: colors.purple, fontWeight: 600 }}>
+        ← Back to transfers
+      </Link>
 
-      <h1 className="text-2xl font-semibold text-gray-900 mb-6">
-        Transfer {transfer.id.slice(0, 8)}...
-      </h1>
-
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+      {!transfer && !error && (
+        <div style={{ fontSize: '14px', color: colors.muted }}>Loading…</div>
+      )}
+      {error && !transfer && (
+        <div role="alert" style={{ background: '#fef1f2', color: '#b00020', fontSize: '13px', padding: '10px 12px', borderRadius: '8px' }}>
           {error}
         </div>
       )}
 
-      {/* Transfer info */}
-      <div className="bg-white border border-gray-200 rounded p-4 mb-6">
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <Field label="Status" value={transfer.status.replace(/_/g, ' ')} />
-          <Field label="Sender" value={transfer.user.fullName} />
-          <Field label="Recipient" value={`${transfer.recipient.fullName} (${transfer.recipient.bankName})`} />
-          <Field label="Send" value={`${Number(transfer.sendAmount).toLocaleString()} ${transfer.sendCurrency}`} />
-          <Field label="Receive" value={`${Number(transfer.receiveAmount).toLocaleString()} ${transfer.receiveCurrency}`} />
-          <Field label="Exchange Rate" value={transfer.exchangeRate} />
-          <Field label="Fee" value={`${Number(transfer.fee).toLocaleString()} ${transfer.sendCurrency}`} />
-          <Field label="PayID Ref" value={transfer.payidReference ?? '-'} />
-          <Field label="Payout Provider" value={transfer.payoutProvider ?? '-'} />
-          <Field label="Payout Ref" value={transfer.payoutProviderRef ?? '-'} />
-          <Field label="Retry Count" value={String(transfer.retryCount)} />
-          <Field label="Failure Reason" value={transfer.failureReason ?? '-'} />
-          <Field label="Created" value={new Date(transfer.createdAt).toLocaleString()} />
-          <Field label="Completed" value={transfer.completedAt ? new Date(transfer.completedAt).toLocaleString() : '-'} />
-        </div>
-      </div>
-
-      {/* Actions for NEEDS_MANUAL */}
-      {transfer.status === 'NEEDS_MANUAL' && (
-        <div className="flex gap-3 mb-6">
-          <button
-            onClick={handleRetry}
-            disabled={actionLoading}
-            className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
-          >
-            {actionLoading ? 'Processing...' : 'Retry Payout'}
-          </button>
-          <button
-            onClick={handleRefund}
-            disabled={actionLoading}
-            className="px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-50"
-          >
-            {actionLoading ? 'Processing...' : 'Refund'}
-          </button>
-        </div>
-      )}
-
-      {/* Event timeline */}
-      {transfer.events.length > 0 && (
-        <div>
-          <h2 className="text-lg font-medium text-gray-900 mb-3">Event Timeline</h2>
-          <div className="border-l-2 border-gray-200 ml-3 space-y-4">
-            {transfer.events.map((event) => (
-              <div key={event.id} className="pl-4 relative">
-                <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-gray-300 border-2 border-white" />
-                <p className="text-sm font-medium text-gray-900">
-                  {event.fromStatus.replace(/_/g, ' ')} &rarr; {event.toStatus.replace(/_/g, ' ')}
-                </p>
-                <p className="text-xs text-gray-500">
-                  {event.actor}{event.actorId ? ` (${event.actorId.slice(0, 8)})` : ''} &mdash;{' '}
-                  {new Date(event.createdAt).toLocaleString()}
-                </p>
-                {event.metadata && (
-                  <pre className="text-xs text-gray-400 mt-1">
-                    {JSON.stringify(event.metadata, null, 2)}
-                  </pre>
-                )}
+      {transfer && (
+        <>
+          <div className="flex items-baseline justify-between mb-6 flex-wrap gap-3">
+            <div>
+              <div style={{ fontSize: '11px', color: colors.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Transfer
               </div>
-            ))}
+              <h1 className="mt-1 font-mono" style={{ fontSize: '22px', fontWeight: 700, color: colors.ink }}>
+                {transfer.id.slice(0, 12)}…
+              </h1>
+            </div>
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                padding: '4px 10px',
+                borderRadius: '999px',
+                background: 'rgba(45,27,105,0.10)',
+                color: colors.purple,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+              }}
+            >
+              {transfer.status.replace(/_/g, ' ')}
+            </span>
           </div>
-        </div>
+
+          {error && (
+            <div role="alert" className="mb-4" style={{ background: '#fef1f2', color: '#b00020', fontSize: '13px', padding: '10px 12px', borderRadius: '8px' }}>
+              {error}
+            </div>
+          )}
+
+          {/* Summary grid */}
+          <section
+            className="mb-6"
+            style={{ background: colors.cardBg, borderRadius: radius.card, padding: spacing.cardPad, boxShadow: shadow.card }}
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+              <Field label="Sender" value={transfer.user.fullName} />
+              <Field label="Recipient" value={`${transfer.recipient.fullName} (${transfer.recipient.bankName})`} />
+              <Field label="Send"    value={`${Number(transfer.sendAmount).toLocaleString()} ${transfer.sendCurrency}`} />
+              <Field label="Receive" value={`${Number(transfer.receiveAmount).toLocaleString()} ${transfer.receiveCurrency}`} tone="green" />
+              <Field label="Exchange rate" value={transfer.exchangeRate} />
+              <Field label="Fee"     value={`${Number(transfer.fee).toLocaleString()} ${transfer.sendCurrency}`} />
+              <Field label="PayID ref" value={transfer.payidReference ?? '—'} mono />
+              <Field label="Payout provider" value={transfer.payoutProvider ?? '—'} />
+              <Field label="Payout ref" value={transfer.payoutProviderRef ?? '—'} mono />
+              <Field label="Retry count" value={String(transfer.retryCount)} />
+              <Field label="Failure reason" value={transfer.failureReason ?? '—'} />
+              <Field label="Created" value={new Date(transfer.createdAt).toLocaleString()} />
+              <Field label="Completed" value={transfer.completedAt ? new Date(transfer.completedAt).toLocaleString() : '—'} />
+            </div>
+          </section>
+
+          {/* Actions */}
+          {transfer.status === 'NEEDS_MANUAL' && (
+            <div className="flex gap-3 mb-6">
+              <button
+                type="button"
+                onClick={handleRetry}
+                disabled={actionLoading}
+                className="text-white transition hover:brightness-110 disabled:opacity-60"
+                style={{
+                  background: GRADIENT,
+                  padding: '10px 18px',
+                  borderRadius: radius.cta,
+                  fontSize: '14px',
+                  fontWeight: 600,
+                }}
+              >
+                {actionLoading ? 'Processing…' : 'Retry payout'}
+              </button>
+              <button
+                type="button"
+                onClick={handleRefund}
+                disabled={actionLoading}
+                className="transition hover:brightness-110 disabled:opacity-60"
+                style={{
+                  background: '#b00020',
+                  color: '#fff',
+                  padding: '10px 18px',
+                  borderRadius: radius.cta,
+                  fontSize: '14px',
+                  fontWeight: 600,
+                }}
+              >
+                {actionLoading ? 'Processing…' : 'Refund'}
+              </button>
+            </div>
+          )}
+
+          {/* Timeline */}
+          {transfer.events.length > 0 && (
+            <section style={{ background: colors.cardBg, borderRadius: radius.card, padding: spacing.cardPad, boxShadow: shadow.card }}>
+              <h2 style={{ fontSize: '15px', fontWeight: 600, color: colors.ink }}>Event timeline</h2>
+              <ol
+                className="mt-4 ml-3 space-y-4"
+                style={{ borderLeft: `2px solid ${colors.border}` }}
+              >
+                {transfer.events.map((event) => (
+                  <li key={event.id} className="pl-4 relative">
+                    <span
+                      className="absolute -left-[7px] top-1"
+                      style={{ width: '12px', height: '12px', borderRadius: '6px', background: GRADIENT, border: `2px solid ${colors.cardBg}` }}
+                    />
+                    <p style={{ fontSize: '13px', fontWeight: 600, color: colors.ink }}>
+                      {event.fromStatus.replace(/_/g, ' ')} → {event.toStatus.replace(/_/g, ' ')}
+                    </p>
+                    <p style={{ fontSize: '11px', color: colors.muted }}>
+                      {event.actor}{event.actorId ? ` (${event.actorId.slice(0, 8)})` : ''} · {new Date(event.createdAt).toLocaleString()}
+                    </p>
+                    {event.metadata && (
+                      <pre
+                        className="mt-1 overflow-x-auto"
+                        style={{ fontSize: '11px', color: colors.muted, background: colors.pageBg, padding: '8px 10px', borderRadius: '6px' }}
+                      >
+                        {JSON.stringify(event.metadata, null, 2)}
+                      </pre>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+        </>
       )}
-    </div>
+    </AdminShell>
   )
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({ label, value, tone, mono }: { label: string; value: string; tone?: 'green'; mono?: boolean }) {
   return (
     <div>
-      <p className="text-xs text-gray-500 uppercase">{label}</p>
-      <p className="text-gray-900">{value}</p>
+      <div style={{ fontSize: '10px', color: colors.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
+      <div
+        className={mono ? 'font-mono' : ''}
+        style={{
+          fontSize: '14px',
+          fontWeight: 500,
+          marginTop: '2px',
+          color: tone === 'green' ? colors.green : colors.ink,
+        }}
+      >
+        {value}
+      </div>
     </div>
   )
 }

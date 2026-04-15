@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { KolaLogo, Tagline, FieldLabel, colors, radius, shadow, spacing, type as typeT, GRADIENT } from '@/components/design/KolaPrimitives'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -71,61 +72,105 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="w-full max-w-sm">
+    <div className="w-full max-w-sm kola-card-enter">
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-white">
-          Kola<span className="text-kolaleaf-green-light">leaf</span>
-        </h1>
-        <p className="text-white/70 text-sm mt-1">Fast. Secure. Better rates to Nigeria.</p>
+        <KolaLogo tone="onDark" size="lg" />
+        <div className="mt-2"><Tagline tone="onDark" /></div>
       </div>
 
-      <div className="bg-white rounded-2xl p-6 shadow-lg">
+      <div
+        style={{
+          background: colors.cardBg,
+          borderRadius: radius.card,
+          padding: spacing.cardPad,
+          boxShadow: shadow.card,
+          color: colors.ink,
+        }}
+      >
         {!needs2FA ? (
-          <form onSubmit={handleLogin}>
-            <h2 className="text-xl font-semibold text-center mb-6">Sign In</h2>
+          <form onSubmit={handleLogin} className="flex flex-col gap-4">
+            <h2 style={{ fontSize: '18px', fontWeight: 600, textAlign: 'center' }}>Sign in</h2>
 
             {error && (
-              <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg mb-4">{error}</div>
+              <div role="alert" style={{ background: '#fef1f2', color: '#b00020', fontSize: '13px', padding: '10px 12px', borderRadius: '8px' }}>
+                {error}
+              </div>
             )}
 
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-kolaleaf-purple"
-              placeholder="you@example.com"
-            />
+            <label className="flex flex-col gap-2">
+              <FieldLabel>Email</FieldLabel>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+                placeholder="you@example.com"
+                style={{
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '8px',
+                  padding: '10px 12px',
+                  fontSize: '14px',
+                  outline: 'none',
+                }}
+                onFocus={(e) => (e.currentTarget.style.borderColor = colors.purple)}
+                onBlur={(e) => (e.currentTarget.style.borderColor = colors.border)}
+              />
+            </label>
 
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-6 focus:outline-none focus:ring-2 focus:ring-kolaleaf-purple"
-              placeholder="Enter your password"
-            />
+            <label className="flex flex-col gap-2">
+              <FieldLabel>Password</FieldLabel>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={8}
+                autoComplete="current-password"
+                placeholder="At least 8 characters"
+                style={{
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '8px',
+                  padding: '10px 12px',
+                  fontSize: '14px',
+                  outline: 'none',
+                }}
+                onFocus={(e) => (e.currentTarget.style.borderColor = colors.purple)}
+                onBlur={(e) => (e.currentTarget.style.borderColor = colors.border)}
+              />
+            </label>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-kolaleaf-purple to-kolaleaf-green disabled:opacity-50"
+              aria-busy={loading}
+              className="w-full text-white transition hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
+              style={{
+                background: GRADIENT,
+                padding: spacing.ctaPad,
+                borderRadius: radius.cta,
+                fontSize: typeT.cta.size,
+                fontWeight: typeT.cta.weight,
+                letterSpacing: typeT.cta.letterSpacing,
+                marginTop: '4px',
+              }}
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
         ) : (
-          <form onSubmit={handle2FA}>
-            <h2 className="text-xl font-semibold text-center mb-2">Two-Factor Authentication</h2>
-            <p className="text-sm text-gray-500 text-center mb-6">
-              Enter the 6-digit code from your authenticator app.
-            </p>
+          <form onSubmit={handle2FA} className="flex flex-col gap-4">
+            <div className="text-center">
+              <h2 style={{ fontSize: '18px', fontWeight: 600 }}>Two-factor authentication</h2>
+              <p style={{ fontSize: '13px', color: colors.muted, marginTop: '6px' }}>
+                Enter the 6-digit code from your authenticator app.
+              </p>
+            </div>
 
             {error && (
-              <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg mb-4">{error}</div>
+              <div role="alert" style={{ background: '#fef1f2', color: '#b00020', fontSize: '13px', padding: '10px 12px', borderRadius: '8px' }}>
+                {error}
+              </div>
             )}
 
             <input
@@ -134,27 +179,55 @@ export default function LoginPage() {
               onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
               required
               maxLength={6}
-              className="w-full px-3 py-3 border border-gray-300 rounded-lg mb-6 text-center text-2xl tracking-widest focus:outline-none focus:ring-2 focus:ring-kolaleaf-purple"
-              placeholder="000000"
+              inputMode="numeric"
+              aria-label="6-digit code"
               autoFocus
+              placeholder="000000"
+              className="tabular-nums text-center"
+              style={{
+                border: `1px solid ${colors.border}`,
+                borderRadius: '8px',
+                padding: '12px',
+                fontSize: '24px',
+                letterSpacing: '8px',
+                outline: 'none',
+              }}
+              onFocus={(e) => (e.currentTarget.style.borderColor = colors.purple)}
+              onBlur={(e) => (e.currentTarget.style.borderColor = colors.border)}
             />
 
             <button
               type="submit"
               disabled={loading || totpCode.length !== 6}
-              className="w-full py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-kolaleaf-purple to-kolaleaf-green disabled:opacity-50"
+              aria-busy={loading}
+              className="w-full text-white transition hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
+              style={{
+                background: GRADIENT,
+                padding: spacing.ctaPad,
+                borderRadius: radius.cta,
+                fontSize: typeT.cta.size,
+                fontWeight: typeT.cta.weight,
+                letterSpacing: typeT.cta.letterSpacing,
+              }}
             >
-              {loading ? 'Verifying...' : 'Verify'}
+              {loading ? 'Verifying…' : 'Verify'}
             </button>
           </form>
         )}
 
-        <p className="text-center text-sm text-gray-500 mt-4">
+        <p className="text-center mt-5" style={{ fontSize: '13px', color: colors.muted }}>
           Don&apos;t have an account?{' '}
-          <Link href="/register" className="text-kolaleaf-purple font-medium">
-            Sign Up
+          <Link href="/register" style={{ color: colors.purple, fontWeight: 600 }}>
+            Sign up
           </Link>
         </p>
+      </div>
+
+      {/* Trust strip under card */}
+      <div className="mt-6 flex items-center justify-center gap-5 text-white/80" style={{ fontSize: '11px' }}>
+        <span>🔒 AUSTRAC</span>
+        <span>⚡ Minutes</span>
+        <span>★ 4.8/5</span>
       </div>
     </div>
   )

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { AdminShell, FieldLabel, colors, radius, shadow, spacing, GRADIENT } from '@/components/design/KolaPrimitives'
 
 interface RateEntry {
   id: string
@@ -18,6 +19,17 @@ interface CorridorRate {
   stale: boolean
   hoursStale?: number
   history: RateEntry[]
+}
+
+const inputStyle: React.CSSProperties = {
+  border: `1px solid ${colors.border}`,
+  borderRadius: '8px',
+  padding: '8px 12px',
+  fontSize: '13px',
+  background: colors.cardBg,
+  color: colors.ink,
+  outline: 'none',
+  width: '100%',
 }
 
 export default function AdminRatesPage() {
@@ -44,6 +56,7 @@ export default function AdminRatesPage() {
 
   useEffect(() => {
     fetchRates()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function handleSetRate(e: React.FormEvent) {
@@ -73,127 +86,154 @@ export default function AdminRatesPage() {
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Exchange Rates</h1>
+    <AdminShell active="Rates">
+      <div className="mb-6">
+        <div style={{ fontSize: '11px', color: colors.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Pricing
+        </div>
+        <h1 className="mt-1" style={{ fontSize: '24px', fontWeight: 700, color: colors.ink, letterSpacing: '-0.3px' }}>
+          Exchange rates
+        </h1>
+      </div>
 
-      {/* Current rates */}
       {rates.map((r) => (
-        <div key={r.corridor.id} className="bg-white border border-gray-200 rounded p-4 mb-4">
-          <div className="flex justify-between items-start mb-3">
+        <section
+          key={r.corridor.id}
+          className="mb-4"
+          style={{ background: colors.cardBg, borderRadius: radius.card, padding: spacing.cardPad, boxShadow: shadow.card }}
+        >
+          <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
-              <h2 className="text-lg font-medium text-gray-900">
+              <h2 style={{ fontSize: '15px', fontWeight: 600, color: colors.ink }}>
                 {r.corridor.baseCurrency} / {r.corridor.targetCurrency}
               </h2>
               {r.stale && (
-                <p className="text-xs text-yellow-600 font-medium">
-                  Stale — {r.hoursStale ?? '?'}h since last update
-                </p>
+                <span
+                  className="inline-block mt-1"
+                  style={{
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    padding: '2px 8px',
+                    borderRadius: '999px',
+                    background: 'rgba(255,215,0,0.20)',
+                    color: '#8a6d0a',
+                  }}
+                >
+                  Stale · {r.hoursStale ?? '?'}h
+                </span>
               )}
             </div>
             {r.currentRate && (
               <div className="text-right">
-                <p className="text-2xl font-semibold text-gray-900">
+                <div className="tabular-nums" style={{ fontSize: '28px', fontWeight: 700, color: colors.ink }}>
                   {Number(r.currentRate.customerRate).toFixed(2)}
-                </p>
-                <p className="text-xs text-gray-500">
-                  Wholesale: {Number(r.currentRate.wholesaleRate).toFixed(4)} | Spread: {(Number(r.currentRate.spread) * 100).toFixed(2)}%
+                </div>
+                <div style={{ fontSize: '11px', color: colors.muted }}>
+                  Wholesale {Number(r.currentRate.wholesaleRate).toFixed(4)} · spread {(Number(r.currentRate.spread) * 100).toFixed(2)}%
                   {r.currentRate.adminOverride && (
-                    <span className="ml-2 text-blue-600 font-medium">Admin Override</span>
+                    <span className="ml-2" style={{ color: colors.purple, fontWeight: 600 }}>Admin override</span>
                   )}
-                </p>
+                </div>
               </div>
             )}
           </div>
 
-          {/* Rate history */}
           {r.history.length > 0 && (
-            <details className="text-sm">
-              <summary className="cursor-pointer text-gray-600 hover:text-gray-900">
-                Rate History ({r.history.length})
+            <details className="mt-4">
+              <summary style={{ fontSize: '13px', color: colors.muted, cursor: 'pointer', fontWeight: 600 }}>
+                Rate history ({r.history.length})
               </summary>
-              <table className="w-full mt-2 text-xs">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="text-left px-2 py-1">Date</th>
-                    <th className="text-right px-2 py-1">Customer Rate</th>
-                    <th className="text-right px-2 py-1">Wholesale</th>
-                    <th className="text-right px-2 py-1">Spread</th>
-                    <th className="text-left px-2 py-1">Source</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {r.history.map((h) => (
-                    <tr key={h.id}>
-                      <td className="px-2 py-1 text-gray-500">{new Date(h.effectiveAt).toLocaleString()}</td>
-                      <td className="px-2 py-1 text-right font-mono">{Number(h.customerRate).toFixed(2)}</td>
-                      <td className="px-2 py-1 text-right font-mono">{Number(h.wholesaleRate).toFixed(4)}</td>
-                      <td className="px-2 py-1 text-right">{(Number(h.spread) * 100).toFixed(2)}%</td>
-                      <td className="px-2 py-1">{h.adminOverride ? 'Admin' : 'API'}</td>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full" style={{ fontSize: '12px' }}>
+                  <thead style={{ background: colors.pageBg }}>
+                    <tr>
+                      <Th>Date</Th>
+                      <Th align="right">Customer</Th>
+                      <Th align="right">Wholesale</Th>
+                      <Th align="right">Spread</Th>
+                      <Th>Source</Th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {r.history.map((h, i) => (
+                      <tr key={h.id} style={{ borderTop: i === 0 ? 'none' : `1px solid ${colors.border}` }}>
+                        <td className="px-3 py-2" style={{ color: colors.muted }}>{new Date(h.effectiveAt).toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right tabular-nums" style={{ color: colors.ink }}>{Number(h.customerRate).toFixed(2)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums" style={{ color: colors.ink }}>{Number(h.wholesaleRate).toFixed(4)}</td>
+                        <td className="px-3 py-2 text-right" style={{ color: colors.ink }}>{(Number(h.spread) * 100).toFixed(2)}%</td>
+                        <td className="px-3 py-2" style={{ color: h.adminOverride ? colors.purple : colors.muted }}>
+                          {h.adminOverride ? 'Admin' : 'API'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </details>
           )}
-        </div>
+        </section>
       ))}
 
       {!loading && rates.length === 0 && (
-        <p className="text-gray-500 text-sm mb-6">No corridors configured</p>
+        <p style={{ fontSize: '13px', color: colors.muted }}>No corridors configured.</p>
       )}
 
-      {/* Set rate form */}
-      <div className="bg-white border border-gray-200 rounded p-4 mt-6">
-        <h2 className="text-lg font-medium text-gray-900 mb-3">Set Admin Rate Override</h2>
-        <form onSubmit={handleSetRate} className="space-y-3">
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">Corridor</label>
-            <select
-              value={formCorridorId}
-              onChange={(e) => setFormCorridorId(e.target.value)}
-              className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
-            >
+      {/* Override form */}
+      <section
+        className="mt-6"
+        style={{ background: colors.cardBg, borderRadius: radius.card, padding: spacing.cardPad, boxShadow: shadow.card }}
+      >
+        <h2 style={{ fontSize: '15px', fontWeight: 600, color: colors.ink }}>Set admin rate override</h2>
+        <form onSubmit={handleSetRate} className="mt-4 grid md:grid-cols-3 gap-3">
+          <label className="flex flex-col gap-1.5 md:col-span-1">
+            <FieldLabel>Corridor</FieldLabel>
+            <select value={formCorridorId} onChange={(e) => setFormCorridorId(e.target.value)} style={inputStyle}>
               {rates.map((r) => (
                 <option key={r.corridor.id} value={r.corridor.id}>
                   {r.corridor.baseCurrency}/{r.corridor.targetCurrency}
                 </option>
               ))}
             </select>
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <FieldLabel>Wholesale rate</FieldLabel>
+            <input type="text" value={formWholesaleRate} onChange={(e) => setFormWholesaleRate(e.target.value)} placeholder="1050.00" required style={inputStyle} />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <FieldLabel>Customer rate</FieldLabel>
+            <input type="text" value={formCustomerRate} onChange={(e) => setFormCustomerRate(e.target.value)} placeholder="1020.00" required style={inputStyle} />
+          </label>
+
+          <div className="md:col-span-3">
+            {submitError && (
+              <p role="alert" style={{ fontSize: '13px', color: '#b00020', marginBottom: '8px' }}>{submitError}</p>
+            )}
+            {submitSuccess && (
+              <p style={{ fontSize: '13px', color: colors.green, marginBottom: '8px' }}>Rate updated successfully.</p>
+            )}
+            <button
+              type="submit"
+              className="text-white transition hover:brightness-110"
+              style={{ background: GRADIENT, padding: '10px 18px', borderRadius: '8px', fontSize: '14px', fontWeight: 600 }}
+            >
+              Set rate
+            </button>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">Wholesale Rate</label>
-              <input
-                type="text"
-                value={formWholesaleRate}
-                onChange={(e) => setFormWholesaleRate(e.target.value)}
-                placeholder="e.g. 1050.00"
-                className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">Customer Rate</label>
-              <input
-                type="text"
-                value={formCustomerRate}
-                onChange={(e) => setFormCustomerRate(e.target.value)}
-                placeholder="e.g. 1020.00"
-                className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
-                required
-              />
-            </div>
-          </div>
-          {submitError && <p className="text-sm text-red-600">{submitError}</p>}
-          {submitSuccess && <p className="text-sm text-green-600">Rate updated successfully</p>}
-          <button
-            type="submit"
-            className="px-4 py-2 bg-gray-900 text-white text-sm rounded hover:bg-gray-800"
-          >
-            Set Rate
-          </button>
         </form>
-      </div>
-    </div>
+      </section>
+    </AdminShell>
+  )
+}
+
+function Th({ children, align = 'left' }: { children: React.ReactNode; align?: 'left' | 'right' }) {
+  return (
+    <th
+      className={`px-3 py-2 ${align === 'right' ? 'text-right' : 'text-left'}`}
+      style={{ fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: colors.muted }}
+    >
+      {children}
+    </th>
   )
 }

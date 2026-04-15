@@ -2,22 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { AdminShell, colors, radius, shadow, GRADIENT } from '@/components/design/KolaPrimitives'
 
 const STATUSES = [
-  'ALL',
-  'CREATED',
-  'AWAITING_AUD',
-  'AUD_RECEIVED',
-  'PROCESSING_NGN',
-  'NGN_SENT',
-  'COMPLETED',
-  'NGN_FAILED',
-  'NGN_RETRY',
-  'NEEDS_MANUAL',
-  'REFUNDED',
-  'CANCELLED',
-  'EXPIRED',
-  'FLOAT_INSUFFICIENT',
+  'ALL', 'CREATED', 'AWAITING_AUD', 'AUD_RECEIVED', 'PROCESSING_NGN',
+  'NGN_SENT', 'COMPLETED', 'NGN_FAILED', 'NGN_RETRY', 'NEEDS_MANUAL',
+  'REFUNDED', 'CANCELLED', 'EXPIRED', 'FLOAT_INSUFFICIENT',
 ]
 
 interface TransferRow {
@@ -30,6 +20,19 @@ interface TransferRow {
   createdAt: string
   user: { id: string; fullName: string }
   recipient: { id: string; fullName: string; bankName: string }
+}
+
+const STATUS_TONE: Record<string, { bg: string; fg: string }> = {
+  COMPLETED:      { bg: 'rgba(26,107,60,0.10)', fg: colors.green },
+  NGN_SENT:       { bg: 'rgba(26,107,60,0.10)', fg: colors.green },
+  PROCESSING_NGN: { bg: 'rgba(255,215,0,0.20)', fg: '#8a6d0a' },
+  AWAITING_AUD:   { bg: 'rgba(255,215,0,0.20)', fg: '#8a6d0a' },
+  NGN_RETRY:      { bg: 'rgba(255,215,0,0.20)', fg: '#8a6d0a' },
+  NEEDS_MANUAL:   { bg: 'rgba(255,140,0,0.18)', fg: '#8a4a0a' },
+  NGN_FAILED:     { bg: 'rgba(176,0,32,0.10)',  fg: '#b00020' },
+  REFUNDED:       { bg: 'rgba(45,27,105,0.10)', fg: colors.purple },
+  CANCELLED:      { bg: 'rgba(136,136,136,0.15)', fg: colors.muted },
+  EXPIRED:        { bg: 'rgba(136,136,136,0.15)', fg: colors.muted },
 }
 
 export default function AdminTransfersPage() {
@@ -49,11 +52,8 @@ export default function AdminTransfersPage() {
     const res = await fetch(`/api/admin/transfers?${params}`)
     if (res.ok) {
       const data = await res.json()
-      if (cursor) {
-        setTransfers((prev) => [...prev, ...data.transfers])
-      } else {
-        setTransfers(data.transfers)
-      }
+      if (cursor) setTransfers((prev) => [...prev, ...data.transfers])
+      else setTransfers(data.transfers)
       setNextCursor(data.nextCursor)
     }
     setLoading(false)
@@ -64,116 +64,155 @@ export default function AdminTransfersPage() {
   }, [fetchTransfers])
 
   return (
-    <div>
-      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Transfers</h1>
+    <AdminShell active="Transfers">
+      <div className="mb-6">
+        <div style={{ fontSize: '11px', color: colors.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Operations
+        </div>
+        <h1 className="mt-1" style={{ fontSize: '24px', fontWeight: 700, color: colors.ink, letterSpacing: '-0.3px' }}>
+          Transfers
+        </h1>
+      </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 mb-4">
+      <div className="flex flex-wrap items-center gap-3 mb-4">
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="px-3 py-1.5 border border-gray-300 rounded text-sm bg-white"
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: '8px',
+            padding: '8px 12px',
+            fontSize: '13px',
+            background: colors.cardBg,
+            color: colors.ink,
+          }}
         >
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s.replace(/_/g, ' ')}
-            </option>
-          ))}
+          {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
         </select>
         <input
           type="text"
-          placeholder="Search user or recipient..."
+          placeholder="Search user or recipient…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && fetchTransfers()}
-          className="px-3 py-1.5 border border-gray-300 rounded text-sm w-64"
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: '8px',
+            padding: '8px 12px',
+            fontSize: '13px',
+            background: colors.cardBg,
+            color: colors.ink,
+            width: '280px',
+          }}
         />
         <button
+          type="button"
           onClick={() => fetchTransfers()}
-          className="px-4 py-1.5 bg-gray-900 text-white text-sm rounded hover:bg-gray-800"
+          className="text-white transition hover:brightness-110"
+          style={{ background: GRADIENT, padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 600 }}
         >
           Search
         </button>
       </div>
 
-      {/* Table */}
-      <div className="bg-white border border-gray-200 rounded overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th className="text-left px-4 py-2 font-medium text-gray-600">ID</th>
-              <th className="text-left px-4 py-2 font-medium text-gray-600">Sender</th>
-              <th className="text-left px-4 py-2 font-medium text-gray-600">Recipient</th>
-              <th className="text-right px-4 py-2 font-medium text-gray-600">Send</th>
-              <th className="text-right px-4 py-2 font-medium text-gray-600">Receive</th>
-              <th className="text-left px-4 py-2 font-medium text-gray-600">Status</th>
-              <th className="text-left px-4 py-2 font-medium text-gray-600">Created</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {transfers.map((t) => (
-              <tr key={t.id} className="hover:bg-gray-50">
-                <td className="px-4 py-2">
-                  <Link href={`/admin/transfers/${t.id}`} className="text-blue-600 hover:underline font-mono text-xs">
-                    {t.id.slice(0, 8)}...
-                  </Link>
-                </td>
-                <td className="px-4 py-2">{t.user.fullName}</td>
-                <td className="px-4 py-2">{t.recipient.fullName}</td>
-                <td className="px-4 py-2 text-right font-mono">
-                  {Number(t.sendAmount).toLocaleString()} {t.sendCurrency}
-                </td>
-                <td className="px-4 py-2 text-right font-mono">
-                  {Number(t.receiveAmount).toLocaleString()} {t.receiveCurrency}
-                </td>
-                <td className="px-4 py-2">
-                  <StatusBadge status={t.status} />
-                </td>
-                <td className="px-4 py-2 text-gray-500 text-xs">
-                  {new Date(t.createdAt).toLocaleDateString()}
-                </td>
-              </tr>
-            ))}
-            {!loading && transfers.length === 0 && (
+      {/* Table card */}
+      <div style={{ background: colors.cardBg, borderRadius: radius.card, boxShadow: shadow.card, overflow: 'hidden' }}>
+        <div className="overflow-x-auto">
+          <table className="w-full" style={{ fontSize: '13px' }}>
+            <thead style={{ background: colors.pageBg, borderBottom: `1px solid ${colors.border}` }}>
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
-                  No transfers found
-                </td>
+                <Th>ID</Th>
+                <Th>Sender</Th>
+                <Th>Recipient</Th>
+                <Th align="right">Send</Th>
+                <Th align="right">Receive</Th>
+                <Th>Status</Th>
+                <Th>Created</Th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {transfers.map((t, i) => {
+                const tone = STATUS_TONE[t.status] ?? { bg: 'rgba(136,136,136,0.15)', fg: colors.muted }
+                return (
+                  <tr key={t.id} style={{ borderTop: i === 0 ? 'none' : `1px solid ${colors.border}` }} className="hover:bg-[#fafafa] transition-colors">
+                    <td className="px-4 py-3">
+                      <Link href={`/admin/transfers/${t.id}`} className="font-mono" style={{ color: colors.purple, fontSize: '12px' }}>
+                        {t.id.slice(0, 8)}…
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3" style={{ color: colors.ink }}>{t.user.fullName}</td>
+                    <td className="px-4 py-3" style={{ color: colors.ink }}>{t.recipient.fullName}</td>
+                    <td className="px-4 py-3 text-right tabular-nums" style={{ color: colors.ink }}>
+                      {Number(t.sendAmount).toLocaleString()} {t.sendCurrency}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums" style={{ color: colors.green }}>
+                      {Number(t.receiveAmount).toLocaleString()} {t.receiveCurrency}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          padding: '2px 8px',
+                          borderRadius: '999px',
+                          background: tone.bg,
+                          color: tone.fg,
+                        }}
+                      >
+                        {t.status.replace(/_/g, ' ')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3" style={{ color: colors.muted, fontSize: '12px' }}>
+                      {new Date(t.createdAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </td>
+                  </tr>
+                )
+              })}
+              {!loading && transfers.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center" style={{ color: colors.muted }}>
+                    No transfers found
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Load more */}
       {nextCursor && (
         <button
+          type="button"
           onClick={() => fetchTransfers(nextCursor)}
           disabled={loading}
-          className="mt-4 px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+          className="mt-4"
+          style={{
+            border: `1px solid ${colors.border}`,
+            background: colors.cardBg,
+            borderRadius: '8px',
+            padding: '8px 14px',
+            fontSize: '13px',
+            fontWeight: 600,
+            color: colors.ink,
+          }}
         >
-          {loading ? 'Loading...' : 'Load more'}
+          {loading ? 'Loading…' : 'Load more'}
         </button>
       )}
-    </div>
+    </AdminShell>
   )
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    COMPLETED: 'bg-green-100 text-green-800',
-    NEEDS_MANUAL: 'bg-red-100 text-red-800',
-    NGN_FAILED: 'bg-red-100 text-red-800',
-    PROCESSING_NGN: 'bg-blue-100 text-blue-800',
-    AWAITING_AUD: 'bg-yellow-100 text-yellow-800',
-    REFUNDED: 'bg-purple-100 text-purple-800',
-    CANCELLED: 'bg-gray-100 text-gray-600',
-    EXPIRED: 'bg-gray-100 text-gray-600',
-  }
-  const colorClass = colors[status] ?? 'bg-gray-100 text-gray-700'
+function Th({ children, align = 'left' }: { children: React.ReactNode; align?: 'left' | 'right' }) {
   return (
-    <span className={`px-2 py-0.5 rounded text-xs font-medium ${colorClass}`}>
-      {status.replace(/_/g, ' ')}
-    </span>
+    <th
+      className={`px-4 py-2 ${align === 'right' ? 'text-right' : 'text-left'}`}
+      style={{ fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: colors.muted }}
+    >
+      {children}
+    </th>
   )
 }

@@ -3,6 +3,17 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { KolaLogo, Tagline, FieldLabel, colors, radius, shadow, spacing, type as typeT, GRADIENT } from '@/components/design/KolaPrimitives'
+
+function textInputStyle() {
+  return {
+    border: `1px solid ${colors.border}`,
+    borderRadius: '8px',
+    padding: '10px 12px',
+    fontSize: '14px',
+    outline: 'none',
+  } as const
+}
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -45,79 +56,120 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="w-full max-w-sm">
+    <div className="w-full max-w-sm kola-card-enter">
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-white">
-          Kola<span className="text-kolaleaf-green-light">leaf</span>
-        </h1>
-        <p className="text-white/70 text-sm mt-1">Fast. Secure. Better rates to Nigeria.</p>
+        <KolaLogo tone="onDark" size="lg" />
+        <div className="mt-2"><Tagline tone="onDark" /></div>
       </div>
 
-      <div className="bg-white rounded-2xl p-6 shadow-lg">
-        <form onSubmit={handleRegister}>
-          <h2 className="text-xl font-semibold text-center mb-6">Create Account</h2>
+      <div
+        style={{
+          background: colors.cardBg,
+          borderRadius: radius.card,
+          padding: spacing.cardPad,
+          boxShadow: shadow.card,
+          color: colors.ink,
+        }}
+      >
+        <form onSubmit={handleRegister} className="flex flex-col gap-4">
+          <h2 style={{ fontSize: '18px', fontWeight: 600, textAlign: 'center' }}>Create account</h2>
 
           {error && (
-            <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg mb-4">{error}</div>
+            <div role="alert" style={{ background: '#fef1f2', color: '#b00020', fontSize: '13px', padding: '10px 12px', borderRadius: '8px' }}>
+              {error}
+            </div>
           )}
 
-          <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-          <input
-            type="text"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            required
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-kolaleaf-purple"
-            placeholder="John Doe"
-          />
-
-          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-kolaleaf-purple"
-            placeholder="you@example.com"
-          />
-
-          <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={8}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-kolaleaf-purple"
-            placeholder="At least 8 characters"
-          />
-
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Referral Code <span className="text-gray-400">(optional)</span>
+          <label className="flex flex-col gap-2">
+            <FieldLabel>Full name</FieldLabel>
+            <input
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+              autoComplete="name"
+              placeholder="Chinwe Obimma"
+              style={textInputStyle()}
+              onFocus={(e) => (e.currentTarget.style.borderColor = colors.purple)}
+              onBlur={(e) => (e.currentTarget.style.borderColor = colors.border)}
+            />
           </label>
-          <input
-            type="text"
-            value={referralCode}
-            onChange={(e) => setReferralCode(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-6 focus:outline-none focus:ring-2 focus:ring-kolaleaf-purple"
-            placeholder="Enter referral code"
-          />
+
+          <label className="flex flex-col gap-2">
+            <FieldLabel>Email</FieldLabel>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+              placeholder="you@example.com"
+              style={textInputStyle()}
+              onFocus={(e) => (e.currentTarget.style.borderColor = colors.purple)}
+              onBlur={(e) => (e.currentTarget.style.borderColor = colors.border)}
+            />
+          </label>
+
+          <label className="flex flex-col gap-2">
+            <FieldLabel>Password</FieldLabel>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={8}
+              autoComplete="new-password"
+              placeholder="At least 8 characters"
+              style={textInputStyle()}
+              onFocus={(e) => (e.currentTarget.style.borderColor = colors.purple)}
+              onBlur={(e) => (e.currentTarget.style.borderColor = colors.border)}
+            />
+          </label>
+
+          <label className="flex flex-col gap-2">
+            <FieldLabel>Referral code (optional)</FieldLabel>
+            <input
+              type="text"
+              value={referralCode}
+              onChange={(e) => setReferralCode(e.target.value)}
+              placeholder="Enter referral code"
+              style={textInputStyle()}
+              onFocus={(e) => (e.currentTarget.style.borderColor = colors.purple)}
+              onBlur={(e) => (e.currentTarget.style.borderColor = colors.border)}
+            />
+          </label>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-kolaleaf-purple to-kolaleaf-green disabled:opacity-50"
+            aria-busy={loading}
+            className="w-full text-white transition hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
+            style={{
+              background: GRADIENT,
+              padding: spacing.ctaPad,
+              borderRadius: radius.cta,
+              fontSize: typeT.cta.size,
+              fontWeight: typeT.cta.weight,
+              letterSpacing: typeT.cta.letterSpacing,
+              marginTop: '4px',
+            }}
           >
-            {loading ? 'Creating account...' : 'Create Account'}
+            {loading ? 'Creating account…' : 'Create account'}
           </button>
         </form>
 
-        <p className="text-center text-sm text-gray-500 mt-4">
+        <p className="text-center mt-5" style={{ fontSize: '13px', color: colors.muted }}>
           Already have an account?{' '}
-          <Link href="/login" className="text-kolaleaf-purple font-medium">
-            Sign In
+          <Link href="/login" style={{ color: colors.purple, fontWeight: 600 }}>
+            Sign in
           </Link>
         </p>
+      </div>
+
+      <div className="mt-6 flex items-center justify-center gap-5 text-white/80" style={{ fontSize: '11px' }}>
+        <span>🔒 AUSTRAC</span>
+        <span>⚡ Minutes</span>
+        <span>★ 4.8/5</span>
       </div>
     </div>
   )

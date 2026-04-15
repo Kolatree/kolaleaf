@@ -2,17 +2,18 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { DashboardShell, colors, radius, shadow, spacing } from '@/components/design/KolaPrimitives'
 
 interface KycStatus {
   status: string
   applicantId?: string
 }
 
-const KYC_LABELS: Record<string, { text: string; color: string }> = {
-  VERIFIED: { text: 'Verified', color: 'bg-green-100 text-green-700' },
-  PENDING: { text: 'Not Started', color: 'bg-gray-100 text-gray-600' },
-  IN_REVIEW: { text: 'In Review', color: 'bg-yellow-100 text-yellow-700' },
-  REJECTED: { text: 'Rejected', color: 'bg-red-100 text-red-600' },
+const KYC_PILL: Record<string, { bg: string; fg: string; text: string }> = {
+  VERIFIED:  { bg: 'rgba(26,107,60,0.10)', fg: colors.green, text: 'Verified' },
+  PENDING:   { bg: 'rgba(136,136,136,0.15)', fg: colors.muted, text: 'Not started' },
+  IN_REVIEW: { bg: 'rgba(255,215,0,0.20)',  fg: '#8a6d0a', text: 'In review' },
+  REJECTED:  { bg: 'rgba(176,0,32,0.10)',   fg: '#b00020', text: 'Rejected' },
 }
 
 export default function AccountPage() {
@@ -62,59 +63,126 @@ export default function AccountPage() {
     }
   }
 
-  const kycLabel = kyc ? KYC_LABELS[kyc.status] ?? KYC_LABELS.PENDING : null
+  const pill = kyc ? KYC_PILL[kyc.status] ?? KYC_PILL.PENDING : null
 
   return (
-    <>
-      <header className="px-6 pt-4 pb-4 text-white">
-        <h1 className="text-xl font-bold">Account</h1>
-      </header>
-
-      <main className="px-4 space-y-4">
-        {/* KYC Status */}
-        <div className="bg-white rounded-2xl p-5 shadow-lg">
-          <h2 className="font-semibold mb-3">Identity Verification</h2>
-          {loading ? (
-            <p className="text-gray-400 text-sm">Loading...</p>
-          ) : (
-            <div className="flex items-center justify-between">
-              <div>
-                <span className={`inline-block text-[12px] font-semibold px-3 py-1 rounded-full ${kycLabel?.color}`}>
-                  {kycLabel?.text}
-                </span>
-              </div>
-              {kyc && (kyc.status === 'PENDING' || kyc.status === 'REJECTED') && (
-                <button
-                  onClick={handleInitiateKyc}
-                  className="text-sm font-medium text-kolaleaf-purple"
-                >
-                  {kyc.status === 'REJECTED' ? 'Retry Verification' : 'Start Verification'}
-                </button>
-              )}
-            </div>
-          )}
+    <DashboardShell active="Account">
+      <div className="max-w-[720px] mx-auto space-y-4 kola-stagger">
+        <div>
+          <div style={{ fontSize: '11px', color: colors.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Your settings
+          </div>
+          <h1 className="mt-1" style={{ fontSize: '24px', fontWeight: 700, color: colors.ink, letterSpacing: '-0.3px' }}>
+            Account
+          </h1>
         </div>
+
+        {/* KYC */}
+        <section style={{ background: colors.cardBg, borderRadius: radius.card, padding: spacing.cardPad, boxShadow: shadow.card }}>
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <h2 style={{ fontSize: '15px', fontWeight: 600, color: colors.ink }}>Identity verification</h2>
+              <p className="mt-1" style={{ fontSize: '12px', color: colors.muted }}>
+                Required to send money — AUSTRAC / AML/CTF compliance.
+              </p>
+            </div>
+            {loading ? (
+              <span className="kola-shimmer" style={{ width: '80px', height: '24px', borderRadius: '999px' }} />
+            ) : (
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  padding: '4px 10px',
+                  borderRadius: '999px',
+                  background: pill?.bg,
+                  color: pill?.fg,
+                }}
+              >
+                {pill?.text}
+              </span>
+            )}
+          </div>
+
+          {kyc && (kyc.status === 'PENDING' || kyc.status === 'REJECTED') && (
+            <button
+              type="button"
+              onClick={handleInitiateKyc}
+              className="mt-4"
+              style={{
+                fontSize: '13px',
+                fontWeight: 600,
+                color: colors.purple,
+              }}
+            >
+              {kyc.status === 'REJECTED' ? 'Retry verification →' : 'Start verification →'}
+            </button>
+          )}
+        </section>
 
         {/* Security */}
-        <div className="bg-white rounded-2xl p-5 shadow-lg">
-          <h2 className="font-semibold mb-3">Security</h2>
-          <div className="flex items-center justify-between">
-            <span className="text-[14px] text-gray-600">Two-Factor Authentication</span>
-            <span className="text-[12px] font-semibold text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
-              Manage in app
+        <section style={{ background: colors.cardBg, borderRadius: radius.card, padding: spacing.cardPad, boxShadow: shadow.card }}>
+          <h2 style={{ fontSize: '15px', fontWeight: 600, color: colors.ink }}>Security</h2>
+          <p className="mt-1" style={{ fontSize: '12px', color: colors.muted }}>
+            Protect your account with an authenticator app.
+          </p>
+          <div className="mt-4 flex items-center justify-between">
+            <span style={{ fontSize: '14px', color: colors.ink }}>Two-factor authentication</span>
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                padding: '4px 10px',
+                borderRadius: '999px',
+                background: 'rgba(136,136,136,0.15)',
+                color: colors.muted,
+              }}
+            >
+              Manage in mobile app
             </span>
           </div>
-        </div>
+        </section>
 
-        {/* Logout */}
+        {/* Trust strip */}
+        <section
+          style={{ background: colors.cardBg, borderRadius: radius.card, padding: spacing.cardPad, boxShadow: shadow.card }}
+        >
+          <h2 style={{ fontSize: '15px', fontWeight: 600, color: colors.ink }}>Why Kolaleaf</h2>
+          <div className="mt-3 grid grid-cols-3 gap-3 text-center">
+            <Badge icon="🔒" title="AUSTRAC" sub="Registered" />
+            <Badge icon="⚡" title="Minutes" sub="Delivery" />
+            <Badge icon="★"  title="4.8 / 5" sub="Trust score" />
+          </div>
+        </section>
+
         <button
+          type="button"
           onClick={handleLogout}
           disabled={loggingOut}
-          className="w-full bg-white rounded-2xl p-4 shadow-lg text-center text-red-500 font-semibold disabled:opacity-50"
+          className="w-full disabled:opacity-60"
+          style={{
+            background: colors.cardBg,
+            borderRadius: radius.card,
+            padding: spacing.cardPad,
+            boxShadow: shadow.card,
+            color: '#b00020',
+            fontWeight: 600,
+            fontSize: '14px',
+          }}
         >
-          {loggingOut ? 'Signing out...' : 'Sign Out'}
+          {loggingOut ? 'Signing out…' : 'Sign out'}
         </button>
-      </main>
-    </>
+      </div>
+    </DashboardShell>
+  )
+}
+
+function Badge({ icon, title, sub }: { icon: string; title: string; sub: string }) {
+  return (
+    <div>
+      <div style={{ fontSize: '22px' }}>{icon}</div>
+      <div style={{ fontSize: '12px', fontWeight: 600, color: colors.ink, marginTop: '4px' }}>{title}</div>
+      <div style={{ fontSize: '11px', color: colors.muted }}>{sub}</div>
+    </div>
   )
 }

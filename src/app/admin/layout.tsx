@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation'
 import { validateSession } from '@/lib/auth/sessions'
 import { getSessionTokenFromCookie } from '@/lib/auth/middleware'
 import { prisma } from '@/lib/db/client'
-import AdminSidebar from './_components/admin-sidebar'
 
 function getAdminEmails(): string[] {
   const raw = process.env.ADMIN_EMAILS ?? ''
@@ -13,6 +12,9 @@ function getAdminEmails(): string[] {
     .filter(Boolean)
 }
 
+// Admin group layout — auth + admin-email gate only. The visual shell
+// (AdminShell) is applied by each page so pages can declare their own active
+// nav item and render into a consistent frame.
 export default async function AdminLayout({
   children,
 }: {
@@ -32,7 +34,6 @@ export default async function AdminLayout({
     redirect('/login')
   }
 
-  // Check admin email
   const emailIdentifier = await prisma.userIdentifier.findFirst({
     where: { userId: session.userId, type: 'EMAIL' },
     select: { identifier: true },
@@ -43,10 +44,5 @@ export default async function AdminLayout({
     redirect('/login')
   }
 
-  return (
-    <div className="flex min-h-screen bg-gray-50">
-      <AdminSidebar />
-      <main className="flex-1 p-6">{children}</main>
-    </div>
-  )
+  return <>{children}</>
 }

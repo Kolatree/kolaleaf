@@ -2,8 +2,10 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { validateSession } from '@/lib/auth/sessions'
 import { getSessionTokenFromCookie } from '@/lib/auth/middleware'
-import BottomNav from './_components/bottom-nav'
 
+// The (dashboard) group layout is auth-only — the visual shell lives in
+// DashboardShell (applied by each page). This keeps auth server-side and the
+// shell client-side, while letting the Send page render its gradient hero.
 export default async function DashboardLayout({
   children,
 }: {
@@ -23,12 +25,5 @@ export default async function DashboardLayout({
     redirect('/login')
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-kolaleaf-purple to-kolaleaf-green">
-      <div className="pb-24">
-        {children}
-      </div>
-      <BottomNav />
-    </div>
-  )
+  return <>{children}</>
 }

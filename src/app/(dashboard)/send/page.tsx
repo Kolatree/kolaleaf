@@ -1,7 +1,21 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import Decimal from 'decimal.js'
+import {
+  KolaLogo,
+  Tagline,
+  TransferCard,
+  DashboardShell,
+  FieldLabel,
+  colors,
+  radius,
+  shadow,
+  spacing,
+  type as typeT,
+  GRADIENT,
+} from '@/components/design/KolaPrimitives'
 
 interface Recipient {
   id: string
@@ -14,18 +28,6 @@ interface RateData {
   corridorId: string
   customerRate: string
   effectiveAt: string
-}
-
-function formatAUD(value: string): string {
-  const num = parseFloat(value)
-  if (isNaN(num)) return '0.00'
-  return num.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-function formatNGN(value: string): string {
-  const num = parseFloat(value)
-  if (isNaN(num)) return '0'
-  return Math.floor(num).toLocaleString('en-NG')
 }
 
 export default function SendPage() {
@@ -46,7 +48,7 @@ export default function SendPage() {
         setRate(data)
       }
     } catch {
-      // Rate fetch failed silently — will show "Loading..." state
+      // Rate fetch failed silently — will show loading state
     }
   }, [])
 
@@ -81,9 +83,8 @@ export default function SendPage() {
     load()
   }, [])
 
-  const receiveAmount = rate && sendAmount
-    ? new Decimal(sendAmount || '0').mul(new Decimal(rate.customerRate)).toFixed(0)
-    : '0'
+  const amountNum = parseFloat(sendAmount) || 0
+  const rateNum = rate ? parseFloat(rate.customerRate) : 0
 
   async function handleSend() {
     if (!selectedRecipientId || !rate) return
@@ -109,7 +110,7 @@ export default function SendPage() {
         setError(data.error || 'Transfer failed')
         return
       }
-      setSuccess('Transfer created! Check Activity for status.')
+      setSuccess('Transfer created — check Activity for status.')
     } catch {
       setError('Something went wrong. Please try again.')
     } finally {
@@ -117,126 +118,176 @@ export default function SendPage() {
     }
   }
 
+  const kycBlocked = kycVerified === false
+  const canSend = !sending && rateNum > 0 && selectedRecipientId && amountNum > 0
+
   return (
-    <>
-      <header className="px-6 pt-4 pb-2 text-white">
-        <h1 className="text-[22px] font-bold tracking-tight">
-          Kola<span className="text-kolaleaf-green-light">leaf</span>
-        </h1>
-        <p className="text-[13px] text-white/70">Fast. Secure. Better rates to Nigeria.</p>
-      </header>
-
-      <main className="px-4">
-        <div className="bg-white rounded-2xl p-6 shadow-lg">
-          {/* You Send */}
-          <p className="text-[11px] uppercase tracking-wider text-gray-400 mb-2">You send</p>
-          <div className="flex items-center justify-between mb-5">
-            <input
-              type="text"
-              inputMode="decimal"
-              value={sendAmount}
-              onChange={(e) => setSendAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-              className="text-4xl font-bold text-foreground w-[60%] border-none outline-none bg-transparent"
-              placeholder="0"
-            />
-            <div className="flex items-center gap-1.5 bg-gray-100 px-3 py-1.5 rounded-full text-[13px] font-semibold">
-              <span className="w-5 h-3.5 rounded-sm bg-gradient-to-b from-blue-900 via-white to-red-600 inline-block" />
-              AUD
+    <DashboardShell
+      active="Send"
+      hero={
+        <>
+          {/* Left column — headline + chips */}
+          <div>
+            <div style={{ fontSize: '11px', color: colors.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Send money to Nigeria
             </div>
-          </div>
-
-          {/* Rate bar */}
-          <div className="bg-kolaleaf-bg rounded-lg px-3.5 py-2.5 text-center text-[13px] text-kolaleaf-green font-semibold mb-5">
-            <span className="text-gray-400 font-normal">Best Rate</span>
-            &nbsp; 1 AUD = {rate ? formatNGN(rate.customerRate) : '...'} NGN
-          </div>
-
-          {/* They Receive */}
-          <p className="text-[11px] uppercase tracking-wider text-gray-400 mb-2">They receive</p>
-          <div className="flex items-center justify-between mb-5">
-            <span className="text-4xl font-bold text-kolaleaf-green">{formatNGN(receiveAmount)}</span>
-            <div className="flex items-center gap-1.5 bg-gray-100 px-3 py-1.5 rounded-full text-[13px] font-semibold">
-              <span className="w-5 h-3.5 rounded-sm inline-block" style={{ background: 'linear-gradient(90deg, #008751 33%, #fff 33% 66%, #008751 66%)' }} />
-              NGN
+            <h1
+              className="mt-3"
+              style={{
+                fontSize: typeT.heroHeadline.size,
+                fontWeight: typeT.heroHeadline.weight,
+                letterSpacing: typeT.heroHeadline.letterSpacing,
+                lineHeight: typeT.heroHeadline.lineHeight,
+                color: colors.ink,
+              }}
+            >
+              Better rates.<br />Delivered in minutes.
+            </h1>
+            <p className="mt-3 max-w-sm" style={{ fontSize: '14px', color: colors.muted, lineHeight: 1.55 }}>
+              AUSTRAC-registered. Zero fees. Built by Nigerian-Australians who know the corridor.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-2 kola-stagger">
+              <Chip icon="🔒" label="AUSTRAC Registered" />
+              <Chip icon="⚡" label="Minutes delivery" />
+              <Chip icon="★" label="4.8/5 · 1,247 reviews" />
             </div>
-          </div>
 
-          <hr className="border-gray-100 mb-5" />
-
-          {/* Recipient selector */}
-          {recipients.length > 0 && (
-            <div className="mb-4">
-              <div className="flex justify-between text-[14px] mb-2">
-                <span className="text-gray-400">Recipient</span>
+            {/* Recipient select + submit live under the chips on desktop */}
+            <div
+              className="mt-8"
+              style={{
+                background: colors.cardBg,
+                borderRadius: radius.card,
+                padding: spacing.cardPad,
+                boxShadow: shadow.card,
+                maxWidth: '440px',
+              }}
+            >
+              <FieldLabel>Recipient</FieldLabel>
+              {recipients.length === 0 ? (
+                <div className="mt-3" style={{ fontSize: '13px', color: colors.muted }}>
+                  You haven&apos;t added any recipients yet.{' '}
+                  <Link href="/recipients" style={{ color: colors.purple, fontWeight: 600 }}>Add one →</Link>
+                </div>
+              ) : (
                 <select
                   value={selectedRecipientId}
                   onChange={(e) => setSelectedRecipientId(e.target.value)}
-                  className="font-semibold text-right bg-transparent border-none outline-none cursor-pointer"
+                  className="mt-2 w-full"
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: '8px',
+                    padding: '10px 12px',
+                    fontSize: '14px',
+                    background: colors.cardBg,
+                    color: colors.ink,
+                  }}
                 >
                   {recipients.map((r) => (
-                    <option key={r.id} value={r.id}>{r.fullName} — {r.bankName}</option>
+                    <option key={r.id} value={r.id}>
+                      {r.fullName} — {r.bankName} · •••{r.accountNumber.slice(-4)}
+                    </option>
                   ))}
                 </select>
-              </div>
+              )}
+
+              {error && (
+                <div role="alert" className="mt-3" style={{ background: '#fef1f2', color: '#b00020', fontSize: '13px', padding: '10px 12px', borderRadius: '8px' }}>
+                  {error}
+                </div>
+              )}
+              {success && (
+                <div className="mt-3" style={{ background: colors.bgSoft, color: colors.green, fontSize: '13px', padding: '10px 12px', borderRadius: '8px' }}>
+                  {success}
+                </div>
+              )}
+
+              {kycBlocked ? (
+                <Link
+                  href="/account"
+                  className="mt-4 inline-block w-full text-center text-white transition hover:brightness-110"
+                  style={{
+                    background: GRADIENT,
+                    padding: spacing.ctaPad,
+                    borderRadius: radius.cta,
+                    fontSize: typeT.cta.size,
+                    fontWeight: typeT.cta.weight,
+                    letterSpacing: typeT.cta.letterSpacing,
+                    marginTop: '12px',
+                  }}
+                >
+                  Verify identity to send →
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSend}
+                  disabled={!canSend}
+                  aria-busy={sending}
+                  className="w-full text-white transition hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
+                  style={{
+                    background: GRADIENT,
+                    padding: spacing.ctaPad,
+                    borderRadius: radius.cta,
+                    fontSize: typeT.cta.size,
+                    fontWeight: typeT.cta.weight,
+                    letterSpacing: typeT.cta.letterSpacing,
+                    marginTop: '12px',
+                  }}
+                >
+                  {sending ? 'Sending…' : `Send A$${new Decimal(amountNum || 0).toFixed(2)}`}
+                </button>
+              )}
             </div>
-          )}
-
-          {/* Details */}
-          <div className="flex justify-between text-[14px] mb-3.5">
-            <span className="text-gray-400">Receive method</span>
-            <span className="font-semibold">Bank Transfer</span>
-          </div>
-          <div className="flex justify-between text-[14px] mb-3.5">
-            <span className="text-gray-400">Fee</span>
-            <span className="font-semibold text-kolaleaf-green">0 AUD</span>
-          </div>
-          <div className="flex justify-between text-[14px] mb-3.5">
-            <span className="text-gray-400">Transfer time</span>
-            <span className="font-semibold text-kolaleaf-green">Minutes</span>
-          </div>
-          <div className="flex justify-between text-[14px] mb-4">
-            <span className="text-gray-400">Total to pay</span>
-            <span className="font-bold text-kolaleaf-purple">{formatAUD(sendAmount)} AUD</span>
           </div>
 
-          {error && <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg mb-4">{error}</div>}
-          {success && <div className="bg-green-50 text-kolaleaf-green text-sm p-3 rounded-lg mb-4">{success}</div>}
-
-          {/* CTA */}
-          {kycVerified === false ? (
-            <a
-              href="/account"
-              className="block w-full py-4 rounded-xl font-bold text-white text-center bg-gradient-to-r from-kolaleaf-purple to-kolaleaf-green"
+          {/* Right column — gradient frame wrapping the transfer card */}
+          <div className="flex justify-center md:justify-end kola-card-enter">
+            <div
+              className="relative p-6 md:p-8"
+              style={{ background: GRADIENT, borderRadius: radius.hero, boxShadow: shadow.lifted }}
             >
-              Complete Verification
-            </a>
-          ) : (
-            <button
-              onClick={handleSend}
-              disabled={sending || !rate || !selectedRecipientId || !sendAmount}
-              className="w-full py-4 rounded-xl font-bold text-white bg-gradient-to-r from-kolaleaf-purple to-kolaleaf-green disabled:opacity-50"
-            >
-              {sending ? 'Sending...' : 'Send Money'}
-            </button>
-          )}
-        </div>
+              <div className="mb-5 text-white">
+                <KolaLogo tone="onDark" />
+                <div className="mt-1"><Tagline tone="onDark" /></div>
+              </div>
+              {rateNum > 0 ? (
+                <TransferCard
+                  amountAud={amountNum}
+                  onAmountChange={(v) => setSendAmount(String(v))}
+                  rateCustomer={rateNum}
+                  feeAud={0}
+                />
+              ) : (
+                <div
+                  className="kola-shimmer"
+                  style={{ width: '420px', maxWidth: '100%', height: '420px', borderRadius: radius.card, background: colors.cardBg }}
+                />
+              )}
+            </div>
+          </div>
+        </>
+      }
+    />
+  )
+}
 
-        {/* Trust bar */}
-        <div className="flex justify-between items-center px-2 py-3 mt-4 text-[11px] text-white/70">
-          <div className="text-center">
-            <div className="font-semibold text-white">AUSTRAC</div>
-            Registered
-          </div>
-          <div className="text-center">
-            <div className="font-semibold text-white">Minutes</div>
-            Delivery
-          </div>
-          <div className="text-center">
-            <div className="font-semibold text-white">4.8/5</div>
-            Trust Score
-          </div>
-        </div>
-      </main>
-    </>
+function Chip({ icon, label }: { icon: string; label: string }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1.5"
+      style={{
+        background: colors.cardBg,
+        border: `1px solid ${colors.border}`,
+        padding: '6px 12px',
+        borderRadius: '999px',
+        fontSize: '12px',
+        color: colors.ink,
+        fontWeight: 600,
+      }}
+    >
+      <span>{icon}</span>
+      {label}
+    </span>
   )
 }

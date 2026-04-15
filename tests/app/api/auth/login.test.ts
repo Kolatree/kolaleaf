@@ -41,9 +41,10 @@ describe('POST /api/auth/login', () => {
       user: { id: 'u1', fullName: 'Test' } as never,
       session: { token: 'tok' } as never,
       requires2FA: false,
+      twoFactorMethod: 'NONE',
     })
 
-    const res = await POST(makeRequest({ identifier: 'a@b.com', password: '12345678' }))
+    const res = await POST(makeRequest({ identifier: 'a@b.com', password: 'TestPass123!' }))
     expect(res.status).toBe(200)
     const json = await res.json()
     expect(json.user.id).toBe('u1')
@@ -56,9 +57,10 @@ describe('POST /api/auth/login', () => {
       user: { id: 'u1', fullName: 'Test' } as never,
       session: { token: 'tok' } as never,
       requires2FA: true,
+      twoFactorMethod: 'TOTP',
     })
 
-    const res = await POST(makeRequest({ identifier: 'a@b.com', password: '12345678' }))
+    const res = await POST(makeRequest({ identifier: 'a@b.com', password: 'TestPass123!' }))
     const json = await res.json()
     expect(json.requires2FA).toBe(true)
   })

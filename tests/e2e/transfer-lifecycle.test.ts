@@ -238,7 +238,8 @@ describe('Transfer Lifecycle E2E — Golden Path', () => {
       identifier: email,
       password,
     })
-    expect(user.fullName).toBe('Login User')
+    expect(user).not.toBeNull()
+    expect(user!.fullName).toBe('Login User')
     expect(session.token).toHaveLength(64)
     expect(requires2FA).toBe(false)
   })

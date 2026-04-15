@@ -7,6 +7,7 @@ import { hashPassword } from '../password'
 beforeEach(async () => {
   await prisma.referral.deleteMany({})
   await prisma.session.deleteMany({})
+  await prisma.twoFactorChallenge.deleteMany({})
   await prisma.userIdentifier.deleteMany({})
   await prisma.authEvent.deleteMany({})
   await prisma.user.deleteMany({ where: { fullName: { startsWith: 'LoginTest' } } })
@@ -15,6 +16,7 @@ beforeEach(async () => {
 afterAll(async () => {
   await prisma.referral.deleteMany({})
   await prisma.session.deleteMany({})
+  await prisma.twoFactorChallenge.deleteMany({})
   await prisma.userIdentifier.deleteMany({})
   await prisma.authEvent.deleteMany({})
   await prisma.user.deleteMany({ where: { fullName: { startsWith: 'LoginTest' } } })
@@ -87,17 +89,52 @@ describe('login service', () => {
     expect(result.session.token).toMatch(/^[a-f0-9]{64}$/)
   })
 
-  it('returns requires2FA when TOTP is enabled', async () => {
+  it('returns requires2FA=true with method=TOTP when TOTP 2FA is enabled', async () => {
     const user = await createVerifiedUser('login5@example.com', 'CorrectPass5!', 'LoginTest 2FA')
     await prisma.user.update({
       where: { id: user.id },
-      data: { totpEnabled: true, totpSecret: 'FAKESECRET' },
+      data: {
+        twoFactorMethod: 'TOTP',
+        twoFactorSecret: 'FAKESECRET',
+        twoFactorEnabledAt: new Date(),
+      },
     })
     const result = await loginUser({
       identifier: 'login5@example.com',
       password: 'CorrectPass5!',
     })
     expect(result.requires2FA).toBe(true)
+    expect(result.twoFactorMethod).toBe('TOTP')
+    expect(result.challengeId).toBeUndefined()
+  })
+
+  it('returns requires2FA=true with method=SMS + challengeId when SMS 2FA is enabled', async () => {
+    const user = await createVerifiedUser('login-sms@example.com', 'CorrectPassSms1!', 'LoginTest SMS')
+    // Attach a verified phone for the SMS 2FA path
+    await prisma.userIdentifier.create({
+      data: {
+        userId: user.id,
+        type: 'PHONE',
+        identifier: `+6140000${Date.now().toString().slice(-4)}`,
+        verified: true,
+        verifiedAt: new Date(),
+      },
+    })
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        twoFactorMethod: 'SMS',
+        twoFactorEnabledAt: new Date(),
+      },
+    })
+    const result = await loginUser({
+      identifier: 'login-sms@example.com',
+      password: 'CorrectPassSms1!',
+    })
+    expect(result.requires2FA).toBe(true)
+    expect(result.twoFactorMethod).toBe('SMS')
+    expect(result.challengeId).toBeDefined()
+    expect(typeof result.challengeId).toBe('string')
   })
 
   it('throws on unknown identifier', async () => {

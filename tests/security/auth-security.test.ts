@@ -8,7 +8,7 @@ import {
 import { registerUser } from '../../src/lib/auth/register'
 import { loginUser } from '../../src/lib/auth/login'
 import { validateSession, revokeSession } from '../../src/lib/auth/sessions'
-import { verifyTotpToken } from '../../src/lib/auth/totp'
+import { verifyTotpCode } from '../../src/lib/auth/totp'
 
 beforeAll(async () => {
   await cleanupTestData()
@@ -91,14 +91,14 @@ describe('Auth Security', () => {
     const secret = generateSecret()
 
     // Try a known-wrong numeric code
-    const result = verifyTotpToken(secret, '000000')
+    const result = verifyTotpCode(secret, '000000')
     // While technically 000000 could be valid for a brief window,
     // we test that the function returns a boolean and doesn't throw
     expect(typeof result).toBe('boolean')
 
     // Non-numeric input throws TokenFormatError from otplib
     // (tokens must be digits only)
-    expect(() => verifyTotpToken(secret, 'abcdef')).toThrow()
+    expect(() => verifyTotpCode(secret, 'abcdef')).toThrow()
   })
 
   it('revoked session is rejected', async () => {

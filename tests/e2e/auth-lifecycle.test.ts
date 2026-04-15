@@ -7,7 +7,7 @@ import { registerUser } from '../../src/lib/auth/register'
 import { loginUser } from '../../src/lib/auth/login'
 import { validateSession, revokeAllUserSessions } from '../../src/lib/auth/sessions'
 import { addIdentifier, verifyIdentifier, getUserIdentifiers } from '../../src/lib/auth/identity'
-import { generateTotpSecret, verifyTotpToken } from '../../src/lib/auth/totp'
+import { generateTotpSecret, buildOtpauthUri, verifyTotpCode } from '../../src/lib/auth/totp'
 
 beforeAll(async () => {
   await cleanupTestData()
@@ -53,33 +53,32 @@ describe('Auth Lifecycle E2E', () => {
     expect(loginSession.token).toHaveLength(64)
 
     // ── Step 3: Enable 2FA (TOTP) ──
-    const { secret, uri } = generateTotpSecret(email)
+    const secret = generateTotpSecret()
+    const uri = buildOtpauthUri({ secret, accountLabel: email, issuer: 'Kolaleaf' })
     expect(uri).toContain('Kolaleaf')
     // URI encodes @ as %40
     expect(uri).toContain(email.replace('@', '%40'))
 
-    // Store TOTP secret on user
+    // Store 2FA secret on user via the new (post-15f) fields.
     await prisma.user.update({
       where: { id: user.id },
       data: {
-        totpSecret: secret,
-        totpEnabled: true,
+        twoFactorMethod: 'TOTP',
+        twoFactorSecret: secret,
+        twoFactorEnabledAt: new Date(),
       },
     })
 
-    // Verify TOTP with a valid code
-    // otplib generateSecret + verifySync — test the function shape
-    // We can't generate a real time-based code deterministically in tests,
-    // but we can verify the code validation path works correctly
-    const wrongResult = verifyTotpToken(secret, '000000')
-    // 000000 is almost certainly wrong — verifying the rejection path
-    // (may occasionally pass if the current TOTP window is 000000, but astronomically unlikely)
+    // Verify TOTP rejects a clearly-wrong code. We can't generate a real
+    // time-based code deterministically in tests, but we can verify the
+    // rejection path works correctly.
+    const wrongResult = verifyTotpCode(secret, '000000')
     expect(typeof wrongResult).toBe('boolean')
 
-    // ── Step 4: Verify user now has totpEnabled ──
+    // ── Step 4: Verify user now has 2FA enabled via the new fields ──
     const userWith2FA = await prisma.user.findUniqueOrThrow({ where: { id: user.id } })
-    expect(userWith2FA.totpEnabled).toBe(true)
-    expect(userWith2FA.totpSecret).toBe(secret)
+    expect(userWith2FA.twoFactorMethod).toBe('TOTP')
+    expect(userWith2FA.twoFactorSecret).toBe(secret)
 
     // ── Step 5: Login again — should signal 2FA is required ──
     const { requires2FA: needs2FA } = await loginUser({
@@ -133,7 +132,8 @@ describe('Auth Lifecycle E2E', () => {
       identifier: phone,
       password,
     })
-    expect(loggedInUser.id).toBe(user.id)
+    expect(loggedInUser).not.toBeNull()
+    expect(loggedInUser!.id).toBe(user.id)
     expect(session.token).toHaveLength(64)
   })
 

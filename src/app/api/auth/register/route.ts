@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     const { user, session } = await registerUser({
       fullName: fullName.trim(),
       email: email.trim().toLowerCase(),
-      password,
+      password: pwCheck.password,
       referralCode: referralCode || undefined,
     })
 

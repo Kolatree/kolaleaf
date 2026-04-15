@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   if (!pwCheck.ok) {
     return NextResponse.json({ error: pwCheck.error }, { status: 400 })
   }
-  const newPassword = body.newPassword as string
+  const newPassword = pwCheck.password
 
   try {
     const tokenHash = hashToken(rawToken)

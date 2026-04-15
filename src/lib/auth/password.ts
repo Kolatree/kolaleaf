@@ -28,7 +28,7 @@ export const MIN_PASSWORD_LENGTH = 12
 export const MIN_CHARACTER_CLASSES = 3
 
 export type PasswordValidationResult =
-  | { ok: true }
+  | { ok: true; password: string }
   | { ok: false; error: string; rule: 'missing' | 'length' | 'complexity' }
 
 export function validatePasswordComplexity(plain: unknown): PasswordValidationResult {
@@ -54,5 +54,7 @@ export function validatePasswordComplexity(plain: unknown): PasswordValidationRe
       rule: 'complexity',
     }
   }
-  return { ok: true }
+  // Return the validated password so callers can use the narrowed type instead
+  // of casting from `unknown` at each call site.
+  return { ok: true, password: plain }
 }

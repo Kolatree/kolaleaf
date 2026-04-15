@@ -5,13 +5,117 @@
 
 ## Current Status
 
-**Active step:** 15d -- Resend integration + email verification + password reset (review pending)
+**Active step:** 15e -- Twilio SMS integration + phone verification + SMS 2FA helpers (review pending)
 **Last cleared:** Step 15b
 **Pending deploy:** NO
 
 ---
 
 ## Step History
+
+### Step 15e -- Twilio SMS integration + phone verification + SMS 2FA helpers -- REVIEW PENDING
+*Date: 2026-04-15*
+
+Ships the outbound-SMS infrastructure (Twilio), the phone-verification flow
+(add phone -> receive 6-digit SMS -> submit -> identifier flipped verified),
+a phone-remove endpoint that blocks while SMS 2FA is active, and the
+`TwoFactorChallenge` issuer/verifier helpers that 15f will plug into login.
+No schema migrations (15c covered all tables). One new dep: `twilio`.
+
+Files changed:
+- `package.json` / `package-lock.json` -- added `twilio` dependency (only new dep).
+- `.env` / `.env.example` -- added `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
+  `TWILIO_FROM_NUMBER`. All blank in dev; `sendSms()` console.logs with
+  `[sms-dev]` prefix. Production throws at `client.ts` import if any is missing.
+- `src/lib/sms/client.ts` (new) -- Twilio client init, fail-fast in production,
+  dev-null in development. Mirrors the shape of `src/lib/email/client.ts`.
+- `src/lib/sms/send.ts` (new) -- `sendSms({to,body})` wrapper returning
+  `{ok,id?,error?}`. Dev fallback: `[sms-dev]` stdout log. Never throws.
+- `src/lib/sms/index.ts` (new) -- barrel.
+- `src/lib/auth/phone.ts` (new) -- `normalizePhone(raw)` (regex-only E.164
+  placeholder; stripping spaces/dashes/parens and requiring `+\d{7,15}$`),
+  `InvalidPhoneError`, `generateSmsCode()` (6-digit + bcrypt cost-4 hash),
+  `verifySmsCode(raw, hash)`. The cost-4 choice is documented inline: the
+  code space is only 10^6 so sha256 would be rainbow-tabled; bcrypt's salt
+  blocks that, and cost 4 keeps verify fast for a 5-10min ttl.
+- `src/lib/auth/two-factor-challenge.ts` (new) -- `issueSmsChallenge(userId,
+  phoneE164)` returns `{challengeId}` after creating a `TwoFactorChallenge`
+  (method=SMS, 5min expiry) and dispatching the SMS. `verifyChallenge(id, raw)`
+  looks up, rejects expired/consumed/attempts>=5, increments attempts on every
+  submission, bcrypt-compares, and marks `consumedAt` on success.
+- `src/app/api/account/phone/add/route.ts` (new) -- `requireAuth`. Normalises
+  phone, rejects 409 if another user owns the number verified, rate-limits to
+  3 codes per (user, phone) per hour (429 with `retryAfter`), upserts an
+  unverified `UserIdentifier`, invalidates prior unused codes, writes a fresh
+  `PhoneVerificationCode` with 10min expiry, fires SMS. SMS failure is logged
+  but the 200 still returns because the code row is persisted.
+- `src/app/api/account/phone/verify/route.ts` (new) -- `requireAuth`. Finds
+  the latest unused, non-expired code. Increments attempts on every submission.
+  On the 5th attempt the code is burned regardless of correctness. On success,
+  a `$transaction` atomically flips `UserIdentifier.verified=true`, marks the
+  code `usedAt=now()`, and writes `PHONE_VERIFIED` AuthEvent -- so the audit
+  row and state transition are all-or-nothing.
+- `src/app/api/account/phone/remove/route.ts` (new) -- `requireAuth`. 400
+  `cannot_remove_phone_while_2fa_active` if `User.twoFactorMethod==='SMS'`.
+  Otherwise hard-deletes the `UserIdentifier` row and writes `PHONE_REMOVED`
+  AuthEvent with the phone in metadata for audit.
+- New tests: `tests/lib/sms/send.test.ts` (6), `tests/lib/auth/phone.test.ts`
+  (13), `tests/lib/auth/two-factor-challenge.test.ts` (7),
+  `tests/app/api/account/phone/add.test.ts` (6),
+  `tests/app/api/account/phone/verify.test.ts` (7),
+  `tests/app/api/account/phone/remove.test.ts` (5).
+
+Test count: 438 -> 481 (43 new, all green). tsc: 0 new errors (one pre-existing
+error in `src/app/api/auth/register/route.ts` from 15d -- see Known Gaps).
+
+Decisions:
+- **bcrypt cost 4 for SMS codes is intentional.** Short-lived (5-10min) + low
+  entropy (6 digits). Higher cost hurts verify latency without materially
+  raising the attacker's cost for a brute-force within the ttl. Documented
+  inline in `src/lib/auth/phone.ts`.
+- **E.164 uniqueness gate is verified-only.** Another user holding the phone
+  as verified blocks the add. An abandoned unverified hold does not block --
+  a legitimate owner must be able to reclaim it.
+- **`verifyChallenge` increments attempts on success too.** A brute-force
+  attacker cannot burn 4 wrong guesses and then nail it on #5 -- every
+  submission costs one attempt, correct or not.
+- **`PHONE_VERIFIED` audit row is inside the same `$transaction`** as the
+  identifier flip and the code consume. An audit hole is impossible.
+- **Phone-remove blocks SMS 2FA active users.** Without this guard they'd
+  lock themselves out -- no phone to receive the 2FA code on. 15f's disable-
+   2FA flow is the supported escape hatch.
+- **SMS 2FA login wiring is NOT in this step.** Helpers exist but no route
+  path calls them -- that's 15f.
+
+Known Gaps:
+- Regex E.164 normalisation in `src/lib/auth/phone.ts` is a placeholder. It
+  does not validate country codes or regional carrier formats. Replace with
+  `libphonenumber-js` or Twilio Lookup in a later step when bringing in a
+  proper dep is budgeted.
+- `src/app/api/auth/register/route.ts:36` previously had a pre-existing tsc
+  error from 15d; after the 15e post-review re-verify run it no longer
+  reports (likely a stale Prisma generate from the earlier session). Not
+  counted as a gap anymore; flagging here only for traceability.
+
+Fixes applied post-Richard review (round 1):
+- **Must Fix 1** -- cross-user phone hijack via abandoned unverified claim.
+  Upsert `update` in `src/app/api/account/phone/add/route.ts` now transfers
+  ownership (`{userId, verified:false, verifiedAt:null}`) when the row
+  exists unverified under another user. The 409 guard still blocks when the
+  existing row is verified under another user. Code-invalidation scope
+  dropped the `userId` filter so codes issued to the previous owner cannot
+  be replayed by the new owner.
+- **Should Fix 1** -- regression test added at
+  `tests/e2e/phone-verification.test.ts` (real DB, 2 cases) proving
+  ownership transfer works and the 409 verified-taken path is unchanged.
+- **Should Fix 2** -- `verifyChallenge` in
+  `src/lib/auth/two-factor-challenge.ts` now stamps `consumedAt` in the
+  same update as the exhausting attempts increment. Two new unit tests in
+  `tests/lib/auth/two-factor-challenge.test.ts` prove the behavior (exhaust
+  on wrong code kills future correct guesses; success on the exhausting
+  attempt does not double-stamp).
+- Re-verify: `npx tsc --noEmit` -> 0 errors; `npm test -- --run` -> 485/485
+  passing.
 
 ### Step 15d -- Resend integration + email verification + password reset flows -- REVIEW PENDING
 *Date: 2026-04-15*

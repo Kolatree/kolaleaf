@@ -5,13 +5,109 @@
 
 ## Current Status
 
-**Active step:** 15e -- Twilio SMS integration + phone verification + SMS 2FA helpers (review pending)
+**Active step:** 15f-2 -- 2FA setup API routes + /account UI section (review pending)
 **Last cleared:** Step 15b
 **Pending deploy:** NO
 
 ---
 
 ## Step History
+
+### Step 15f-2 -- 2FA setup API routes + /account UI section -- REVIEW PENDING
+*Date: 2026-04-15*
+
+Adds the user-facing 2FA management surface: four API routes and one `/account`
+UI section. With 15f-1 handling the login-side verification, this step covers
+the enrollment, disable, and backup-code-regeneration flows. No schema
+migrations (all 2FA columns + `TwoFactorChallenge` landed in 15c). No new deps.
+
+Files changed:
+- `src/app/api/account/2fa/setup/route.ts` (new) -- `requireAuth`. Body
+  `{method: 'TOTP'|'SMS'}`. TOTP path: fresh secret (NOT persisted -- echoed
+  back on response and committed only via `/enable`), otpauth URI labelled
+  with user's primary verified EMAIL identifier, QR data URL. SMS path:
+  requires a verified PHONE identifier (400 `phone_not_verified` otherwise);
+  issues an SMS challenge via `issueSmsChallenge` and returns `challengeId`.
+  Both paths: 400 `already_enabled` if `user.twoFactorMethod !== 'NONE'`;
+  writes `TWO_FACTOR_SETUP_INITIATED` AuthEvent with `{method}`.
+- `src/app/api/account/2fa/enable/route.ts` (new) -- `requireAuth`. Commits
+  enrollment. TOTP: `verifyTotpCode(secret, code)`, 400 `invalid_code` on
+  miss. SMS: `verifyChallenge(challengeId, code)`, 400 `invalid_code` on
+  miss. On success: generates 8 raw backup codes + hashes, `$transaction`
+  updates `User{twoFactorMethod, twoFactorSecret|null, twoFactorBackupCodes,
+  twoFactorEnabledAt}` + writes `TWO_FACTOR_ENABLED` AuthEvent. Returns
+  `{enabled:true, backupCodes: rawCodes}` -- the ONLY place raw codes exist.
+- `src/app/api/account/2fa/disable/route.ts` (new) -- `requireAuth`. Body
+  `{code, challengeId?}`. 400 `not_enabled` if off. Verifies the code using
+  the user's current method (TOTP secret or SMS challenge) OR falls back to
+  a backup code. On success: `$transaction` clears 2FA columns + deletes
+  all OTHER sessions (`userId=X, id: {not: currentSessionId}`) to
+  force-logout other devices + writes `TWO_FACTOR_DISABLED` AuthEvent.
+  SMS-disable workflow documented in route header: clients should call
+  `/setup` with method=SMS for a fresh challenge, OR submit a backup code.
+- `src/app/api/account/2fa/regenerate-backup-codes/route.ts` (new) --
+  `requireAuth`. Same code-verification as `/disable`. On success: generates
+  8 fresh codes, `$transaction` updates `User.twoFactorBackupCodes = hashes`
+  + writes `TWO_FACTOR_BACKUP_CODES_REGENERATED`. Returns raw codes once.
+- `src/app/api/account/me/route.ts` (new) -- GET-only `requireAuth`.
+  Returns minimal account summary for the `/account` client components:
+  `{twoFactorMethod, twoFactorEnabledAt, hasVerifiedPhone, phoneMasked,
+  backupCodesRemaining}`. Never returns the 2FA secret or backup-code hashes.
+- `src/app/(dashboard)/account/_components/two-factor-section.tsx` (new) --
+  client component rendering the full 2FA state-machine: view (on/off),
+  picker (TOTP vs SMS with disabled-SMS-when-no-phone), TOTP setup
+  (QR + manual-entry secret + 6-digit input + Enable), SMS setup (input +
+  Resend + Enable), backup-codes reveal panel (4x2 grid, Copy-all,
+  "I've saved these" checkbox gating Continue), disable flow (modal-style
+  inline, current code OR backup code, warn banner), regen flow (same
+  verification, fresh codes panel). Uses Variant D tokens only (no raw
+  Tailwind colours for state). All routes called: `/api/account/me`,
+  `/api/account/2fa/setup`, `/api/account/2fa/enable`,
+  `/api/account/2fa/disable`, `/api/account/2fa/regenerate-backup-codes`.
+- `src/app/(dashboard)/account/page.tsx` -- swapped the old "Manage in
+  mobile app" placeholder card for `<TwoFactorSection />`. Page stays a
+  client component (KYC fetch, logout). No other edits.
+
+New tests (+25):
+- `tests/app/api/account/2fa/setup.test.ts` (7 cases)
+- `tests/app/api/account/2fa/enable.test.ts` (7 cases)
+- `tests/app/api/account/2fa/disable.test.ts` (7 cases)
+- `tests/app/api/account/2fa/regenerate-backup-codes.test.ts` (4 cases)
+
+Phase D results:
+- `npx tsc --noEmit`: 0 errors.
+- `npm test -- --run`: 73 files / 520 tests passed (was 73/495; +25 new).
+- Manual smoke sequence documented in REVIEW-REQUEST.
+
+Fixes applied post-Richard review (0 Must Fix, 5 Should Fix — all applied):
+1. `verifyChallenge(userId, challengeId, code)` — added userId scoping as
+   defense-in-depth. Updated all 4 call sites (enable, disable,
+   regenerate-backup-codes, verify-2fa). Switched
+   `prisma.twoFactorChallenge.findUnique` to `findFirst` with `{id, userId}`.
+   Added a cross-user regression test in
+   `tests/lib/auth/two-factor-challenge.test.ts`.
+2. Removed the dead-end "Can't find your code?" button in the SMS-disable
+   flow (`two-factor-section.tsx`). Strengthened the surrounding copy
+   instead: "enter one of your saved backup codes, or the most recent SMS
+   code sent at sign-in".
+3. `/api/account/me` 401 handling in `two-factor-section.tsx` — the initial
+   load and the `continueAfterBackupCodes` refresh both detect 401 and
+   redirect to `/login` instead of rendering a bogus "NONE" state.
+4. `src/app/api/account/me/route.ts` maskPhone comment updated to match
+   actual bullet-ellipsis output (`+61 ••• 678`).
+5. Dropped the misleading `remainingBackupCodes` AuthEvent metadata field in
+   `/api/account/2fa/disable/route.ts` (twoFactorBackupCodes is cleared on
+   disable, so the pre-disable count was confusing). Also removed the now
+   unused `remainingBackupHashes` local.
+
+Post-fix Phase D:
+- `npx tsc --noEmit`: 0 errors.
+- `npm test -- --run`: 73 files / 521 tests passed (+1 cross-user regression).
+
+Reviewer findings: 5 Should Fix — all addressed above.
+Deploy: N/A
+
+---
 
 ### Step 15e -- Twilio SMS integration + phone verification + SMS 2FA helpers -- REVIEW PENDING
 *Date: 2026-04-15*

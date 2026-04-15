@@ -42,8 +42,12 @@ export async function issueSmsChallenge(
 /**
  * Verify a raw code against an issued challenge.
  *
+ * Scoped by `userId` as defense-in-depth: the caller is already
+ * authenticated, but requiring the challenge to belong to the same user
+ * means a leaked/guessed `challengeId` can't be redeemed across accounts.
+ *
  * Enforces:
- * - challenge exists
+ * - challenge exists AND belongs to userId
  * - not expired
  * - not already consumed (no replay)
  * - attempts < 5 before the check
@@ -52,11 +56,12 @@ export async function issueSmsChallenge(
  * `attempts`. Returns boolean — the route handler decides HTTP shape.
  */
 export async function verifyChallenge(
+  userId: string,
   challengeId: string,
   rawCode: string,
 ): Promise<boolean> {
-  const challenge = await prisma.twoFactorChallenge.findUnique({
-    where: { id: challengeId },
+  const challenge = await prisma.twoFactorChallenge.findFirst({
+    where: { id: challengeId, userId },
   })
 
   if (!challenge) return false

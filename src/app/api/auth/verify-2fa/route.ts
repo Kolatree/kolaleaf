@@ -48,7 +48,7 @@ export async function POST(request: Request) {
 
     // Path 2: SMS challenge. Requires the challengeId issued at login.
     if (user.twoFactorMethod === 'SMS' && challengeId) {
-      const ok = await verifyChallenge(challengeId, code)
+      const ok = await verifyChallenge(user.id, challengeId, code)
       if (ok) {
         await logAuthEvent({
           userId: user.id,

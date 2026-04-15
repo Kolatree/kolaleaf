@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardShell, colors, radius, shadow, spacing } from '@/components/design/KolaPrimitives'
+import { TwoFactorSection } from './_components/two-factor-section'
 
 interface KycStatus {
   status: string
@@ -120,28 +121,8 @@ export default function AccountPage() {
           )}
         </section>
 
-        {/* Security */}
-        <section style={{ background: colors.cardBg, borderRadius: radius.card, padding: spacing.cardPad, boxShadow: shadow.card }}>
-          <h2 style={{ fontSize: '15px', fontWeight: 600, color: colors.ink }}>Security</h2>
-          <p className="mt-1" style={{ fontSize: '12px', color: colors.muted }}>
-            Protect your account with an authenticator app.
-          </p>
-          <div className="mt-4 flex items-center justify-between">
-            <span style={{ fontSize: '14px', color: colors.ink }}>Two-factor authentication</span>
-            <span
-              style={{
-                fontSize: '11px',
-                fontWeight: 600,
-                padding: '4px 10px',
-                borderRadius: '999px',
-                background: 'rgba(136,136,136,0.15)',
-                color: colors.muted,
-              }}
-            >
-              Manage in mobile app
-            </span>
-          </div>
-        </section>
+        {/* Security — 2FA */}
+        <TwoFactorSection />
 
         {/* Trust strip */}
         <section

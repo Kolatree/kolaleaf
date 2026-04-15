@@ -4,7 +4,7 @@ vi.mock('@/lib/db/client', () => ({
   prisma: {
     twoFactorChallenge: {
       create: vi.fn(),
-      findUnique: vi.fn(),
+      findFirst: vi.fn(),
       update: vi.fn(),
     },
   },
@@ -22,7 +22,7 @@ import {
 } from '@/lib/auth/two-factor-challenge'
 
 const mockCreate = vi.mocked(prisma.twoFactorChallenge.create)
-const mockFindUnique = vi.mocked(prisma.twoFactorChallenge.findUnique)
+const mockFindFirst = vi.mocked(prisma.twoFactorChallenge.findFirst)
 const mockUpdate = vi.mocked(prisma.twoFactorChallenge.update)
 const mockSendSms = vi.mocked(sendSms)
 
@@ -77,7 +77,7 @@ describe('verifyChallenge', () => {
     const code = '123456'
     const hash = await bcrypt.hash(code, 4)
 
-    mockFindUnique.mockResolvedValueOnce({
+    mockFindFirst.mockResolvedValueOnce({
       id: 'ch_1',
       userId: 'u1',
       method: 'SMS',
@@ -89,7 +89,7 @@ describe('verifyChallenge', () => {
     } as never)
     mockUpdate.mockResolvedValue({} as never)
 
-    const ok = await verifyChallenge('ch_1', code)
+    const ok = await verifyChallenge('u1', 'ch_1', code)
     expect(ok).toBe(true)
 
     // First update increments attempts; second (or combined final) sets consumedAt.
@@ -104,7 +104,7 @@ describe('verifyChallenge', () => {
     const bcrypt = (await import('bcrypt')).default
     const hash = await bcrypt.hash('123456', 4)
 
-    mockFindUnique.mockResolvedValueOnce({
+    mockFindFirst.mockResolvedValueOnce({
       id: 'ch_1',
       userId: 'u1',
       method: 'SMS',
@@ -116,7 +116,7 @@ describe('verifyChallenge', () => {
     } as never)
     mockUpdate.mockResolvedValue({} as never)
 
-    const ok = await verifyChallenge('ch_1', '000000')
+    const ok = await verifyChallenge('u1', 'ch_1', '000000')
     expect(ok).toBe(false)
     // attempts incremented
     const attemptsUpdate = mockUpdate.mock.calls.find(
@@ -126,8 +126,8 @@ describe('verifyChallenge', () => {
   })
 
   it('returns false for missing challenge', async () => {
-    mockFindUnique.mockResolvedValueOnce(null)
-    const ok = await verifyChallenge('nope', '123456')
+    mockFindFirst.mockResolvedValueOnce(null)
+    const ok = await verifyChallenge('u1', 'nope', '123456')
     expect(ok).toBe(false)
   })
 
@@ -135,7 +135,7 @@ describe('verifyChallenge', () => {
     const bcrypt = (await import('bcrypt')).default
     const hash = await bcrypt.hash('123456', 4)
 
-    mockFindUnique.mockResolvedValueOnce({
+    mockFindFirst.mockResolvedValueOnce({
       id: 'ch_1',
       userId: 'u1',
       method: 'SMS',
@@ -146,7 +146,7 @@ describe('verifyChallenge', () => {
       createdAt: new Date(),
     } as never)
 
-    const ok = await verifyChallenge('ch_1', '123456')
+    const ok = await verifyChallenge('u1', 'ch_1', '123456')
     expect(ok).toBe(false)
   })
 
@@ -154,7 +154,7 @@ describe('verifyChallenge', () => {
     const bcrypt = (await import('bcrypt')).default
     const hash = await bcrypt.hash('123456', 4)
 
-    mockFindUnique.mockResolvedValueOnce({
+    mockFindFirst.mockResolvedValueOnce({
       id: 'ch_1',
       userId: 'u1',
       method: 'SMS',
@@ -165,7 +165,7 @@ describe('verifyChallenge', () => {
       createdAt: new Date(),
     } as never)
 
-    const ok = await verifyChallenge('ch_1', '123456')
+    const ok = await verifyChallenge('u1', 'ch_1', '123456')
     expect(ok).toBe(false)
   })
 
@@ -173,7 +173,7 @@ describe('verifyChallenge', () => {
     const bcrypt = (await import('bcrypt')).default
     const hash = await bcrypt.hash('123456', 4)
 
-    mockFindUnique.mockResolvedValueOnce({
+    mockFindFirst.mockResolvedValueOnce({
       id: 'ch_1',
       userId: 'u1',
       method: 'SMS',
@@ -184,7 +184,7 @@ describe('verifyChallenge', () => {
       createdAt: new Date(),
     } as never)
 
-    const ok = await verifyChallenge('ch_1', '123456')
+    const ok = await verifyChallenge('u1', 'ch_1', '123456')
     expect(ok).toBe(false)
   })
 
@@ -196,7 +196,7 @@ describe('verifyChallenge', () => {
     const hash = await bcrypt.hash('123456', 4)
 
     // 5th submission with a wrong code: attempts goes 4 -> 5, consumedAt burns.
-    mockFindUnique.mockResolvedValueOnce({
+    mockFindFirst.mockResolvedValueOnce({
       id: 'ch_1',
       userId: 'u1',
       method: 'SMS',
@@ -208,7 +208,7 @@ describe('verifyChallenge', () => {
     } as never)
     mockUpdate.mockResolvedValue({} as never)
 
-    const firstResult = await verifyChallenge('ch_1', '000000')
+    const firstResult = await verifyChallenge('u1', 'ch_1', '000000')
     expect(firstResult).toBe(false)
 
     // Exactly one update: increment + consumedAt together.
@@ -220,7 +220,7 @@ describe('verifyChallenge', () => {
 
     // Now simulate a 6th call with the CORRECT code. Because consumedAt is
     // stamped from the previous call, the challenge must refuse.
-    mockFindUnique.mockResolvedValueOnce({
+    mockFindFirst.mockResolvedValueOnce({
       id: 'ch_1',
       userId: 'u1',
       method: 'SMS',
@@ -231,7 +231,7 @@ describe('verifyChallenge', () => {
       createdAt: new Date(),
     } as never)
 
-    const followup = await verifyChallenge('ch_1', '123456')
+    const followup = await verifyChallenge('u1', 'ch_1', '123456')
     expect(followup).toBe(false)
   })
 
@@ -242,7 +242,7 @@ describe('verifyChallenge', () => {
     const code = '123456'
     const hash = await bcrypt.hash(code, 4)
 
-    mockFindUnique.mockResolvedValueOnce({
+    mockFindFirst.mockResolvedValueOnce({
       id: 'ch_1',
       userId: 'u1',
       method: 'SMS',
@@ -254,7 +254,7 @@ describe('verifyChallenge', () => {
     } as never)
     mockUpdate.mockResolvedValue({} as never)
 
-    const ok = await verifyChallenge('ch_1', code)
+    const ok = await verifyChallenge('u1', 'ch_1', code)
     expect(ok).toBe(true)
 
     // Only ONE update that sets consumedAt — the exhausting one.
@@ -263,5 +263,19 @@ describe('verifyChallenge', () => {
       return 'consumedAt' in d && d.consumedAt
     })
     expect(consumedUpdates).toHaveLength(1)
+  })
+
+  it('refuses to verify a challenge that belongs to another user (cross-user scoping)', async () => {
+    // Defense-in-depth: even with the correct code and a valid challengeId,
+    // calling verifyChallenge with a different userId must return false
+    // because the `where: { id, userId }` clause excludes it at the DB.
+    // Simulate the DB returning null (no row matches the scoped query).
+    mockFindFirst.mockResolvedValueOnce(null)
+
+    const ok = await verifyChallenge('userB', 'ch_owned_by_userA', '123456')
+    expect(ok).toBe(false)
+    // No attempts incremented, no consumedAt stamped — the challenge is
+    // entirely untouched from userB's perspective.
+    expect(mockUpdate).not.toHaveBeenCalled()
   })
 })

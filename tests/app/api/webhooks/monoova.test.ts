@@ -50,10 +50,10 @@ describe('POST /api/webhooks/monoova', () => {
     expect(res.status).toBe(400)
   })
 
-  it('passes raw body to handler for signature verification', async () => {
+  it('passes raw body string to handler for signature verification', async () => {
     mockHandler.mockResolvedValue(undefined)
     const body = { eventId: '42', eventType: 'payment' }
     await POST(makeWebhookRequest(body, 'mysig'))
-    expect(mockHandler).toHaveBeenCalledWith(body, 'mysig')
+    expect(mockHandler).toHaveBeenCalledWith(JSON.stringify(body), 'mysig')
   })
 })

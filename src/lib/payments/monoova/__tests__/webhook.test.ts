@@ -1,19 +1,34 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import crypto from 'crypto'
 import { handleMonoovaWebhook } from '../webhook'
 
 // Mock dependencies
 vi.mock('../../../db/client', () => ({
   prisma: {
     webhookEvent: {
-      findUnique: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
     },
     transfer: {
       findFirst: vi.fn(),
     },
   },
 }))
+
+vi.mock('../../../../generated/prisma/client', () => {
+  class PrismaClientKnownRequestError extends Error {
+    code: string
+    constructor(message: string, opts: { code: string }) {
+      super(message)
+      this.code = opts.code
+    }
+  }
+  return {
+    Prisma: {
+      PrismaClientKnownRequestError,
+    },
+  }
+})
 
 vi.mock('../payid-service', () => ({
   handlePaymentReceived: vi.fn(),
@@ -24,6 +39,7 @@ vi.mock('../verify-signature', () => ({
 }))
 
 import { prisma } from '../../../db/client'
+import { Prisma } from '../../../../generated/prisma/client'
 import { handlePaymentReceived } from '../payid-service'
 import { verifyMonoovaSignature } from '../verify-signature'
 
@@ -40,161 +56,138 @@ function makePayload(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function signPayload(payload: string): string {
-  return crypto.createHmac('sha256', WEBHOOK_SECRET).update(payload).digest('hex')
-}
-
 describe('handleMonoovaWebhook', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // Set env var for webhook secret
     vi.stubEnv('MONOOVA_WEBHOOK_SECRET', WEBHOOK_SECRET)
   })
 
   it('processes a valid webhook end-to-end', async () => {
-    const payload = makePayload()
-    const payloadStr = JSON.stringify(payload)
-    const signature = signPayload(payloadStr)
+    const rawBody = JSON.stringify(makePayload())
+    const signature = 'any-signature'
 
     vi.mocked(verifyMonoovaSignature).mockReturnValue(true)
 
-    // No existing webhook event (not a duplicate)
-    vi.mocked(prisma.webhookEvent.findUnique).mockResolvedValue(null)
+    // Atomic claim succeeds (no existing row)
+    vi.mocked(prisma.webhookEvent.create).mockResolvedValue({} as any)
 
     // Transfer found
     const transfer = { id: 'txn-001', payidReference: 'KL-txn-001-1700000000' }
     vi.mocked(prisma.transfer.findFirst).mockResolvedValue(transfer as any)
 
-    // handlePaymentReceived succeeds
     vi.mocked(handlePaymentReceived).mockResolvedValue({ id: 'txn-001', status: 'AUD_RECEIVED' } as any)
+    vi.mocked(prisma.webhookEvent.update).mockResolvedValue({} as any)
 
-    // webhookEvent.create succeeds
-    vi.mocked(prisma.webhookEvent.create).mockResolvedValue({} as any)
+    await handleMonoovaWebhook(rawBody, signature)
 
-    await handleMonoovaWebhook(payload, signature)
+    // Signature verified against the raw body (not JSON.stringify of a re-parsed object)
+    expect(verifyMonoovaSignature).toHaveBeenCalledWith(rawBody, signature, WEBHOOK_SECRET)
 
-    // Verify signature was checked
-    expect(verifyMonoovaSignature).toHaveBeenCalledWith(payloadStr, signature, WEBHOOK_SECRET)
-
-    // Verify idempotency check
-    expect(prisma.webhookEvent.findUnique).toHaveBeenCalledWith({
-      where: { provider_eventId: { provider: 'monoova', eventId: 'evt-001' } },
-    })
-
-    // Verify transfer lookup
-    expect(prisma.transfer.findFirst).toHaveBeenCalledWith({
-      where: { payidReference: 'KL-txn-001-1700000000' },
-    })
-
-    // Verify payment was processed
-    expect(handlePaymentReceived).toHaveBeenCalledWith('txn-001', expect.any(Object))
-
-    // Verify webhook event was stored
+    // Claim-row insert
     expect(prisma.webhookEvent.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         provider: 'monoova',
         eventId: 'evt-001',
         eventType: 'payment.received',
-        processed: true,
+        processed: false,
       }),
     })
+
+    // Transfer lookup
+    expect(prisma.transfer.findFirst).toHaveBeenCalledWith({
+      where: { payidReference: 'KL-txn-001-1700000000' },
+    })
+
+    // Payment processed
+    expect(handlePaymentReceived).toHaveBeenCalledWith('txn-001', expect.any(Object))
+
+    // Marked processed on success
+    expect(prisma.webhookEvent.update).toHaveBeenCalledWith({
+      where: { provider_eventId: { provider: 'monoova', eventId: 'evt-001' } },
+      data: expect.objectContaining({ processed: true }),
+    })
+
+    // No delete on success path
+    expect(prisma.webhookEvent.delete).not.toHaveBeenCalled()
   })
 
-  it('skips duplicate webhook (idempotency)', async () => {
-    const payload = makePayload()
-    const payloadStr = JSON.stringify(payload)
-    const signature = signPayload(payloadStr)
+  it('skips duplicate webhook via P2002 (idempotency)', async () => {
+    const rawBody = JSON.stringify(makePayload())
+    const signature = 'any-signature'
 
     vi.mocked(verifyMonoovaSignature).mockReturnValue(true)
 
-    // Existing webhook event found — duplicate
-    vi.mocked(prisma.webhookEvent.findUnique).mockResolvedValue({
-      id: 'wh-existing',
-      provider: 'monoova',
-      eventId: 'evt-001',
-      processed: true,
-    } as any)
+    // Unique-constraint violation on the claim insert
+    vi.mocked(prisma.webhookEvent.create).mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('duplicate', { code: 'P2002' } as any)
+    )
 
-    await handleMonoovaWebhook(payload, signature)
+    await handleMonoovaWebhook(rawBody, signature)
 
-    // Should NOT process payment or create new event
+    // No processing, no update, no delete
+    expect(prisma.transfer.findFirst).not.toHaveBeenCalled()
     expect(handlePaymentReceived).not.toHaveBeenCalled()
-    expect(prisma.webhookEvent.create).not.toHaveBeenCalled()
+    expect(prisma.webhookEvent.update).not.toHaveBeenCalled()
+    expect(prisma.webhookEvent.delete).not.toHaveBeenCalled()
   })
 
   it('rejects invalid signature', async () => {
-    const payload = makePayload()
-    const badSignature = 'deadbeef'
-
+    const rawBody = JSON.stringify(makePayload())
     vi.mocked(verifyMonoovaSignature).mockReturnValue(false)
 
     await expect(
-      handleMonoovaWebhook(payload, badSignature)
+      handleMonoovaWebhook(rawBody, 'deadbeef')
     ).rejects.toThrow('Invalid webhook signature')
 
-    expect(prisma.webhookEvent.findUnique).not.toHaveBeenCalled()
+    expect(prisma.webhookEvent.create).not.toHaveBeenCalled()
     expect(handlePaymentReceived).not.toHaveBeenCalled()
   })
 
-  it('logs but does not throw for unknown transfer reference', async () => {
-    const payload = makePayload({ payIdReference: 'KL-unknown-ref' })
-    const payloadStr = JSON.stringify(payload)
-    const signature = signPayload(payloadStr)
+  it('marks processed but does not throw for unknown transfer reference', async () => {
+    const rawBody = JSON.stringify(makePayload({ payIdReference: 'KL-unknown-ref' }))
 
     vi.mocked(verifyMonoovaSignature).mockReturnValue(true)
-    vi.mocked(prisma.webhookEvent.findUnique).mockResolvedValue(null)
-    vi.mocked(prisma.transfer.findFirst).mockResolvedValue(null) // not found
-
-    // webhookEvent still stored
     vi.mocked(prisma.webhookEvent.create).mockResolvedValue({} as any)
+    vi.mocked(prisma.transfer.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.webhookEvent.update).mockResolvedValue({} as any)
 
-    // Should NOT throw
-    await handleMonoovaWebhook(payload, signature)
+    await handleMonoovaWebhook(rawBody, 'sig')
 
     // Payment not processed (no transfer found)
     expect(handlePaymentReceived).not.toHaveBeenCalled()
 
-    // But webhook event is still stored for audit
-    expect(prisma.webhookEvent.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        provider: 'monoova',
-        eventId: 'evt-001',
-        processed: false,
-      }),
+    // Audit row marked processed so we don't retry it
+    expect(prisma.webhookEvent.update).toHaveBeenCalledWith({
+      where: { provider_eventId: { provider: 'monoova', eventId: 'evt-001' } },
+      data: expect.objectContaining({ processed: true }),
     })
+    expect(prisma.webhookEvent.delete).not.toHaveBeenCalled()
   })
 
-  it('flags amount mismatch from handlePaymentReceived', async () => {
-    const payload = makePayload({ amount: 999.99 })
-    const payloadStr = JSON.stringify(payload)
-    const signature = signPayload(payloadStr)
+  it('releases the claim (deletes) when processing throws', async () => {
+    const rawBody = JSON.stringify(makePayload({ amount: 999.99 }))
 
     vi.mocked(verifyMonoovaSignature).mockReturnValue(true)
-    vi.mocked(prisma.webhookEvent.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.webhookEvent.create).mockResolvedValue({} as any)
     vi.mocked(prisma.transfer.findFirst).mockResolvedValue({
       id: 'txn-001',
       payidReference: 'KL-txn-001-1700000000',
     } as any)
 
-    // handlePaymentReceived throws amount mismatch
     vi.mocked(handlePaymentReceived).mockRejectedValue(
       new Error('Amount mismatch: expected 250.00, received 999.99')
     )
+    vi.mocked(prisma.webhookEvent.delete).mockResolvedValue({} as any)
 
-    vi.mocked(prisma.webhookEvent.create).mockResolvedValue({} as any)
-
-    // Should still store the event but re-throw the error
     await expect(
-      handleMonoovaWebhook(payload, signature)
+      handleMonoovaWebhook(rawBody, 'sig')
     ).rejects.toThrow('Amount mismatch')
 
-    // Webhook event stored with processed=false on error
-    expect(prisma.webhookEvent.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        provider: 'monoova',
-        eventId: 'evt-001',
-        processed: false,
-      }),
+    // Claim released so provider retry can re-enter
+    expect(prisma.webhookEvent.delete).toHaveBeenCalledWith({
+      where: { provider_eventId: { provider: 'monoova', eventId: 'evt-001' } },
     })
+    // No processed=true update on failure
+    expect(prisma.webhookEvent.update).not.toHaveBeenCalled()
   })
 })

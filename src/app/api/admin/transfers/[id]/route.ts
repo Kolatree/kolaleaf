@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { Prisma } from '@/generated/prisma/client'
 import { requireAdmin } from '@/lib/auth/admin-middleware'
 import { AuthError } from '@/lib/auth/middleware'
 import { prisma } from '@/lib/db/client'
@@ -24,7 +25,15 @@ export async function GET(
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode })
     }
-    const message = error instanceof Error ? error.message : 'Failed to fetch transfer'
-    return NextResponse.json({ error: message }, { status: 500 })
+    // Unknown transfer id → 404. Do not leak Prisma's P2025 message (which
+    // mentions model and constraint names).
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2025'
+    ) {
+      return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    }
+    console.error('[admin/transfers/[id]]', error)
+    return NextResponse.json({ error: 'Failed to fetch transfer' }, { status: 500 })
   }
 }

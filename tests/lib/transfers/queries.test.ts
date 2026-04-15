@@ -28,7 +28,11 @@ beforeAll(async () => {
 })
 
 afterEach(async () => {
-  await cleanupTestData()
+  // Scoped cleanup: only wipe transfers/events between tests so the beforeAll
+  // user/recipient/otherUser fixtures survive. cleanupTestData (in afterAll)
+  // wipes the rest.
+  await prisma.transferEvent.deleteMany({})
+  await prisma.transfer.deleteMany({})
 })
 
 afterAll(async () => {
@@ -101,6 +105,25 @@ describe('listTransfers', () => {
     const result = await listTransfers(otherUserId)
     expect(result.transfers).toEqual([])
     expect(result.nextCursor).toBeUndefined()
+  })
+
+  it('includes recipient { id, fullName, bankName } and omits sensitive fields', async () => {
+    // Create fresh fixtures inline — the suite's afterEach wipes between tests.
+    const user = await createTestUser()
+    const recipient = await createTestRecipient(user.id)
+    await createTestTransfer(user.id, recipient.id)
+
+    const result = await listTransfers(user.id)
+    expect(result.transfers.length).toBe(1)
+
+    const t = result.transfers[0]
+    expect(t.recipient).toEqual({
+      id: recipient.id,
+      fullName: 'Test Recipient',
+      bankName: 'GTBank',
+    })
+    expect((t.recipient as Record<string, unknown>).accountNumber).toBeUndefined()
+    expect((t.recipient as Record<string, unknown>).bankCode).toBeUndefined()
   })
 })
 

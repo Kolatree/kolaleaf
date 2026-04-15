@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 import { checkAndAlertFloat } from '@/lib/workers/float-alert'
+import { authorizeCron } from '@/lib/auth/cron-auth'
 
 export async function POST(request: Request) {
-  const secret = request.headers.get('authorization')?.replace('Bearer ', '')
-  if (!secret || secret !== process.env.CRON_SECRET) {
+  if (!authorizeCron(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -16,7 +16,8 @@ export async function POST(request: Request) {
       pausedCount: result.pausedCount,
       resumedCount: result.resumedCount,
     })
-  } catch {
+  } catch (err) {
+    console.error('[cron/float]', err)
     return NextResponse.json({ error: 'Float check failed' }, { status: 500 })
   }
 }

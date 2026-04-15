@@ -1,18 +1,33 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import crypto from 'crypto'
 import { handleSumsubWebhook } from '../webhook'
 
 vi.mock('../../../db/client', () => ({
   prisma: {
     webhookEvent: {
-      findUnique: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
     },
     user: {
       findFirst: vi.fn(),
     },
   },
 }))
+
+vi.mock('../../../../generated/prisma/client', () => {
+  class PrismaClientKnownRequestError extends Error {
+    code: string
+    constructor(message: string, opts: { code: string }) {
+      super(message)
+      this.code = opts.code
+    }
+  }
+  return {
+    Prisma: {
+      PrismaClientKnownRequestError,
+    },
+  }
+})
 
 vi.mock('../kyc-service', () => ({
   handleKycApproved: vi.fn(),
@@ -24,6 +39,7 @@ vi.mock('../verify-signature', () => ({
 }))
 
 import { prisma } from '../../../db/client'
+import { Prisma } from '../../../../generated/prisma/client'
 import { handleKycApproved, handleKycRejected } from '../kyc-service'
 import { verifySumsubSignature } from '../verify-signature'
 
@@ -57,10 +73,6 @@ function makeRejectedPayload(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function signPayload(payload: string): string {
-  return crypto.createHmac('sha256', WEBHOOK_SECRET).update(payload).digest('hex')
-}
-
 describe('handleSumsubWebhook', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -68,32 +80,31 @@ describe('handleSumsubWebhook', () => {
   })
 
   it('processes an approved webhook end-to-end', async () => {
-    const payload = makeApprovedPayload()
-    const payloadStr = JSON.stringify(payload)
-    const signature = signPayload(payloadStr)
+    const rawBody = JSON.stringify(makeApprovedPayload())
+    const signature = 'any-signature'
 
     vi.mocked(verifySumsubSignature).mockReturnValue(true)
-
-    // No existing event (not duplicate)
-    vi.mocked(prisma.webhookEvent.findUnique).mockResolvedValue(null)
-
-    // User found by kycProviderId
+    vi.mocked(prisma.webhookEvent.create).mockResolvedValue({} as any)
     vi.mocked(prisma.user.findFirst).mockResolvedValue({
       id: 'user-001',
       kycProviderId: 'applicant-abc-123',
     } as any)
-
     vi.mocked(handleKycApproved).mockResolvedValue({} as any)
-    vi.mocked(prisma.webhookEvent.create).mockResolvedValue({} as any)
+    vi.mocked(prisma.webhookEvent.update).mockResolvedValue({} as any)
 
-    await handleSumsubWebhook(payload, signature)
+    await handleSumsubWebhook(rawBody, signature)
 
-    // Signature verified
-    expect(verifySumsubSignature).toHaveBeenCalledWith(payloadStr, signature, WEBHOOK_SECRET)
+    // Signature verified against the raw body
+    expect(verifySumsubSignature).toHaveBeenCalledWith(rawBody, signature, WEBHOOK_SECRET)
 
-    // Idempotency check
-    expect(prisma.webhookEvent.findUnique).toHaveBeenCalledWith({
-      where: { provider_eventId: { provider: 'sumsub', eventId: 'applicant-abc-123:applicantReviewed:GREEN' } },
+    // Claim-row insert
+    expect(prisma.webhookEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        provider: 'sumsub',
+        eventId: 'applicant-abc-123:applicantReviewed:GREEN',
+        eventType: 'applicantReviewed',
+        processed: false,
+      }),
     })
 
     // User lookup
@@ -105,94 +116,99 @@ describe('handleSumsubWebhook', () => {
     expect(handleKycApproved).toHaveBeenCalledWith('user-001')
     expect(handleKycRejected).not.toHaveBeenCalled()
 
-    // Webhook event stored as processed
-    expect(prisma.webhookEvent.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        provider: 'sumsub',
-        eventId: 'applicant-abc-123:applicantReviewed:GREEN',
-        eventType: 'applicantReviewed',
-        processed: true,
-      }),
+    // Marked processed
+    expect(prisma.webhookEvent.update).toHaveBeenCalledWith({
+      where: { provider_eventId: { provider: 'sumsub', eventId: 'applicant-abc-123:applicantReviewed:GREEN' } },
+      data: expect.objectContaining({ processed: true }),
     })
+    expect(prisma.webhookEvent.delete).not.toHaveBeenCalled()
   })
 
   it('processes a rejected webhook correctly', async () => {
-    const payload = makeRejectedPayload()
-    const payloadStr = JSON.stringify(payload)
-    const signature = signPayload(payloadStr)
+    const rawBody = JSON.stringify(makeRejectedPayload())
 
     vi.mocked(verifySumsubSignature).mockReturnValue(true)
-    vi.mocked(prisma.webhookEvent.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.webhookEvent.create).mockResolvedValue({} as any)
     vi.mocked(prisma.user.findFirst).mockResolvedValue({
       id: 'user-001',
       kycProviderId: 'applicant-abc-123',
     } as any)
     vi.mocked(handleKycRejected).mockResolvedValue({} as any)
-    vi.mocked(prisma.webhookEvent.create).mockResolvedValue({} as any)
+    vi.mocked(prisma.webhookEvent.update).mockResolvedValue({} as any)
 
-    await handleSumsubWebhook(payload, signature)
+    await handleSumsubWebhook(rawBody, 'sig')
 
     expect(handleKycRejected).toHaveBeenCalledWith('user-001', ['ID_INVALID', 'SELFIE_MISMATCH'])
     expect(handleKycApproved).not.toHaveBeenCalled()
   })
 
-  it('skips duplicate webhook (idempotency)', async () => {
-    const payload = makeApprovedPayload()
-    const payloadStr = JSON.stringify(payload)
-    const signature = signPayload(payloadStr)
+  it('skips duplicate webhook via P2002 (idempotency)', async () => {
+    const rawBody = JSON.stringify(makeApprovedPayload())
 
     vi.mocked(verifySumsubSignature).mockReturnValue(true)
 
-    // Existing event — duplicate
-    vi.mocked(prisma.webhookEvent.findUnique).mockResolvedValue({
-      id: 'wh-existing',
-      provider: 'sumsub',
-      eventId: 'applicant-abc-123:applicantReviewed:GREEN',
-      processed: true,
-    } as any)
+    vi.mocked(prisma.webhookEvent.create).mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('duplicate', { code: 'P2002' } as any)
+    )
 
-    await handleSumsubWebhook(payload, signature)
+    await handleSumsubWebhook(rawBody, 'sig')
 
+    expect(prisma.user.findFirst).not.toHaveBeenCalled()
     expect(handleKycApproved).not.toHaveBeenCalled()
     expect(handleKycRejected).not.toHaveBeenCalled()
-    expect(prisma.webhookEvent.create).not.toHaveBeenCalled()
+    expect(prisma.webhookEvent.update).not.toHaveBeenCalled()
   })
 
   it('rejects invalid signature', async () => {
-    const payload = makeApprovedPayload()
-
+    const rawBody = JSON.stringify(makeApprovedPayload())
     vi.mocked(verifySumsubSignature).mockReturnValue(false)
 
     await expect(
-      handleSumsubWebhook(payload, 'bad-signature')
+      handleSumsubWebhook(rawBody, 'bad-signature')
     ).rejects.toThrow('Invalid webhook signature')
 
-    expect(prisma.webhookEvent.findUnique).not.toHaveBeenCalled()
+    expect(prisma.webhookEvent.create).not.toHaveBeenCalled()
     expect(handleKycApproved).not.toHaveBeenCalled()
   })
 
-  it('logs but does not throw for unknown applicant', async () => {
-    const payload = makeApprovedPayload({ applicantId: 'unknown-applicant' })
-    const payloadStr = JSON.stringify(payload)
-    const signature = signPayload(payloadStr)
+  it('marks processed but does not throw for unknown applicant', async () => {
+    const rawBody = JSON.stringify(makeApprovedPayload({ applicantId: 'unknown-applicant' }))
 
     vi.mocked(verifySumsubSignature).mockReturnValue(true)
-    vi.mocked(prisma.webhookEvent.findUnique).mockResolvedValue(null)
-    vi.mocked(prisma.user.findFirst).mockResolvedValue(null) // not found
     vi.mocked(prisma.webhookEvent.create).mockResolvedValue({} as any)
+    vi.mocked(prisma.user.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.webhookEvent.update).mockResolvedValue({} as any)
 
-    // Should NOT throw
-    await handleSumsubWebhook(payload, signature)
+    await handleSumsubWebhook(rawBody, 'sig')
 
     expect(handleKycApproved).not.toHaveBeenCalled()
 
-    // Webhook event still stored for audit
-    expect(prisma.webhookEvent.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        provider: 'sumsub',
-        eventId: 'unknown-applicant:applicantReviewed:GREEN',
-        processed: false,
-      }),
+    // Audit row marked processed
+    expect(prisma.webhookEvent.update).toHaveBeenCalledWith({
+      where: { provider_eventId: { provider: 'sumsub', eventId: 'unknown-applicant:applicantReviewed:GREEN' } },
+      data: expect.objectContaining({ processed: true }),
     })
+  })
+
+  it('releases the claim (deletes) when processing throws', async () => {
+    const rawBody = JSON.stringify(makeApprovedPayload())
+
+    vi.mocked(verifySumsubSignature).mockReturnValue(true)
+    vi.mocked(prisma.webhookEvent.create).mockResolvedValue({} as any)
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({
+      id: 'user-001',
+      kycProviderId: 'applicant-abc-123',
+    } as any)
+    vi.mocked(handleKycApproved).mockRejectedValue(new Error('boom'))
+    vi.mocked(prisma.webhookEvent.delete).mockResolvedValue({} as any)
+
+    await expect(
+      handleSumsubWebhook(rawBody, 'sig')
+    ).rejects.toThrow('boom')
+
+    expect(prisma.webhookEvent.delete).toHaveBeenCalledWith({
+      where: { provider_eventId: { provider: 'sumsub', eventId: 'applicant-abc-123:applicantReviewed:GREEN' } },
+    })
+    expect(prisma.webhookEvent.update).not.toHaveBeenCalled()
   })
 })

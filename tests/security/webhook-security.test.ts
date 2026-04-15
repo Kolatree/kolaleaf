@@ -46,18 +46,18 @@ describe('Webhook Security', () => {
       const originalEnv = process.env.MONOOVA_WEBHOOK_SECRET
       process.env.MONOOVA_WEBHOOK_SECRET = 'real-secret'
 
-      const payload = {
+      const rawBody = JSON.stringify({
         eventId: 'evt-bad-sig',
         eventType: 'payment.received',
         payIdReference: 'KL-123',
         amount: 100,
         timestamp: new Date().toISOString(),
-      }
-      const wrongSignature = hmacSha256(JSON.stringify(payload), 'wrong-secret')
+      })
+      const wrongSignature = hmacSha256(rawBody, 'wrong-secret')
 
       try {
         await expect(
-          handleMonoovaWebhook(payload, wrongSignature)
+          handleMonoovaWebhook(rawBody, wrongSignature)
         ).rejects.toThrow('Invalid webhook signature')
       } finally {
         process.env.MONOOVA_WEBHOOK_SECRET = originalEnv
@@ -70,7 +70,7 @@ describe('Webhook Security', () => {
 
       try {
         await expect(
-          handleMonoovaWebhook({ eventId: 'x' }, '')
+          handleMonoovaWebhook(JSON.stringify({ eventId: 'x' }), '')
         ).rejects.toThrow('Invalid webhook signature')
       } finally {
         process.env.MONOOVA_WEBHOOK_SECRET = originalEnv
@@ -83,16 +83,16 @@ describe('Webhook Security', () => {
       const originalEnv = process.env.SUMSUB_WEBHOOK_SECRET
       process.env.SUMSUB_WEBHOOK_SECRET = 'real-sumsub-secret'
 
-      const payload = {
+      const rawBody = JSON.stringify({
         applicantId: 'app-123',
         type: 'applicantReviewed',
         reviewResult: { reviewAnswer: 'GREEN' },
-      }
-      const wrongSignature = hmacSha256(JSON.stringify(payload), 'wrong-secret')
+      })
+      const wrongSignature = hmacSha256(rawBody, 'wrong-secret')
 
       try {
         await expect(
-          handleSumsubWebhook(payload, wrongSignature)
+          handleSumsubWebhook(rawBody, wrongSignature)
         ).rejects.toThrow('Invalid webhook signature')
       } finally {
         process.env.SUMSUB_WEBHOOK_SECRET = originalEnv
@@ -102,39 +102,39 @@ describe('Webhook Security', () => {
 
   describe('Flutterwave signature verification', () => {
     it('rejects invalid Flutterwave signature (verif-hash mismatch)', async () => {
-      const payload = {
+      const rawBody = JSON.stringify({
         event: 'transfer.completed',
         data: { id: 12345, reference: 'ref-1', status: 'SUCCESSFUL' },
-      }
+      })
 
       await expect(
-        handleFlutterwaveWebhook(payload, 'wrong-hash', 'correct-secret')
+        handleFlutterwaveWebhook(rawBody, 'wrong-hash', 'correct-secret')
       ).rejects.toThrow('Invalid Flutterwave webhook signature')
     })
 
     it('rejects empty Flutterwave signature', async () => {
-      const payload = {
+      const rawBody = JSON.stringify({
         event: 'transfer.completed',
         data: { id: 12345, reference: 'ref-1', status: 'SUCCESSFUL' },
-      }
+      })
 
       await expect(
-        handleFlutterwaveWebhook(payload, '', 'secret')
+        handleFlutterwaveWebhook(rawBody, '', 'secret')
       ).rejects.toThrow('Invalid Flutterwave webhook signature')
     })
   })
 
   describe('Paystack signature verification', () => {
     it('rejects invalid Paystack signature (HMAC-SHA512 mismatch)', async () => {
-      const payload = {
+      const rawBody = JSON.stringify({
         event: 'transfer.success',
         data: { transfer_code: 'TRF_xyz', reference: 'ref-2', status: 'success' },
-      }
+      })
 
-      const wrongSignature = hmacSha512(JSON.stringify(payload), 'wrong-key')
+      const wrongSignature = hmacSha512(rawBody, 'wrong-key')
 
       await expect(
-        handlePaystackWebhook(payload, wrongSignature, 'correct-key')
+        handlePaystackWebhook(rawBody, wrongSignature, 'correct-key')
       ).rejects.toThrow('Invalid Paystack webhook signature')
     })
   })
@@ -152,20 +152,20 @@ describe('Webhook Security', () => {
       const originalEnv = process.env.MONOOVA_WEBHOOK_SECRET
       process.env.MONOOVA_WEBHOOK_SECRET = secret
 
-      const payload = {
+      const rawBody = JSON.stringify({
         eventId: 'evt-idempotent-1',
         eventType: 'payment.received',
         payIdReference: 'KL-IDMP-1',
         amount: 500,
         timestamp: new Date().toISOString(),
-      }
-      const signature = hmacSha256(JSON.stringify(payload), secret)
+      })
+      const signature = hmacSha256(rawBody, secret)
 
       try {
         // First call processes
-        await handleMonoovaWebhook(payload, signature)
-        // Second call should be silently skipped
-        await handleMonoovaWebhook(payload, signature)
+        await handleMonoovaWebhook(rawBody, signature)
+        // Second call should be silently skipped (P2002 on create)
+        await handleMonoovaWebhook(rawBody, signature)
       } finally {
         process.env.MONOOVA_WEBHOOK_SECRET = originalEnv
       }
@@ -187,15 +187,15 @@ describe('Webhook Security', () => {
       })
 
       const webhookSecret = 'flw-test-secret'
-      const payload = {
+      const rawBody = JSON.stringify({
         event: 'transfer.completed',
         data: { id: 99999, reference: 'ref-dup', status: 'SUCCESSFUL' },
-      }
+      })
 
       // First call
-      await handleFlutterwaveWebhook(payload, webhookSecret, webhookSecret)
+      await handleFlutterwaveWebhook(rawBody, webhookSecret, webhookSecret)
       // Second call: idempotent
-      await handleFlutterwaveWebhook(payload, webhookSecret, webhookSecret)
+      await handleFlutterwaveWebhook(rawBody, webhookSecret, webhookSecret)
 
       const events = await prisma.webhookEvent.findMany({
         where: { provider: 'FLUTTERWAVE', eventId: '99999' },
@@ -213,16 +213,16 @@ describe('Webhook Security', () => {
       })
 
       const secretKey = 'paystack-test-secret'
-      const payload = {
+      const rawBody = JSON.stringify({
         event: 'transfer.success',
         data: { transfer_code: 'TRF_dup_test', reference: 'ref-dup-ps', status: 'success' },
-      }
-      const signature = hmacSha512(JSON.stringify(payload), secretKey)
+      })
+      const signature = hmacSha512(rawBody, secretKey)
 
       // First call
-      await handlePaystackWebhook(payload, signature, secretKey)
+      await handlePaystackWebhook(rawBody, signature, secretKey)
       // Second call: idempotent
-      await handlePaystackWebhook(payload, signature, secretKey)
+      await handlePaystackWebhook(rawBody, signature, secretKey)
 
       const events = await prisma.webhookEvent.findMany({
         where: { provider: 'PAYSTACK', eventId: 'TRF_dup_test' },

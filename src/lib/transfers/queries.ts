@@ -17,8 +17,21 @@ interface ListParams {
   cursor?: string
 }
 
+// The public, non-sensitive recipient fields we surface to the owner's
+// transfer list. Account numbers and bank codes are intentionally omitted —
+// the user already sees those on the /recipients page.
+export interface TransferListRecipient {
+  id: string
+  fullName: string
+  bankName: string
+}
+
+export type TransferWithRecipient = Transfer & {
+  recipient: TransferListRecipient | null
+}
+
 interface ListResult {
-  transfers: Transfer[]
+  transfers: TransferWithRecipient[]
   nextCursor?: string
 }
 
@@ -34,6 +47,9 @@ export async function listTransfers(
     where,
     orderBy: { createdAt: 'desc' },
     take: limit + 1,
+    include: {
+      recipient: { select: { id: true, fullName: true, bankName: true } },
+    },
     ...(params.cursor
       ? { skip: 1, cursor: { id: params.cursor } }
       : {}),

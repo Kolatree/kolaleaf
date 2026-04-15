@@ -5,13 +5,42 @@
 
 ## Current Status
 
-**Active step:** 9 -- API Routes + Pages (Full Stack)
-**Last cleared:** Step 8
+**Active step:** 14 -- UI→Backend Gap Closure (review pending)
+**Last cleared:** Step 13
 **Pending deploy:** NO
 
 ---
 
 ## Step History
+
+### Step 14 -- UI→Backend Gap Closure -- REVIEW PENDING
+*Date: 2026-04-15*
+
+Closes 3 gaps the Variant D redesign introduced (audit by Bob, scope confirmed by Arch).
+
+Files changed:
+- `src/app/api/rates/public/route.ts` (NEW) -- public read-only rate endpoint, pair-based query, 60s/120s SWR cache, no admin field leak
+- `tests/app/api/rates/public.test.ts` (NEW) -- 8 cases covering 400, 404, success shape, PII filter, cache header, case normalization
+- `src/lib/transfers/queries.ts` -- enrich `listTransfers` with `recipient: { id, fullName, bankName }`; new exported `TransferListRecipient` and `TransferWithRecipient` types
+- `tests/lib/transfers/queries.test.ts` -- new test for the recipient enrichment + sensitive-field omission
+- `src/app/(dashboard)/send/page.tsx` -- swap `/api/rates/aud-ngn` → `/api/rates/public?base=AUD&target=NGN`
+- `src/app/_components/landing-page.tsx` -- same swap + comment update
+
+Decisions:
+- Generic pair-based public endpoint (consistent with multi-corridor invariant), not slug-based
+- Send page uses the same public endpoint (no separate authed variant in this step)
+- `TransferWithRecipient.recipient` typed nullable for safety
+- Pre-existing `/api/rates/[corridorId]` left in place; no callers but no harm
+
+Verification:
+- `npx tsc --noEmit` -- 0 errors (cleaner than baseline of 4)
+- `npm test -- --run` -- ~382 pass, 4 known-flaky failures (matches HANDOVER baseline)
+- `tests/app/api/rates/public.test.ts` in isolation -- 8/8 pass
+
+Reviewer findings: [pending Richard]
+Deploy: pending Step 15 holistic review
+
+---
 
 ### Step 1 -- Project Scaffold + Database Schema -- REVIEW PENDING
 *Date: 2026-04-14*
@@ -80,7 +109,15 @@ Deploy: N/A
 ## Known Gaps
 *Logged here instead of fixed. Addressed in a future step.*
 
-None.
+Logged during Step 14 audit (deferred per brief):
+- `/activity/[id]` -- transfer detail page referenced by Activity row links, not yet implemented
+- `/privacy`, `/terms`, `/compliance-info` -- footer stub links (404 today)
+- Mobile hamburger menu in `SiteHeader` (current mobile fallback is "Sign in / Start sending" only)
+- Login rate limiting (no protection against brute force)
+- Account page user name/email display (not requested in any brief; nice-to-have)
+- Test flakiness in `tests/lib/transfers/queries.test.ts` (4 tests fail under `afterEach` cleanup race; pre-existing, not introduced by Step 14)
+- Pre-existing `/api/rates/[corridorId]` route is now unused by any UI -- remove in a future cleanup step
+- 4 pre-existing TS errors in `src/lib/kyc/sumsub/__tests__/kyc-service.test.ts` (runtime-safe per HANDOVER) -- now showing as 0 in tsc, may need re-check
 
 ---
 

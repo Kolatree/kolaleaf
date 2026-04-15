@@ -1,4 +1,5 @@
 import crypto, { timingSafeEqual } from 'crypto'
+import { Prisma } from '../../../generated/prisma/client'
 import { prisma } from '../../db/client'
 
 // Lazy import to allow mocking in tests
@@ -24,58 +25,74 @@ interface FlutterwaveWebhookPayload {
   }
 }
 
+// Handles a Flutterwave payout webhook.
+//
+// Security: Flutterwave's `verif-hash` header is the static webhook secret
+// (not an HMAC). The raw body is accepted for future-proofing and parity
+// with the other providers, but the comparison is still secret-to-header.
+//
+// Idempotency: create-as-lock pattern (see monoova/webhook.ts).
 export async function handleFlutterwaveWebhook(
-  payload: unknown,
+  rawBody: string,
   signature: string,
   webhookSecret: string,
 ): Promise<void> {
-  // Verify signature: Flutterwave sends the secret hash in verif-hash header
   const expected = Buffer.from(webhookSecret, 'utf-8')
   const received = Buffer.from(signature, 'utf-8')
   if (expected.length !== received.length || !timingSafeEqual(expected, received)) {
     throw new Error('Invalid Flutterwave webhook signature')
   }
 
-  const body = payload as FlutterwaveWebhookPayload
+  const body = JSON.parse(rawBody) as FlutterwaveWebhookPayload
   const eventId = String(body.data.id)
   const providerRef = eventId
 
-  // Idempotency check
-  const existing = await prisma.webhookEvent.findUnique({
-    where: { provider_eventId: { provider: 'FLUTTERWAVE', eventId } },
-  })
-  if (existing) return
-
-  // Store webhook event
-  await prisma.webhookEvent.create({
-    data: {
-      provider: 'FLUTTERWAVE',
-      eventId,
-      eventType: body.event,
-      payload: body as object,
-      processed: false,
-    },
-  })
-
-  // Find the transfer by provider ref
-  const transfer = await prisma.transfer.findFirst({
-    where: { payoutProviderRef: providerRef, payoutProvider: 'FLUTTERWAVE' },
-  })
-
-  if (transfer) {
-    const orchestrator = await getOrchestrator() as WebhookOrchestrator
-
-    if (body.data.status === 'SUCCESSFUL') {
-      await orchestrator.handlePayoutSuccess(transfer.id)
-    } else if (body.data.status === 'FAILED') {
-      await orchestrator.handlePayoutFailure(
-        transfer.id,
-        body.data.complete_message ?? 'Transfer failed',
-      )
+  // Atomically claim the event.
+  try {
+    await prisma.webhookEvent.create({
+      data: {
+        provider: 'FLUTTERWAVE',
+        eventId,
+        eventType: body.event,
+        payload: body as unknown as object,
+        processed: false,
+      },
+    })
+  } catch (err) {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
+    ) {
+      return
     }
+    throw err
   }
 
-  // Mark as processed
+  // Process. Release the claim on failure so provider retry can re-enter.
+  try {
+    const transfer = await prisma.transfer.findFirst({
+      where: { payoutProviderRef: providerRef, payoutProvider: 'FLUTTERWAVE' },
+    })
+
+    if (transfer) {
+      const orchestrator = (await getOrchestrator()) as WebhookOrchestrator
+
+      if (body.data.status === 'SUCCESSFUL') {
+        await orchestrator.handlePayoutSuccess(transfer.id)
+      } else if (body.data.status === 'FAILED') {
+        await orchestrator.handlePayoutFailure(
+          transfer.id,
+          body.data.complete_message ?? 'Transfer failed',
+        )
+      }
+    }
+  } catch (err) {
+    await prisma.webhookEvent.delete({
+      where: { provider_eventId: { provider: 'FLUTTERWAVE', eventId } },
+    })
+    throw err
+  }
+
   await prisma.webhookEvent.update({
     where: { provider_eventId: { provider: 'FLUTTERWAVE', eventId } },
     data: { processed: true, processedAt: new Date() },
@@ -94,15 +111,22 @@ interface PaystackWebhookPayload {
   }
 }
 
+// Handles a Paystack payout webhook.
+//
+// Security: HMAC-SHA512 over the raw HTTP body, keyed on the secret key.
+// Signing `JSON.stringify(payload)` on a re-parsed body can differ from the
+// original bytes (whitespace, key order), breaking verification — so we
+// verify against `rawBody` directly.
+//
+// Idempotency: create-as-lock pattern (see monoova/webhook.ts).
 export async function handlePaystackWebhook(
-  payload: unknown,
+  rawBody: string,
   signature: string,
   secretKey: string,
 ): Promise<void> {
-  // Verify HMAC-SHA512 signature
   const expectedSignature = crypto
     .createHmac('sha512', secretKey)
-    .update(JSON.stringify(payload))
+    .update(rawBody)
     .digest('hex')
 
   const expectedBuf = Buffer.from(expectedSignature, 'hex')
@@ -111,45 +135,53 @@ export async function handlePaystackWebhook(
     throw new Error('Invalid Paystack webhook signature')
   }
 
-  const body = payload as PaystackWebhookPayload
+  const body = JSON.parse(rawBody) as PaystackWebhookPayload
   const eventId = body.data.transfer_code
 
-  // Idempotency check
-  const existing = await prisma.webhookEvent.findUnique({
-    where: { provider_eventId: { provider: 'PAYSTACK', eventId } },
-  })
-  if (existing) return
-
-  // Store webhook event
-  await prisma.webhookEvent.create({
-    data: {
-      provider: 'PAYSTACK',
-      eventId,
-      eventType: body.event,
-      payload: body as object,
-      processed: false,
-    },
-  })
-
-  // Find the transfer by provider ref
-  const transfer = await prisma.transfer.findFirst({
-    where: { payoutProviderRef: eventId, payoutProvider: 'PAYSTACK' },
-  })
-
-  if (transfer) {
-    const orchestrator = await getOrchestrator() as WebhookOrchestrator
-
-    if (body.data.status === 'success') {
-      await orchestrator.handlePayoutSuccess(transfer.id)
-    } else if (body.data.status === 'failed') {
-      await orchestrator.handlePayoutFailure(
-        transfer.id,
-        body.data.reason ?? 'Transfer failed',
-      )
+  try {
+    await prisma.webhookEvent.create({
+      data: {
+        provider: 'PAYSTACK',
+        eventId,
+        eventType: body.event,
+        payload: body as unknown as object,
+        processed: false,
+      },
+    })
+  } catch (err) {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
+    ) {
+      return
     }
+    throw err
   }
 
-  // Mark as processed
+  try {
+    const transfer = await prisma.transfer.findFirst({
+      where: { payoutProviderRef: eventId, payoutProvider: 'PAYSTACK' },
+    })
+
+    if (transfer) {
+      const orchestrator = (await getOrchestrator()) as WebhookOrchestrator
+
+      if (body.data.status === 'success') {
+        await orchestrator.handlePayoutSuccess(transfer.id)
+      } else if (body.data.status === 'failed') {
+        await orchestrator.handlePayoutFailure(
+          transfer.id,
+          body.data.reason ?? 'Transfer failed',
+        )
+      }
+    }
+  } catch (err) {
+    await prisma.webhookEvent.delete({
+      where: { provider_eventId: { provider: 'PAYSTACK', eventId } },
+    })
+    throw err
+  }
+
   await prisma.webhookEvent.update({
     where: { provider_eventId: { provider: 'PAYSTACK', eventId } },
     data: { processed: true, processedAt: new Date() },

@@ -67,9 +67,10 @@ async function cleanup() {
   await prisma.userIdentifier.deleteMany({})
   await prisma.authEvent.deleteMany({})
   await prisma.user.deleteMany({ where: { fullName: { startsWith: TEST_PREFIX } } })
-  // Delete rates before corridors to respect FK constraint
-  await prisma.rate.deleteMany({})
-  await prisma.corridor.deleteMany({})
+  // Do NOT delete corridors or rates — those are seeded data shared with other test
+  // files. This test reuses the seeded AUD-NGN corridor via findUnique-or-create
+  // (see createTransferForUser above), so wiping them breaks every subsequent
+  // test file that depends on the seed.
 }
 
 beforeEach(cleanup)

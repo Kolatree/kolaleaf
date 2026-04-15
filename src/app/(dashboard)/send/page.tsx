@@ -42,7 +42,7 @@ export default function SendPage() {
 
   const fetchRate = useCallback(async () => {
     try {
-      const res = await fetch('/api/rates/aud-ngn')
+      const res = await fetch('/api/rates/public?base=AUD&target=NGN')
       if (res.ok) {
         const data = await res.json()
         setRate(data)

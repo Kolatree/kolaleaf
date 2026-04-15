@@ -201,11 +201,11 @@ describe('Transfer Lifecycle E2E — Golden Path', () => {
       amount: 200,
       timestamp: new Date().toISOString(),
     }
-
-    const signature = hmacSha256(JSON.stringify(payload), webhookSecret)
+    const rawBody = JSON.stringify(payload)
+    const signature = hmacSha256(rawBody, webhookSecret)
 
     try {
-      await handleMonoovaWebhook(payload, signature)
+      await handleMonoovaWebhook(rawBody, signature)
     } finally {
       process.env.MONOOVA_WEBHOOK_SECRET = originalEnv
     }

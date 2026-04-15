@@ -51,10 +51,10 @@ function makePaystackPayload(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function paystackSignature(payload: unknown, secret: string): string {
+function paystackSignature(rawBody: string, secret: string): string {
   return crypto
     .createHmac('sha512', secret)
-    .update(JSON.stringify(payload))
+    .update(rawBody)
     .digest('hex')
 }
 
@@ -137,8 +137,8 @@ describe('Flutterwave webhook handler', () => {
       payoutProviderRef: '99001',
     })
 
-    const payload = makeFlutterwavePayload()
-    await handleFlutterwaveWebhook(payload, FW_WEBHOOK_SECRET, FW_WEBHOOK_SECRET)
+    const rawBody = JSON.stringify(makeFlutterwavePayload())
+    await handleFlutterwaveWebhook(rawBody, FW_WEBHOOK_SECRET, FW_WEBHOOK_SECRET)
 
     // Verify webhook event was stored for idempotency
     const event = await prisma.webhookEvent.findFirst({
@@ -151,12 +151,12 @@ describe('Flutterwave webhook handler', () => {
   it('skips duplicate webhook events (idempotency)', async () => {
     await createTestTransfer({ payoutProviderRef: '99001' })
 
-    const payload = makeFlutterwavePayload()
+    const rawBody = JSON.stringify(makeFlutterwavePayload())
 
     // Process first time
-    await handleFlutterwaveWebhook(payload, FW_WEBHOOK_SECRET, FW_WEBHOOK_SECRET)
-    // Process second time — should be skipped
-    await handleFlutterwaveWebhook(payload, FW_WEBHOOK_SECRET, FW_WEBHOOK_SECRET)
+    await handleFlutterwaveWebhook(rawBody, FW_WEBHOOK_SECRET, FW_WEBHOOK_SECRET)
+    // Process second time — should be skipped via P2002 on create
+    await handleFlutterwaveWebhook(rawBody, FW_WEBHOOK_SECRET, FW_WEBHOOK_SECRET)
 
     // Should only have one webhook event record
     const count = await prisma.webhookEvent.count({
@@ -166,18 +166,18 @@ describe('Flutterwave webhook handler', () => {
   })
 
   it('rejects invalid signature', async () => {
-    const payload = makeFlutterwavePayload()
+    const rawBody = JSON.stringify(makeFlutterwavePayload())
 
     await expect(
-      handleFlutterwaveWebhook(payload, 'wrong-secret', FW_WEBHOOK_SECRET),
+      handleFlutterwaveWebhook(rawBody, 'wrong-secret', FW_WEBHOOK_SECRET),
     ).rejects.toThrow('Invalid Flutterwave webhook signature')
   })
 
   it('handles unknown transfer reference gracefully', async () => {
-    const payload = makeFlutterwavePayload({ id: 99999 })
+    const rawBody = JSON.stringify(makeFlutterwavePayload({ id: 99999 }))
 
-    // Should not throw — just log and store the event
-    await handleFlutterwaveWebhook(payload, FW_WEBHOOK_SECRET, FW_WEBHOOK_SECRET)
+    // Should not throw — just store the event
+    await handleFlutterwaveWebhook(rawBody, FW_WEBHOOK_SECRET, FW_WEBHOOK_SECRET)
 
     const event = await prisma.webhookEvent.findFirst({
       where: { provider: 'FLUTTERWAVE', eventId: '99999' },
@@ -188,13 +188,13 @@ describe('Flutterwave webhook handler', () => {
   it('routes failed transfer to handlePayoutFailure', async () => {
     await createTestTransfer({ payoutProviderRef: '99002' })
 
-    const payload = makeFlutterwavePayload({
+    const rawBody = JSON.stringify(makeFlutterwavePayload({
       id: 99002,
       status: 'FAILED',
       complete_message: 'Account not found',
-    })
+    }))
 
-    await handleFlutterwaveWebhook(payload, FW_WEBHOOK_SECRET, FW_WEBHOOK_SECRET)
+    await handleFlutterwaveWebhook(rawBody, FW_WEBHOOK_SECRET, FW_WEBHOOK_SECRET)
 
     const event = await prisma.webhookEvent.findFirst({
       where: { provider: 'FLUTTERWAVE', eventId: '99002' },
@@ -211,10 +211,10 @@ describe('Paystack webhook handler', () => {
       payoutProviderRef: 'TRF_ps_001',
     })
 
-    const payload = makePaystackPayload()
-    const signature = paystackSignature(payload, PS_SECRET_KEY)
+    const rawBody = JSON.stringify(makePaystackPayload())
+    const signature = paystackSignature(rawBody, PS_SECRET_KEY)
 
-    await handlePaystackWebhook(payload, signature, PS_SECRET_KEY)
+    await handlePaystackWebhook(rawBody, signature, PS_SECRET_KEY)
 
     const event = await prisma.webhookEvent.findFirst({
       where: { provider: 'PAYSTACK', eventId: 'TRF_ps_001' },
@@ -229,11 +229,11 @@ describe('Paystack webhook handler', () => {
       payoutProviderRef: 'TRF_ps_001',
     })
 
-    const payload = makePaystackPayload()
-    const signature = paystackSignature(payload, PS_SECRET_KEY)
+    const rawBody = JSON.stringify(makePaystackPayload())
+    const signature = paystackSignature(rawBody, PS_SECRET_KEY)
 
-    await handlePaystackWebhook(payload, signature, PS_SECRET_KEY)
-    await handlePaystackWebhook(payload, signature, PS_SECRET_KEY)
+    await handlePaystackWebhook(rawBody, signature, PS_SECRET_KEY)
+    await handlePaystackWebhook(rawBody, signature, PS_SECRET_KEY)
 
     const count = await prisma.webhookEvent.count({
       where: { provider: 'PAYSTACK', eventId: 'TRF_ps_001' },
@@ -242,21 +242,21 @@ describe('Paystack webhook handler', () => {
   })
 
   it('rejects invalid HMAC signature', async () => {
-    const payload = makePaystackPayload()
+    const rawBody = JSON.stringify(makePaystackPayload())
 
     await expect(
-      handlePaystackWebhook(payload, 'invalid-signature', PS_SECRET_KEY),
+      handlePaystackWebhook(rawBody, 'invalid-signature', PS_SECRET_KEY),
     ).rejects.toThrow('Invalid Paystack webhook signature')
   })
 
   it('handles unknown transfer reference gracefully', async () => {
-    const payload = makePaystackPayload({
+    const rawBody = JSON.stringify(makePaystackPayload({
       transfer_code: 'TRF_unknown',
       reference: 'KL-PO-unknown-1700000000000',
-    })
-    const signature = paystackSignature(payload, PS_SECRET_KEY)
+    }))
+    const signature = paystackSignature(rawBody, PS_SECRET_KEY)
 
-    await handlePaystackWebhook(payload, signature, PS_SECRET_KEY)
+    await handlePaystackWebhook(rawBody, signature, PS_SECRET_KEY)
 
     const event = await prisma.webhookEvent.findFirst({
       where: { provider: 'PAYSTACK', eventId: 'TRF_unknown' },
@@ -270,15 +270,15 @@ describe('Paystack webhook handler', () => {
       payoutProviderRef: 'TRF_ps_fail',
     })
 
-    const payload = makePaystackPayload({
+    const rawBody = JSON.stringify(makePaystackPayload({
       transfer_code: 'TRF_ps_fail',
       reference: 'KL-PO-txn_ps_fail-1700000000000',
       status: 'failed',
       reason: 'Could not credit account',
-    })
-    const signature = paystackSignature(payload, PS_SECRET_KEY)
+    }))
+    const signature = paystackSignature(rawBody, PS_SECRET_KEY)
 
-    await handlePaystackWebhook(payload, signature, PS_SECRET_KEY)
+    await handlePaystackWebhook(rawBody, signature, PS_SECRET_KEY)
 
     const event = await prisma.webhookEvent.findFirst({
       where: { provider: 'PAYSTACK', eventId: 'TRF_ps_fail' },

@@ -52,15 +52,15 @@ describe('KYC Flow E2E', () => {
     const originalEnv = process.env.SUMSUB_WEBHOOK_SECRET
     process.env.SUMSUB_WEBHOOK_SECRET = webhookSecret
 
-    const payload = {
+    const rawBody = JSON.stringify({
       applicantId,
       type: 'applicantReviewed',
       reviewResult: { reviewAnswer: 'GREEN' },
-    }
-    const signature = hmacSha256(JSON.stringify(payload), webhookSecret)
+    })
+    const signature = hmacSha256(rawBody, webhookSecret)
 
     try {
-      await handleSumsubWebhook(payload, signature)
+      await handleSumsubWebhook(rawBody, signature)
     } finally {
       process.env.SUMSUB_WEBHOOK_SECRET = originalEnv
     }
@@ -103,18 +103,18 @@ describe('KYC Flow E2E', () => {
     const originalEnv = process.env.SUMSUB_WEBHOOK_SECRET
     process.env.SUMSUB_WEBHOOK_SECRET = webhookSecret
 
-    const rejPayload = {
+    const rejRawBody = JSON.stringify({
       applicantId,
       type: 'applicantReviewed',
       reviewResult: {
         reviewAnswer: 'RED',
         rejectLabels: ['DOCUMENT_MISMATCH', 'BLURRY_PHOTO'],
       },
-    }
-    const rejSignature = hmacSha256(JSON.stringify(rejPayload), webhookSecret)
+    })
+    const rejSignature = hmacSha256(rejRawBody, webhookSecret)
 
     try {
-      await handleSumsubWebhook(rejPayload, rejSignature)
+      await handleSumsubWebhook(rejRawBody, rejSignature)
     } finally {
       process.env.SUMSUB_WEBHOOK_SECRET = originalEnv
     }
@@ -187,18 +187,18 @@ describe('KYC Flow E2E', () => {
     const originalEnv = process.env.SUMSUB_WEBHOOK_SECRET
     process.env.SUMSUB_WEBHOOK_SECRET = webhookSecret
 
-    const payload = {
+    const rawBody = JSON.stringify({
       applicantId,
       type: 'applicantReviewed',
       reviewResult: { reviewAnswer: 'GREEN' },
-    }
-    const signature = hmacSha256(JSON.stringify(payload), webhookSecret)
+    })
+    const signature = hmacSha256(rawBody, webhookSecret)
 
     try {
       // First call: processes
-      await handleSumsubWebhook(payload, signature)
-      // Second call: should be skipped silently
-      await handleSumsubWebhook(payload, signature)
+      await handleSumsubWebhook(rawBody, signature)
+      // Second call: should be skipped silently (P2002 on create)
+      await handleSumsubWebhook(rawBody, signature)
     } finally {
       process.env.SUMSUB_WEBHOOK_SECRET = originalEnv
     }

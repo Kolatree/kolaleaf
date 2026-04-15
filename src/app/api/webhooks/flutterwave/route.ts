@@ -10,22 +10,22 @@ export async function POST(request: Request) {
   }
 
   let rawBody: string
-  let payload: unknown
   try {
     rawBody = await request.text()
-    payload = JSON.parse(rawBody)
+    JSON.parse(rawBody)
   } catch {
     return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
   }
 
   try {
-    await handleFlutterwaveWebhook(payload, signature, webhookSecret)
+    await handleFlutterwaveWebhook(rawBody, signature, webhookSecret)
     return NextResponse.json({ received: true })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Webhook processing failed'
     if (message === 'Invalid Flutterwave webhook signature') {
       return NextResponse.json({ error: message }, { status: 401 })
     }
+    console.error('[webhooks/flutterwave]', error)
     return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 })
   }
 }

@@ -25,14 +25,14 @@ export function LandingPage() {
     let cancelled = false
     async function fetchRate() {
       try {
-        const res = await fetch('/api/rates/aud-ngn')
+        const res = await fetch('/api/rates/public?base=AUD&target=NGN')
         if (res.ok) {
           const data = await res.json()
           const val = parseFloat(data.customerRate)
           if (!cancelled && !Number.isNaN(val) && val > 0) setRate(val)
         }
       } catch {
-        // Keep fallback rate — public endpoint may require auth in some envs.
+        // Keep fallback rate — corridor config may be missing in dev.
       }
     }
     fetchRate()

@@ -37,7 +37,10 @@ export async function POST(request: Request) {
     response.headers.set('Set-Cookie', setSessionCookie(session.token))
     return response
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Login failed'
-    return NextResponse.json({ error: message }, { status: 401 })
+    // Never leak the underlying error to the client — a DB error or internal
+    // failure would otherwise surface in the HTTP body. Log the raw error so
+    // operators can debug, and respond with a uniform "Login failed".
+    console.error('[auth/login]', error)
+    return NextResponse.json({ error: 'Login failed' }, { status: 401 })
   }
 }

@@ -122,6 +122,44 @@ describe('DefaultFxRateProvider', () => {
   })
 })
 
+describe('fx-fetcher build-time safety', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    delete process.env.FX_API_KEY
+    delete process.env.FX_API_URL
+  })
+
+  it('importing the module in production with missing creds does NOT throw (lazy)', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    delete process.env.FX_API_KEY
+    delete process.env.FX_API_URL
+
+    // LAZY validation: import is side-effect-free so `next build` can collect
+    // page data for routes that transitively import this module without env
+    // vars wired up yet. The throw is deferred to first fetchWholesaleRate.
+    await expect(import('../fx-fetcher')).resolves.toBeDefined()
+  })
+
+  it('constructing DefaultFxRateProvider with no config does NOT throw (lazy)', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    delete process.env.FX_API_KEY
+    delete process.env.FX_API_URL
+
+    expect(() => new DefaultFxRateProvider()).not.toThrow()
+  })
+
+  it('fetchWholesaleRate throws in production when creds are missing', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    delete process.env.FX_API_KEY
+    delete process.env.FX_API_URL
+
+    const provider = new DefaultFxRateProvider()
+    await expect(provider.fetchWholesaleRate('AUD', 'NGN')).rejects.toThrow(
+      /FX rate provider config missing/,
+    )
+  })
+})
+
 describe('validateFxConfig', () => {
   afterEach(() => {
     vi.unstubAllEnvs()

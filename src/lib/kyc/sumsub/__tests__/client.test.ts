@@ -246,6 +246,29 @@ describe('SumsubHttpClient', () => {
   })
 })
 
+describe('sumsub client build-time safety', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    delete process.env.SUMSUB_API_URL
+    delete process.env.SUMSUB_APP_TOKEN
+    delete process.env.SUMSUB_SECRET_KEY
+    delete process.env.SUMSUB_LEVEL_NAME
+  })
+
+  it('importing the module in production with missing creds does NOT throw (lazy)', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    delete process.env.SUMSUB_API_URL
+    delete process.env.SUMSUB_APP_TOKEN
+    delete process.env.SUMSUB_SECRET_KEY
+    delete process.env.SUMSUB_LEVEL_NAME
+
+    // LAZY validation: import is side-effect-free so `next build` can collect
+    // page data for routes that transitively import this module without env
+    // vars wired up yet. The throw is deferred to createSumsubClient().
+    await expect(import('../client')).resolves.toBeDefined()
+  })
+})
+
 describe('validateSumsubConfig', () => {
   afterEach(() => {
     vi.unstubAllEnvs()

@@ -73,36 +73,51 @@ describe('sendSms', () => {
     expect(result.error).toBeDefined()
   })
 
-  it('in production throws at client import when TWILIO_ACCOUNT_SID missing', async () => {
+  it('importing the client in production with missing Twilio creds does NOT throw (lazy)', async () => {
+    vi.stubEnv('TWILIO_ACCOUNT_SID', '')
+    vi.stubEnv('TWILIO_AUTH_TOKEN', '')
+    vi.stubEnv('TWILIO_FROM_NUMBER', '')
+    vi.stubEnv('NODE_ENV', 'production')
+
+    // LAZY validation: import is side-effect-free so `next build` can collect
+    // page data for routes that transitively import this module without env
+    // vars wired up yet. The throw is deferred to first sendSms below.
+    await expect(import('@/lib/sms/client')).resolves.toBeDefined()
+  })
+
+  it('in production sendSms throws on first call when TWILIO_ACCOUNT_SID missing', async () => {
     vi.stubEnv('TWILIO_ACCOUNT_SID', '')
     vi.stubEnv('TWILIO_AUTH_TOKEN', 'token_test')
     vi.stubEnv('TWILIO_FROM_NUMBER', '+15005550006')
     vi.stubEnv('NODE_ENV', 'production')
 
-    await expect(async () => {
-      await import('@/lib/sms/client')
-    }).rejects.toThrow(/TWILIO_ACCOUNT_SID/)
+    const { sendSms } = await import('@/lib/sms/send')
+    await expect(sendSms({ to: '+61400000000', body: 'hi' })).rejects.toThrow(
+      /TWILIO_ACCOUNT_SID/,
+    )
   })
 
-  it('in production throws at client import when TWILIO_AUTH_TOKEN missing', async () => {
+  it('in production sendSms throws on first call when TWILIO_AUTH_TOKEN missing', async () => {
     vi.stubEnv('TWILIO_ACCOUNT_SID', 'AC_test')
     vi.stubEnv('TWILIO_AUTH_TOKEN', '')
     vi.stubEnv('TWILIO_FROM_NUMBER', '+15005550006')
     vi.stubEnv('NODE_ENV', 'production')
 
-    await expect(async () => {
-      await import('@/lib/sms/client')
-    }).rejects.toThrow(/TWILIO_AUTH_TOKEN/)
+    const { sendSms } = await import('@/lib/sms/send')
+    await expect(sendSms({ to: '+61400000000', body: 'hi' })).rejects.toThrow(
+      /TWILIO_AUTH_TOKEN/,
+    )
   })
 
-  it('in production throws at client import when TWILIO_FROM_NUMBER missing', async () => {
+  it('in production sendSms throws on first call when TWILIO_FROM_NUMBER missing', async () => {
     vi.stubEnv('TWILIO_ACCOUNT_SID', 'AC_test')
     vi.stubEnv('TWILIO_AUTH_TOKEN', 'token_test')
     vi.stubEnv('TWILIO_FROM_NUMBER', '')
     vi.stubEnv('NODE_ENV', 'production')
 
-    await expect(async () => {
-      await import('@/lib/sms/client')
-    }).rejects.toThrow(/TWILIO_FROM_NUMBER/)
+    const { sendSms } = await import('@/lib/sms/send')
+    await expect(sendSms({ to: '+61400000000', body: 'hi' })).rejects.toThrow(
+      /TWILIO_FROM_NUMBER/,
+    )
   })
 })

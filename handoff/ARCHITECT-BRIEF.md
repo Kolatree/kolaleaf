@@ -694,4 +694,194 @@ export default defineConfig({
 
 [Builder writes plan here]
 
+---
+
+### Phase A Findings — Step 15l
+
+**Audit date:** 2026-04-16 (next day)
+**Scope:** Full codebase state at commit `343da3b` (Step 15k shipped). NOT just the 15k delta.
+
+**Baseline verification:**
+- `npx tsc --noEmit` — 0 errors. CLEAN.
+- `npm test -- --run` — 82 files / 599 tests passing. CLEAN.
+- `git status` — tree clean. CLEAN.
+- `npm run build` — **FAILS**. See Critical #1 below.
+
+**Summary:** 1 Critical, 4 Major, 6 Minor, 4 Clean. The single Critical blocks
+deploy — everything else is polish. The 12-checkpoint work is otherwise solid:
+webhook security, observability, auth flows, queue, provider hardening, public
+pages, hamburger menu all hold up to direct inspection.
+
+---
+
+#### CRITICAL
+
+**C1. `npm run build` fails in production mode — blocks deploy.**
+
+Location: `src/lib/rates/fx-fetcher.ts:57`, `src/lib/payments/monoova/client.ts:72`,
+`src/lib/kyc/sumsub/client.ts:85`, `src/lib/email/client.ts:19-26`,
+`src/lib/sms/client.ts:23-33`.
+
+Observed:
+```
+Error: FX rate provider config missing in production: FX_API_KEY, FX_API_URL
+Error: RESEND_API_KEY is required in production
+> Build error occurred
+Error: Failed to collect page data for /api/rates/[corridorId]
+```
+
+Step 15j ("fail-fast in production") pushed `validateFxConfig()` /
+`validateMonoovaConfig()` / `validateSumsubConfig()` to execute at module load via
+top-level `export const fxConfig = validateFxConfig()` etc. The Resend client
+and Twilio client do the same top-level throw at import time.
+
+This is correct behavior AT RUNTIME (you want the server to refuse to start with
+missing provider creds), but WRONG at build-time: Next.js 16 `next build`
+evaluates API-route modules with `NODE_ENV=production` during "Collecting page
+data". Any API route that transitively imports these modules throws at import,
+which aborts the build before a single page is produced.
+
+Real-world impact: Railway runs `npm run build` during deploy. The build will
+never succeed unless every provider's creds are present at build-time — which
+defeats the point of a CI build step that's supposed to run without secrets.
+
+Fix: move validation from import-time to first-use-time. Keep fail-fast
+semantics, but at runtime when a factory is called, NOT at module evaluation.
+Pattern:
+  - Remove `export const fxConfig = validateFxConfig()`.
+  - Change `DefaultFxRateProvider` constructor / `fetchWholesaleRate` to call
+    `validateFxConfig()` lazily on first request.
+  - Same pattern for `monoovaConfig`, `sumsubConfig`.
+  - In `email/client.ts` + `sms/client.ts`: gate the top-level `if (isProduction)
+    throw` on a lazy `assertConfig()` that's called from `getResend()` /
+    `getTwilio()` (deferred to the first send). Top-level `process.env` reads
+    are fine; the `throw` is the problem.
+
+Tests: add one per module that asserts `import '...'` does NOT throw when env
+is empty, and that `createXClient()` / `validateXConfig()` DOES throw. Existing
+tests already cover the throw contract — we just need to prove import-time is
+safe.
+
+Severity rationale: "production-ready, no placeholders" fails the moment we try
+to deploy. Currently impossible to ship the app without patching this. One
+issue, one commit, small blast radius.
+
+---
+
+#### MAJOR
+
+**M1. No `/api/rates/[corridorId]` deprecation comment.** Arch's Phase B brief
+for Step 15 locked this: "`/api/rates/[corridorId]` stays in place. Add a
+top-of-file comment: `// DEPRECATED: kept for internal/admin use. New code
+should call /api/rates/public?base=...&target=... or use rateService directly.`"
+Missed in 15b. File: `src/app/api/rates/[corridorId]/route.ts:1`.
+
+**M2. `/api/rates/[corridorId]` instantiates `new RateService(new
+DefaultFxRateProvider())` at module scope (line 5).** Triggers the
+`validateFxConfig()` eager-throw from C1. After C1 is fixed this becomes moot;
+flagging for traceability. Also `/api/admin/rates/route.ts:9` has the same
+pattern.
+
+**M3. Build-time warning: `/api/rates/[corridorId]` named in build error trace.**
+Once C1 is fixed, Next.js may still flag `/api/rates/[corridorId]` as a
+dynamically-evaluated route. Consider adding `export const dynamic = 'force-dynamic'`
+to all API routes that use `cookies()` or `process.env` for SSG/SSR clarity, OR
+leave default and rely on the automatic inference. Defer unless build surfaces a
+new warning after C1.
+
+**M4. Account route audit-log coverage gap (observational, not a fix):**
+`/api/account/phone/add/route.ts` does not write an AuthEvent when a user
+initiates a phone-add. `/phone/verify` correctly writes `PHONE_VERIFIED` on
+completion; `/phone/remove` writes `PHONE_REMOVED`. The gap is: if an attacker
+starts an add flow, the "attempt" itself isn't captured. Arguable — a verified
+flip is the meaningful state change. AUSTRAC requirement is about
+state-transition audit, which is covered. Recommend: defer to Known Gaps.
+Rationale: auditable user-facing state is all captured.
+
+---
+
+#### MINOR
+
+**m1. Cosmetic `transferEvent` self-loop `CREATED → CREATED` (Step 15 Audit
+Item #11 — deferred explicitly then).** `src/lib/transfers/create.ts:104-111`
+still writes the initial row with `fromStatus='CREATED'`, `toStatus='CREATED'`.
+Arch originally said "do inline if trivially under 5 min; otherwise defer." Bob
+deferred in 15a. Still deferred. No fix.
+
+**m2. `where: Record<string, unknown>` typing in admin routes
+(`src/app/api/admin/transfers/route.ts:20-22`, `src/app/api/admin/compliance/route.ts:16`).**
+Deferred in Step 15 — still deferred.
+
+**m3. Activity page empty-state copy not added.** Arch deferred this in Step 15.
+Step 15h added the detail page; the list still lacks empty-state copy for
+"no transfers yet".
+
+**m4. Form `htmlFor` / `aria-describedby` associations.** Deferred in Step 15.
+Pages work but lack the strongest a11y wiring.
+
+**m5. `RateService` singleton not consolidated.** Still instantiated per-file
+in `src/app/api/rates/[corridorId]/route.ts:5`, `src/app/api/admin/rates/route.ts:9`,
+`src/lib/rates/rate-service.ts:126` (the shared helper), `src/lib/workers/rate-refresh.ts:18`.
+Low-impact; Arch deferred.
+
+**m6. Admin rate POST and transfer POST have no HTTP-layer tests.** Underlying
+services are tested. Deferred in Step 15.
+
+---
+
+#### CLEAN (explicitly verified, no issues)
+
+- **TODO/FIXME/XXX scan.** Zero TODOs/FIXMEs/XXXs in `src/` production code
+  (excluding `src/generated/`). The `XXXX-XXXXXX` strings in `src/lib/auth/totp.ts`
+  and its test are backup-code format descriptors, not markers.
+- **Hardcoded secrets.** No `sk_test`/`sk_live`/`pk_test`/literal API keys in
+  source. All providers read `process.env.*`. Clean.
+- **`console.log` audit.** 22 `console.log` occurrences in production code, all
+  intentional: dev-mode stubs (`[email-dev]`, `[sms-dev]`), observability logs
+  in `src/lib/workers/*` and `src/workers/webhook-worker.ts`. No accidental
+  debug logs.
+- **API auth gate audit.** Every `/api/admin/*` route calls `requireAdmin`.
+  Every `/api/account/*`, `/api/transfers/*`, `/api/recipients/*`, `/api/kyc/*`
+  route calls `requireAuth`. Every `/api/cron/*` route calls `authorizeCron`
+  (timing-safe bearer). Every `/api/webhooks/*` route verifies provider
+  signature before enqueue. Every public-expected route
+  (`/api/auth/{login,register,verify-email,request-password-reset,reset-password}`,
+  `/api/rates/public`) is correctly unauthed.
+- **Footer link coverage.** `/privacy`, `/terms`, `/compliance-info` all exist
+  at `src/app/(marketing)/{privacy,terms,compliance-info}/page.tsx` (closed by
+  Step 15k). No 404s from footer.
+- **Bare catch audit.** 37 bare `} catch {}` in production code; all classified
+  as acceptable (JSON-parse fallbacks returning 400 `Invalid JSON`, or
+  client-side UI network catches that surface messages to users). Zero bare
+  catches that silently swallow server-side errors — those were fixed in 15a/15b.
+- **AuthEvent coverage.** `/api/auth/login` + `register` + admin actions (refund,
+  retry, rate override, referral pay) + 2FA enable/disable/regenerate + change-
+  password/email + email/phone verify/remove all emit AuthEvents either via
+  `logAuthEvent` or inline `prisma.authEvent.create` in a transaction. KYC
+  completion via `kyc-service.ts` emits events. AUSTRAC immutability requirement
+  satisfied.
+- **Variant D treatment coverage.** Every `page.tsx` either imports
+  `@/lib/design/tokens` or `@/components/design/KolaPrimitives`. Only
+  `src/app/(marketing)/page.tsx` does not — because it delegates rendering to
+  `LandingPage`, which does.
+- **Hamburger menu.** `src/app/_components/site-header.tsx` has the full Step
+  15k implementation: `useState` open/close, `useId` for `aria-controls`, ESC
+  keydown handler, click-out close via transparent overlay button, responsive
+  `md:hidden`/`hidden md:flex` nav split.
+
+---
+
+### Phase A Triage Request
+
+Single Critical (C1) is a hard blocker. M1 is a 30-second edit locked by
+earlier Arch brief. M2+M3 resolve after C1.
+
+Recommended Phase B scope:
+- **FIX-NOW:** C1 (the build-fix refactor), M1 (the deprecation comment).
+- **DEFER to Known Gaps:** M4, all Minor items (all pre-logged in BUILD-LOG
+  Known Gaps already).
+- **DROP:** M2 (absorbed into C1 fix), M3 (no new warning observed yet).
+
+Stopping here. Waiting for Arch to triage.
+
 Architect approval: [ ] Approved / [ ] Redirect — see notes below

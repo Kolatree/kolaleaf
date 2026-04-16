@@ -1,4 +1,4 @@
-import { getResend, getEmailFrom, hasApiKey } from './client'
+import { assertResendConfig, getResend, getEmailFrom, hasApiKey } from './client'
 
 export interface SendEmailParams {
   to: string
@@ -23,6 +23,10 @@ export interface SendEmailResult {
  */
 export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
   const { to, subject, html, text } = params
+
+  // Fail-fast in production BEFORE falling through to the dev log branch —
+  // a missing RESEND_API_KEY in prod must raise, not silently log.
+  assertResendConfig()
 
   if (!hasApiKey()) {
     console.log('[email-dev] ──────────────────────────────────────')

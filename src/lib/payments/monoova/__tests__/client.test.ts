@@ -159,6 +159,25 @@ describe('MonoovaHttpClient', () => {
   })
 })
 
+describe('monoova client build-time safety', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    delete process.env.MONOOVA_API_URL
+    delete process.env.MONOOVA_API_KEY
+  })
+
+  it('importing the module in production with missing creds does NOT throw (lazy)', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    delete process.env.MONOOVA_API_URL
+    delete process.env.MONOOVA_API_KEY
+
+    // LAZY validation: import is side-effect-free so `next build` can collect
+    // page data for routes that transitively import this module without env
+    // vars wired up yet. The throw is deferred to createMonoovaClient().
+    await expect(import('../client')).resolves.toBeDefined()
+  })
+})
+
 describe('validateMonoovaConfig', () => {
   afterEach(() => {
     vi.unstubAllEnvs()

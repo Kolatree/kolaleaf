@@ -1,66 +1,90 @@
-# Review Feedback — Step 15k
-Date: 2026-04-15
+# Review Feedback -- Step 15l (FINAL)
+Date: 2026-04-16
 Ready for Builder: YES
 
 ## Must Fix
-None.
+
+(none)
 
 ## Should Fix
-- `src/app/(marketing)/compliance-info/page.tsx:80-82` — "Consumer protection"
-  section states "We separate customer funds from operating funds." This is a
-  factual operational claim, not a statutory restatement like the seven-year
-  retention line. If end-to-end segregation is not yet in place (the float engine
-  is still Wave 1), soften to something like "We operate our float with customer
-  funds segregated from operating funds — final treasury arrangements pending
-  counsel review," or hedge the sentence under the same "placeholder" framing
-  the rest of the page uses. The amber banner covers the page generally, but a
-  literal reading of this one sentence asserts a current-state control that the
-  build may not yet have. Log to BUILD-LOG if not addressed now.
+
+(none)
 
 ## Escalate to Architect
-None.
+
+(none)
 
 ## Cleared
-Reviewed 4 source files + 1 test file (privacy/terms/compliance-info `page.tsx`,
-`site-header.tsx`, `marketing-pages.test.tsx`) plus `site-footer.tsx` for link
-hygiene.
 
-**Content.** All three pages render the amber "Pending legal review" banner
-ABOVE the H1 via `<LegalBanner />`, with `role="note"` and an explicit
-`aria-label="Legal review pending"`. Each page also prints "Last updated:
-placeholder date — pending legal review" below the H1. The AUSTRAC number
-`IND100512345` is flagged inline as placeholder and matches the footer. The
-seven-year retention statement is correctly framed as a statutory obligation
-under the AML/CTF Act, not a Kolaleaf-invented commitment. Terms "Governing
-law" explicitly hedges NSW jurisdiction as placeholder. No invented AFCA
-member numbers, no concrete SLA commitments, no escape-hatch language that
-could be read as final policy.
+All 20 changed files reviewed line-by-line against the REVIEW-REQUEST and
+ARCHITECT-BRIEF Phase A/B spec.
 
-**Mobile hamburger.** `'use client'` present. Desktop nav (`hidden md:flex`)
-content is unchanged. Mobile toggle is `md:hidden`, 40×40, has `aria-expanded`,
-`aria-controls` bound via `useId()`, and a dynamic `aria-label` that flips
-between "Open menu" and "Close menu". ESC handler is correctly mounted and
-cleaned up inside `useEffect` keyed on `open`. Outside-click handled via a
-transparent `fixed inset-0` sibling button, only rendered when `open === true`
-so it never blocks initial paint. Every `MobileLink`, the gradient CTA, and
-the logo link all call `setOpen(false)` onClick — returning to a page will not
-leave the menu open. Z-index stacking is correct (catcher z-10, panel z-20).
-No server-only APIs used in the client component.
+**C1 fix (lazy env validation) -- verified across all 5 provider modules:**
 
-**Metadata.** All three pages export a `Metadata` object with `title` and
-`description`.
+1. `rates/fx-fetcher.ts` -- Import safe: no top-level `validateFxConfig()` call;
+   constructor stores config without validating. First-use throws:
+   `fetchWholesaleRate` calls `getConfig()` which calls `validateFxConfig()`;
+   throws with specific missing-var message in production. Tests:
+   `fx-fetcher.test.ts:132-141` (import safe), `fx-fetcher.test.ts:143-149`
+   (construction safe), `fx-fetcher.test.ts:151-160` (fetch throws). Logic
+   unchanged: retry, timeout, error taxonomy intact.
 
-**Link hygiene.** Footer routes `/privacy`, `/terms`, `/compliance-info` match
-the new folder names exactly under `src/app/(marketing)/`.
+2. `payments/monoova/client.ts` -- Import safe: no top-level
+   `validateMonoovaConfig()` call. First-use throws: `createMonoovaClient()`
+   calls `validateMonoovaConfig()` inline; isMock guard throws generic error.
+   Tests: `client.test.ts:169-178` (import safe), `client.test.ts:188-193`
+   (validate throws). Logic unchanged: `MonoovaHttpClient` class, retry, error
+   taxonomy untouched.
 
-**Tests.** `npx vitest run tests/app/marketing-pages.test.tsx` → 3 passed, 0
-failed. `npx tsc --noEmit` → clean. The test walker invokes parameterless
-function components so helper components (`<LegalBanner />`, `<Section />`)
-contribute to the asserted text; the divergence from the admin/page walker is
-documented in a comment block in the file.
+3. `kyc/sumsub/client.ts` -- Import safe: no top-level `validateSumsubConfig()`
+   call. First-use throws: `createSumsubClient()` calls `validateSumsubConfig()`
+   inline; isMock guard throws. Tests: `client.test.ts:258-269` (import safe),
+   `client.test.ts:281-288` (validate throws). Logic unchanged:
+   `SumsubHttpClient`, HMAC signing, retry, error taxonomy untouched.
 
-**Scope.** `git status --short` shows only the files Bob listed in
-REVIEW-REQUEST (plus BUILD-LOG and REVIEW-REQUEST). No new deps, no schema
-changes, no new primitives, no out-of-scope drift.
+4. `email/client.ts` -- Import safe: `process.env` reads at module scope are
+   side-effect-free; `assertResendConfig()` exported but not called at load.
+   First-use throws: `getResend()` calls `assertResendConfig()`; `sendEmail()`
+   also calls it before the dev-log branch so production never silently logs.
+   Tests: `send.test.ts:83-92` (import safe), `send.test.ts:94-103`
+   (RESEND_API_KEY throws), `send.test.ts:105-114` (EMAIL_FROM throws). Logic
+   unchanged: `getResend()`, `getEmailFrom()`, `hasApiKey()` untouched.
 
-Step 15k is clear.
+5. `sms/client.ts` -- Same pattern as email. Import safe: `process.env` reads at
+   module scope. First-use throws: `getTwilio()` calls `assertTwilioConfig()`;
+   `sendSms()` calls it before dev-log branch. Tests: `send.test.ts:76-86`
+   (import safe), `send.test.ts:88-98` (SID throws), `send.test.ts:100-109`
+   (TOKEN throws), `send.test.ts:111-122` (FROM_NUMBER throws). Logic
+   unchanged: `getTwilio()`, `getFromNumber()`, `hasTwilioConfig()` untouched.
+
+**M1 fix (deprecation comment) -- verified:**
+Text at `src/app/api/rates/[corridorId]/route.ts:1-2` matches the verbatim spec
+from ARCHITECT-BRIEF line 212 (line-wrapped for readability, content identical).
+
+**Barrel files -- verified:**
+`fxConfig`, `monoovaConfig`, `sumsubConfig` re-exports removed from
+`rates/index.ts`, `monoova/index.ts`, `sumsub/index.ts`. Zero dangling
+references in `src/` (grep confirmed).
+
+**HANDOVER.md -- verified:**
+Reflects full Step 15 journey (15a-15l). Routes map includes all new routes from
+15d-k (`/activity/[id]`, `/privacy`, `/terms`, `/compliance-info`, auth
+verification, account self-service, 2FA). Decisions-locked section includes lazy
+env validation. Next steps are Railway deploy, real provider sandboxes, Wave 2a
+iOS.
+
+**BUILD-LOG Known Gaps -- verified:**
+All 6 Minor items (m1-m6) and 1 Major (M4) from Phase A are present in the
+"Still open" list. M2 absorbed into C1 (correct -- no longer relevant after lazy
+validation). M3 dropped (correct -- no new build warning observed). No item from
+prior steps was silently dropped. `npm run build` failure is correctly marked
+closed in 15l.
+
+**Scope drift -- verified:**
+20 files changed. Breakdown: 5 provider modules + 3 barrel files + 5 test files
++ 1 route file + 2 email/sms send files + 4 handoff docs. No surprise files. No
+new dependencies. No schema migrations. No API contract changes.
+
+---
+
+Step 15l is clear. Ship it.

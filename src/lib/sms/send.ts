@@ -1,4 +1,4 @@
-import { getTwilio, getFromNumber, hasTwilioConfig } from './client'
+import { assertTwilioConfig, getTwilio, getFromNumber, hasTwilioConfig } from './client'
 
 export interface SendSmsParams {
   to: string
@@ -26,6 +26,10 @@ export interface SendSmsResult {
  */
 export async function sendSms(params: SendSmsParams): Promise<SendSmsResult> {
   const { to, body } = params
+
+  // Fail-fast in production BEFORE falling through to the dev log branch —
+  // a missing Twilio env in prod must raise, not silently log the code.
+  assertTwilioConfig()
 
   if (!hasTwilioConfig()) {
     // Dev fallback. Never reachable in production (client.ts throws).

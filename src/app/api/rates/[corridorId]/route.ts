@@ -1,3 +1,5 @@
+// DEPRECATED: kept for internal/admin use. New code should call
+// /api/rates/public?base=...&target=... or use rateService directly.
 import { NextResponse } from 'next/server'
 import { RateService } from '@/lib/rates'
 import { DefaultFxRateProvider } from '@/lib/rates'

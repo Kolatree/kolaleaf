@@ -5,13 +5,97 @@
 
 ## Current Status
 
-**Active step:** 15k -- Public stub pages + mobile hamburger menu (review pending)
+**Active step:** 15l -- Final wholistic audit + fix pass (review pending)
 **Last cleared:** Step 15b
 **Pending deploy:** NO
 
 ---
 
 ## Step History
+
+### Step 15l -- Final wholistic audit + fix pass (capstone) -- REVIEW PENDING
+*Date: 2026-04-16*
+
+Capstone pass over the completed web app + admin + auth surface. Phase A
+audit walked all 12 prior checkpoints end-to-end (not just the 15k delta).
+Phase B fixed the single Critical (build-time env validation) + the one
+Major (deprecation comment locked by Step 15 Phase B). Everything else
+logged to Known Gaps.
+
+Phase A findings: 1 Critical, 4 Major, 6 Minor, 4 categories verified Clean.
+Full findings in `handoff/ARCHITECT-BRIEF.md` under "Phase A Findings -- Step 15l".
+
+Files changed:
+- `src/lib/rates/fx-fetcher.ts` -- removed top-level `export const fxConfig =
+  validateFxConfig()`. `DefaultFxRateProvider` now resolves config lazily on
+  first `fetchWholesaleRate` call via a new `getConfig()` helper. Constructor
+  stores the explicit config (if any) without validating -- construction is
+  side-effect-free. Import is side-effect-free. Header comment updated to
+  document the lazy contract.
+- `src/lib/rates/index.ts` -- dropped the now-gone `fxConfig` re-export.
+- `src/lib/payments/monoova/client.ts` -- removed top-level `export const
+  monoovaConfig = validateMonoovaConfig()`. `createMonoovaClient()` now calls
+  `validateMonoovaConfig()` on invocation (first-use). Header comment updated.
+- `src/lib/payments/monoova/index.ts` -- dropped `monoovaConfig` re-export.
+- `src/lib/kyc/sumsub/client.ts` -- removed top-level `export const sumsubConfig
+  = validateSumsubConfig()`. `createSumsubClient()` now validates on
+  invocation.
+- `src/lib/kyc/sumsub/index.ts` -- dropped `sumsubConfig` re-export.
+- `src/lib/email/client.ts` -- top-level `if (isProduction) throw` replaced
+  with exported `assertResendConfig()`. `getResend()` calls it at first use.
+  Header comment updated.
+- `src/lib/email/send.ts` -- calls `assertResendConfig()` at the top of
+  `sendEmail()` so the dev-log fallback branch cannot silently fire in
+  production when `RESEND_API_KEY` is missing.
+- `src/lib/sms/client.ts` -- same lazy pattern as email. Exported
+  `assertTwilioConfig()`. `getTwilio()` calls it at first use.
+- `src/lib/sms/send.ts` -- calls `assertTwilioConfig()` before the dev-log
+  fallback branch.
+- `src/app/api/rates/[corridorId]/route.ts` -- added the deprecation comment
+  Arch locked in the Step 15 Phase B triage: "DEPRECATED: kept for
+  internal/admin use. New code should call /api/rates/public?base=...&target=...
+  or use rateService directly."
+- `tests/lib/email/send.test.ts` -- rewrote the single import-throws test to
+  import-does-NOT-throw. Added two `sendEmail()` first-call-throws tests
+  covering `RESEND_API_KEY` missing and `EMAIL_FROM` missing.
+- `tests/lib/sms/send.test.ts` -- rewrote the three import-throws tests to
+  one import-does-NOT-throw + three `sendSms()` first-call-throws tests
+  (one per missing var).
+- `src/lib/rates/__tests__/fx-fetcher.test.ts` -- added a new `fx-fetcher
+  build-time safety` describe block: import does not throw in prod with
+  missing creds; constructing `DefaultFxRateProvider()` does not throw;
+  `fetchWholesaleRate()` throws with the specific var-name message.
+- `src/lib/payments/monoova/__tests__/client.test.ts` -- added `monoova client
+  build-time safety`: import does not throw.
+- `src/lib/kyc/sumsub/__tests__/client.test.ts` -- added `sumsub client
+  build-time safety`: import does not throw.
+
+Decisions made:
+- **Lazy validation, not removal.** Fail-fast in production is preserved --
+  the server still refuses to send / fetch / create clients with missing
+  creds. Only the TIMING moved from module-load to first-use. This is the
+  minimal change that unblocks `next build` without weakening the contract.
+- **`assertXConfig` is exported for both email + sms** because `sendXxx()`
+  must be able to fail-fast BEFORE the dev-log fallback branch fires. An
+  SMS/email dev-log in production would be a security incident.
+- **Flutterwave + Paystack unchanged.** Those adapters already require
+  explicit config at constructor time -- they never had top-level throws
+  and were build-safe.
+- **`/api/rates/[corridorId]` deprecation comment** applied verbatim from
+  Arch's Step 15 Phase B brief.
+- **No new dependencies. No schema migrations.**
+
+Phase D results:
+- `npx tsc --noEmit` -- 0 errors.
+- `npm test -- --run` -- 82 files / 607 tests passing (599 baseline + 8 net
+  new build-safety assertions).
+- `npm run build` -- SUCCEEDS in production mode. All 53 routes generated,
+  zero errors, zero warnings. Was FAILING before this step.
+
+Reviewer findings: [pending review]
+Deploy: N/A
+
+---
 
 ### Step 15k -- Public stub pages + mobile hamburger menu -- REVIEW PENDING
 *Date: 2026-04-15*
@@ -801,15 +885,26 @@ Deploy: N/A
 ## Known Gaps
 *Logged here instead of fixed. Addressed in a future step.*
 
-Logged during Step 14 audit (deferred per brief):
-- `/activity/[id]` -- transfer detail page referenced by Activity row links, not yet implemented
+**Closed in Step 15:**
+- ~~`/activity/[id]` -- transfer detail page~~ -- closed in Step 15h
 - ~~`/privacy`, `/terms`, `/compliance-info` -- footer stub links (404 today)~~ -- closed in Step 15k
-- ~~Mobile hamburger menu in `SiteHeader` (current mobile fallback is "Sign in / Start sending" only)~~ -- closed in Step 15k
+- ~~Mobile hamburger menu in `SiteHeader`~~ -- closed in Step 15k
+- ~~4 pre-existing TS errors in `src/lib/kyc/sumsub/__tests__/kyc-service.test.ts`~~ -- fixed in Step 15b
+- ~~`npm run build` fails in production mode~~ -- fixed in Step 15l (lazy env validation)
+
+**Still open:**
 - Login rate limiting (no protection against brute force)
 - Account page user name/email display (not requested in any brief; nice-to-have)
-- Test flakiness in `tests/lib/transfers/queries.test.ts` (4 tests fail under `afterEach` cleanup race; pre-existing, not introduced by Step 14)
-- Pre-existing `/api/rates/[corridorId]` route is now unused by any UI -- remove in a future cleanup step
-- 4 pre-existing TS errors in `src/lib/kyc/sumsub/__tests__/kyc-service.test.ts` (runtime-safe per HANDOVER) -- now showing as 0 in tsc, may need re-check
+- Test flakiness in `tests/lib/transfers/queries.test.ts` (4 tests fail under `afterEach` cleanup race; pre-existing)
+- `/api/rates/[corridorId]` route is unused by any UI -- deprecation comment added in 15l; remove in a future cleanup step
+- Cosmetic `transferEvent` self-loop `CREATED -> CREATED` in `src/lib/transfers/create.ts`
+- `where: Record<string, unknown>` typing in admin routes (should use Prisma-generated input types)
+- Activity page missing empty-state copy for "no transfers yet"
+- Form `htmlFor` / `aria-describedby` accessibility associations
+- `RateService` singleton not consolidated (instantiated per-file in 4 places)
+- Admin rate POST and transfer POST missing HTTP-layer test coverage
+- `/api/account/phone/add` does not write an AuthEvent (only the verified state-flip is audited)
+- Regex E.164 phone normalisation in `src/lib/auth/phone.ts` is a placeholder (needs `libphonenumber-js`)
 
 ---
 
@@ -821,3 +916,4 @@ Logged during Step 14 audit (deferred per brief):
 - @db.Decimal for all money amounts, never float -- 2026-04-14
 - Cascade delete on UserIdentifier and Session only; no cascade on Transfer or Recipient -- 2026-04-14
 - @@unique([baseCurrency, targetCurrency]) on Corridor for multi-corridor support -- 2026-04-14
+- Lazy env validation on provider clients (first-use, not module-load) -- 2026-04-16

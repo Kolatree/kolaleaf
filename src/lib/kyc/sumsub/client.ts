@@ -81,9 +81,6 @@ export function validateSumsubConfig(): SumsubConfig {
   }
 }
 
-// Module-load validation: fail fast in production if env vars are absent.
-export const sumsubConfig = validateSumsubConfig()
-
 export class SumsubHttpClient implements SumsubClient {
   constructor(
     private readonly baseUrl: string,
@@ -201,7 +198,10 @@ export class SumsubHttpClient implements SumsubClient {
 }
 
 export function createSumsubClient(): SumsubClient {
-  const { apiUrl, appToken, secretKey, levelName, isMock } = sumsubConfig
+  // Lazy validation: runs on first factory call, NOT at module import — the
+  // build-time env check would otherwise fail `next build` before env vars
+  // are wired on the host.
+  const { apiUrl, appToken, secretKey, levelName, isMock } = validateSumsubConfig()
   if (isMock) {
     throw new Error(
       'Sumsub client requested but one or more of SUMSUB_API_URL, SUMSUB_APP_TOKEN, SUMSUB_SECRET_KEY, SUMSUB_LEVEL_NAME are missing',

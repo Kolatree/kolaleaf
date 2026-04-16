@@ -80,13 +80,36 @@ describe('sendEmail', () => {
     expect(result.error).toBeDefined()
   })
 
-  it('in production throws on missing RESEND_API_KEY when importing client', async () => {
+  it('importing the client in production with missing RESEND_API_KEY does NOT throw (lazy)', async () => {
     vi.stubEnv('RESEND_API_KEY', '')
     vi.stubEnv('NODE_ENV', 'production')
     vi.stubEnv('EMAIL_FROM', 'Kolaleaf <noreply@kolaleaf.com>')
 
-    await expect(async () => {
-      await import('@/lib/email/client')
-    }).rejects.toThrow(/RESEND_API_KEY/)
+    // LAZY validation: import is side-effect-free so `next build` can collect
+    // page data for routes that transitively import this module without env
+    // vars wired up yet. The throw is deferred to first send-attempt below.
+    await expect(import('@/lib/email/client')).resolves.toBeDefined()
+  })
+
+  it('in production sendEmail throws on first call when RESEND_API_KEY is missing', async () => {
+    vi.stubEnv('RESEND_API_KEY', '')
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('EMAIL_FROM', 'Kolaleaf <noreply@kolaleaf.com>')
+
+    const { sendEmail } = await import('@/lib/email/send')
+    await expect(
+      sendEmail({ to: 'x@x.com', subject: 'hi', html: '<p>hi</p>', text: 'hi' }),
+    ).rejects.toThrow(/RESEND_API_KEY/)
+  })
+
+  it('in production sendEmail throws on first call when EMAIL_FROM is missing', async () => {
+    vi.stubEnv('RESEND_API_KEY', 'test_key')
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('EMAIL_FROM', '')
+
+    const { sendEmail } = await import('@/lib/email/send')
+    await expect(
+      sendEmail({ to: 'x@x.com', subject: 'hi', html: '<p>hi</p>', text: 'hi' }),
+    ).rejects.toThrow(/EMAIL_FROM/)
   })
 })

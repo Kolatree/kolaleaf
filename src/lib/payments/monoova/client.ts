@@ -10,7 +10,9 @@ import {
  * Monoova PayID client.
  *
  * Production: `MONOOVA_API_URL` and `MONOOVA_API_KEY` are required; missing
- * either is a startup failure via `validateMonoovaConfig()`.
+ * either throws when `createMonoovaClient()` is first called. The check is
+ * LAZY (first-use, not module-load) so `next build` can evaluate route
+ * modules without throwing before env vars are wired on the host.
  *
  * Dev/test: config may be absent. `isMock=true` signals to callers that
  * they should stub rather than hit the network; existing adapter tests
@@ -67,9 +69,6 @@ export function validateMonoovaConfig(): MonoovaConfig {
     isMock: !apiUrl || !apiKey,
   }
 }
-
-// Module-load validation: fail fast in production if env vars are absent.
-export const monoovaConfig = validateMonoovaConfig()
 
 export class MonoovaHttpClient implements MonoovaClient {
   constructor(
@@ -162,11 +161,12 @@ export class MonoovaHttpClient implements MonoovaClient {
 }
 
 export function createMonoovaClient(): MonoovaClient {
-  const { apiUrl, apiKey, isMock } = monoovaConfig
+  // Lazy validation: runs on first factory call, NOT at module import. In
+  // production this throws with the specific missing-var message; in dev/test
+  // without creds it raises a generic "missing" error so call-sites that stub
+  // the client are still caught if they accidentally call the real factory.
+  const { apiUrl, apiKey, isMock } = validateMonoovaConfig()
   if (isMock) {
-    // In dev/test without creds, construction is still permitted so
-    // call-sites that stub `MonoovaClient` can work. Calls to the real
-    // API would fail with a 401 from Monoova — that's by design.
     throw new Error(
       'Monoova client requested but MONOOVA_API_URL/MONOOVA_API_KEY are missing',
     )

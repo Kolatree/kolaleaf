@@ -1,5 +1,5 @@
 export type { MonoovaClient, CreatePayIdParams, CreatePayIdResult, PaymentStatusResult, MonoovaConfig } from './client'
-export { MonoovaHttpClient, createMonoovaClient, validateMonoovaConfig, monoovaConfig } from './client'
+export { MonoovaHttpClient, createMonoovaClient, validateMonoovaConfig } from './client'
 export { generatePayIdForTransfer, handlePaymentReceived } from './payid-service'
 export { handleMonoovaWebhook } from './webhook'
 export { verifyMonoovaSignature } from './verify-signature'

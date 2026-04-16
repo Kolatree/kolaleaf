@@ -1,117 +1,86 @@
-# Review Request -- Step 15k
+# Review Request -- Step 15l
 
-**Step:** 15k -- Public stub pages + mobile hamburger menu
-**Date:** 2026-04-15
+**Step:** 15l -- Final wholistic audit + fix pass (capstone)
+**Date:** 2026-04-16
 **Builder:** Bob
 **Ready for Review:** YES
 
 ---
 
-## Summary
+## What Changed
 
-Two small changes, both behind the public-chrome surface:
+Two fixes from the capstone audit (Phase A findings in `ARCHITECT-BRIEF.md`):
 
-1. **Three public stub pages** (`/privacy`, `/terms`, `/compliance-info`)
-   now render instead of 404. Each is a server component wearing the
-   existing marketing chrome, with a prominent "Pending legal review"
-   banner at the top and 6–7 sections of tasteful placeholder copy.
-2. **Mobile hamburger menu** on `SiteHeader`. Desktop behaviour is
-   unchanged. Mobile viewport now shows a 40x40 hamburger button; tap
-   opens a dropdown containing all nav links + the gradient
-   "Start sending" CTA. Closes on link tap, ESC, and outside click.
+### C1 Fix: Lazy env validation (build-time safety)
 
-No new dependencies. No schema migrations. No new primitives. Only
-Variant D tokens.
+**Problem:** `npm run build` failed in production mode. Five provider modules
+threw at module-load time when env vars were absent. Next.js 16 evaluates API
+route modules with `NODE_ENV=production` during page-data collection, causing
+the build to abort before any pages are produced. Deploy to Railway was
+impossible.
 
----
+**Fix:** Moved env validation from import-time to first-use-time across all
+five modules. Fail-fast semantics preserved -- the server still throws at
+runtime with the specific missing-variable-name error. Only the timing changed
+(first provider call, not module evaluation).
 
-## Files to Review
+Files changed with line ranges:
 
-### New files
+| File | Lines | Change |
+|------|-------|--------|
+| `src/lib/rates/fx-fetcher.ts` | 26-73 | Removed `export const fxConfig = validateFxConfig()`. Added `getConfig()` lazy memo in `DefaultFxRateProvider`. `fetchWholesaleRate` calls `getConfig()` instead of `this.config`. |
+| `src/lib/rates/index.ts` | 1 | Dropped `fxConfig` re-export. |
+| `src/lib/payments/monoova/client.ts` | 9-23, 70-72, 162-173 | Removed `export const monoovaConfig = validateMonoovaConfig()`. `createMonoovaClient()` calls `validateMonoovaConfig()` inline. Header updated. |
+| `src/lib/payments/monoova/index.ts` | 2 | Dropped `monoovaConfig` re-export. |
+| `src/lib/kyc/sumsub/client.ts` | 84-85, 203-211 | Removed `export const sumsubConfig = validateSumsubConfig()`. `createSumsubClient()` calls `validateSumsubConfig()` inline. |
+| `src/lib/kyc/sumsub/index.ts` | 2 | Dropped `sumsubConfig` re-export. |
+| `src/lib/email/client.ts` | 1-46 | Replaced top-level `if (isProduction) throw` with exported `assertResendConfig()`. `getResend()` calls it at first use. |
+| `src/lib/email/send.ts` | 1, 29-31 | Imports + calls `assertResendConfig()` before dev-log fallback. |
+| `src/lib/sms/client.ts` | 1-50 | Same pattern: exported `assertTwilioConfig()`. `getTwilio()` calls it. |
+| `src/lib/sms/send.ts` | 1, 32-34 | Imports + calls `assertTwilioConfig()` before dev-log fallback. |
 
-- `src/app/(marketing)/privacy/page.tsx` -- privacy stub. Server
-  component. `<LegalBanner />` + `<Section />` helpers. 6 sections
-  (collection, purpose, storage, sharing, rights, contact).
-  `export const metadata`.
-- `src/app/(marketing)/terms/page.tsx` -- terms stub. Same shape as
-  privacy. 7 sections (eligibility, your/our responsibilities,
-  prohibited uses, limitation, NSW governing law, contact).
-- `src/app/(marketing)/compliance-info/page.tsx` -- compliance stub.
-  Same shape. 6 sections (AUSTRAC registration, AML/CTF program,
-  reporting obligations, fraud controls, consumer protection, contact).
-  Placeholder AUSTRAC number `IND100512345` matches the footer.
-- `tests/app/marketing-pages.test.tsx` -- 3 render-smoke tests, one
-  per page. Walks the rendered tree (including function-component
-  children) and asserts the "Pending legal review" text plus each
-  page's H1 appear.
+### M1 Fix: Deprecation comment
 
-### Modified files
-
-- `src/app/_components/site-header.tsx` -- replaced the always-visible
-  "Sign in / Start sending" mobile fallback with a hamburger toggle
-  (`md:hidden`) + mobile dropdown panel. Desktop nav (`hidden md:flex`)
-  is unchanged in content. Added `useState` + `useId` + ESC handler.
-  Click-outside handled via a transparent sibling button. Inline SVG
-  icon — no new deps.
-
-### Docs
-
-- `handoff/BUILD-LOG.md` -- Step 15k entry + Known Gaps items
-  (`/privacy` `/terms` `/compliance-info` stubs; mobile hamburger)
-  struck through.
+| File | Lines | Change |
+|------|-------|--------|
+| `src/app/api/rates/[corridorId]/route.ts` | 1-2 | Added: `// DEPRECATED: kept for internal/admin use. New code should call /api/rates/public?base=...&target=... or use rateService directly.` |
 
 ---
 
-## Key Decisions
+## Tests Changed
 
-- **Server components for legal pages.** No client interactivity needed.
-  The `(marketing)/layout.tsx` chrome wraps them automatically.
-- **Banner prominence.** Amber background (#fff7e0 / #f0c040 border),
-  `role="note"` with `aria-label="Legal review pending"`, renders
-  above the H1 so users can't miss it. Includes the escalation email
-  (support / compliance / legal depending on page).
-- **Hamburger renders inline, not `fixed`.** Avoids SSR layout-shift
-  and works with the sticky translucent header. The click-catcher is
-  `fixed inset-0` but only renders when `open === true`, so it never
-  blocks anything on initial paint.
-- **`useId()` for aria-controls.** Keeps button/panel pairing correct
-  under React concurrent rendering without hardcoding IDs.
-- **Test walker invokes function components.** The admin/page test's
-  `collectStrings` skips function components deliberately; this suite's
-  version invokes them (wrapped in a `try/catch`) so that helper
-  components like `<LegalBanner />` contribute to the asserted text.
-  Comment in the file explains why the two copies differ.
+| File | Change |
+|------|--------|
+| `src/lib/rates/__tests__/fx-fetcher.test.ts` | +3 new tests in `fx-fetcher build-time safety` block: import safe, construction safe, fetchWholesaleRate throws with specific message. |
+| `src/lib/payments/monoova/__tests__/client.test.ts` | +1 new test in `monoova client build-time safety`: import safe. |
+| `src/lib/kyc/sumsub/__tests__/client.test.ts` | +1 new test in `sumsub client build-time safety`: import safe. |
+| `tests/lib/email/send.test.ts` | Replaced 1 import-throws test with 1 import-safe + 2 send-throws (RESEND_API_KEY, EMAIL_FROM). Net +2. |
+| `tests/lib/sms/send.test.ts` | Replaced 3 import-throws tests with 1 import-safe + 3 send-throws (one per var). Net +1. |
+
+Total: 599 baseline -> 607 tests. All green.
 
 ---
 
 ## Verification
 
-- `npx tsc --noEmit` -- 0 errors
-- `npm test -- --run` -- 599 passed (596 baseline + 3 new), 0 failures
-- Render-smoke via Vitest confirms each page returns a non-null tree
-  with the "Pending legal review" banner and the page H1 present.
-- Footer links in `site-footer.tsx` already point at `/privacy`,
-  `/terms`, `/compliance-info` -- the new route files match those
-  paths exactly.
-
-Not performed in this step (reviewer, please spot-check in dev):
-- Browser-based smoke with `npm run dev` of the three new routes.
-- Browser-based check of the mobile hamburger in a < 768px viewport
-  (open/close via tap, ESC, outside-click).
+```
+npx tsc --noEmit        -> 0 errors
+npm test -- --run       -> 82 files / 607 tests passed
+npm run build           -> 53 routes generated, 0 errors, 0 warnings
+                           (was FAILING before this step)
+git status              -> clean (pending this commit)
+```
 
 ---
 
-## Open Questions
+## Review Checklist
 
-None. Scope matches the brief exactly.
-
----
-
-## Known Gaps (not in scope of this step)
-
-The legal copy is placeholder. The banner explicitly says so. Final
-copy lands after counsel review before public launch.
-
----
-
-## Ready for Review: YES
+- [ ] `npm run build` succeeds (the primary deliverable of this step)
+- [ ] Lazy validation preserves fail-fast: `validateFxConfig()` still throws in prod with missing vars when called
+- [ ] `sendEmail()` + `sendSms()` do NOT silently log in production with missing creds
+- [ ] No new dependencies introduced
+- [ ] No schema migrations
+- [ ] API contracts unchanged (no response shape changes)
+- [ ] `fxConfig` / `monoovaConfig` / `sumsubConfig` top-level exports removed from barrels
+- [ ] Deprecation comment on `/api/rates/[corridorId]` matches Arch's spec verbatim
+- [ ] Known Gaps in BUILD-LOG refreshed to final state

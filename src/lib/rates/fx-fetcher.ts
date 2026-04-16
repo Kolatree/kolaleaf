@@ -27,11 +27,13 @@ interface FxApiConfig {
  * FX rate API config.
  *
  * Production: `FX_API_KEY` and `FX_API_URL` are required; missing either
- * is a startup failure via `validateFxConfig()`.
+ * is a runtime failure the first time the rate is fetched. The check is
+ * LAZY (first-use, not module-load) so `next build` can evaluate route
+ * modules without throwing before env vars are wired on the host.
  *
  * Dev/test: config may be absent. Call-sites that construct
  * `DefaultFxRateProvider` directly with explicit creds (existing tests)
- * are unaffected.
+ * skip the env check entirely.
  *
  * Idempotency: GET-only, naturally idempotent — no key needed.
  */
@@ -53,21 +55,28 @@ export function validateFxConfig(): FxApiConfig {
   }
 }
 
-// Module-load validation: fail fast in production if env vars are absent.
-export const fxConfig = validateFxConfig()
-
 // ─── Default implementation ─────────────────────────
 
 export class DefaultFxRateProvider implements FxRateProvider {
   readonly name = 'default-fx'
-  private readonly config: FxApiConfig
+  private readonly explicitConfig: FxApiConfig | undefined
+  private resolvedConfig: FxApiConfig | undefined
 
   constructor(config?: FxApiConfig) {
-    this.config = config ?? fxConfig
+    // Constructor does NOT validate — keeps import + route-module evaluation
+    // side-effect-free. Validation happens on first fetchWholesaleRate call.
+    this.explicitConfig = config
+  }
+
+  private getConfig(): FxApiConfig {
+    if (this.resolvedConfig) return this.resolvedConfig
+    this.resolvedConfig = this.explicitConfig ?? validateFxConfig()
+    return this.resolvedConfig
   }
 
   async fetchWholesaleRate(baseCurrency: string, targetCurrency: string): Promise<Decimal> {
-    const url = `${this.config.apiUrl}/latest?base=${baseCurrency}&symbols=${targetCurrency}&apikey=${this.config.apiKey}`
+    const config = this.getConfig()
+    const url = `${config.apiUrl}/latest?base=${baseCurrency}&symbols=${targetCurrency}&apikey=${config.apiKey}`
 
     const data = await withRetry<{ rates?: Record<string, number> }>(
       async (signal) => {
@@ -94,7 +103,7 @@ export class DefaultFxRateProvider implements FxRateProvider {
           )
         }
       },
-      { timeoutMs: this.config.timeoutMs ?? 10_000 },
+      { timeoutMs: config.timeoutMs ?? 10_000 },
     )
 
     const rate = data?.rates?.[targetCurrency]

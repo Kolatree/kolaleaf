@@ -110,3 +110,45 @@ export async function getTransferWithEvents(
   })
   return transfer
 }
+
+// User-safe event projection for the /activity/[id] detail timeline.
+// Exposes the state transition + timestamp but strips `metadata` and
+// `actorId` — metadata may contain provider error text or internal refs
+// that users should never see. Admin views should call
+// getTransferWithEvents (which returns full event rows).
+export interface TransferUserEvent {
+  id: string
+  fromStatus: TransferStatus
+  toStatus: TransferStatus
+  actor: 'USER' | 'SYSTEM' | 'ADMIN'
+  createdAt: Date
+}
+
+export type TransferUserViewWithEvents = TransferUserView & {
+  events: TransferUserEvent[]
+}
+
+export async function getUserTransferWithEvents(
+  transferId: string,
+  userId: string
+): Promise<TransferUserViewWithEvents | null> {
+  const row = await prisma.transfer.findFirst({
+    where: { id: transferId, userId },
+    select: {
+      ...USER_SAFE_TRANSFER_SELECT,
+      events: {
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          fromStatus: true,
+          toStatus: true,
+          actor: true,
+          createdAt: true,
+        },
+      },
+    },
+  })
+  // Prisma's inferred generic from spread-select does not perfectly match our
+  // public interface; cast here so callers get the well-typed shape.
+  return row as TransferUserViewWithEvents | null
+}

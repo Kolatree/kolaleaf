@@ -2,7 +2,19 @@ export { VALID_TRANSITIONS, TERMINAL_STATES, isValidTransition } from './transit
 export { transitionTransfer } from './state-machine'
 export { createTransfer } from './create'
 export { cancelTransfer } from './cancel'
-export { getTransfer, listTransfers, getTransferWithEvents } from './queries'
+export {
+  getTransfer,
+  listTransfers,
+  getTransferWithEvents,
+  getUserTransferWithEvents,
+} from './queries'
+export type {
+  TransferUserView,
+  TransferUserEvent,
+  TransferUserViewWithEvents,
+  TransferListRecipient,
+  TransferWithRecipient,
+} from './queries'
 export {
   InvalidTransitionError,
   ConcurrentModificationError,

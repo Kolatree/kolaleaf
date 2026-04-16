@@ -5,13 +5,121 @@
 
 ## Current Status
 
-**Active step:** 15l -- Final wholistic audit + fix pass (review pending)
+**Active step:** 16 -- Flutterwave bank resolution for recipients (review pending)
 **Last cleared:** Step 15b
 **Pending deploy:** NO
 
 ---
 
 ## Step History
+
+### Step 16 -- Flutterwave bank resolution for recipients UX -- REVIEW PENDING
+*Date: 2026-04-16*
+
+Replaces the free-text recipient form with a provider-verified flow: pick a
+bank from Flutterwave's bank list, type a 10-digit account number, and the
+account holder's canonical name is resolved via `/accounts/resolve`. Matches
+the Nigerian remittance UX standard (every prod NG fintech works this way)
+and removes the "typo in account name" failure mode that eats payouts.
+
+Files changed:
+- `src/lib/payments/payout/types.ts` -- Added `AccountNotFoundError` (non-
+  retryable `PayoutError` subclass). Callers distinguish "invalid combo" from
+  transient provider errors.
+- `src/lib/payments/payout/flutterwave.ts` -- Added exported `NG_BANKS_FALLBACK`
+  (21 tier-1 + mobile-money banks). Added `listBanks(country: 'NG')` — dev
+  returns the fallback list with a one-shot log, prod GETs `/v3/banks/NG` via
+  `withRetry` and memos for 24h. Added `resolveAccount({bankCode,
+  accountNumber})` — dev returns `DEMO ACCOUNT <last4>` deterministically,
+  prod POSTs `/v3/accounts/resolve` with SHA-256 Idempotency-Key of
+  `bankCode:accountNumber`. Account name returned verbatim (no trim/case).
+  Added `createFlutterwaveProvider()` lazy factory — reads env each call,
+  never throws at import time. Matches the 15l lazy-env pattern.
+- `src/lib/payments/payout/index.ts` -- Exports the new error, factory,
+  fallback list, and `BankListEntry` type.
+- `src/app/api/banks/route.ts` (new) -- `GET /api/banks?country=NG`.
+  `requireAuth`; rejects unsupported country with 400; returns `{ banks }`
+  with `Cache-Control: private, max-age=3600`; 503 on provider failure.
+- `src/app/api/recipients/resolve/route.ts` (new) -- `POST /api/recipients/
+  resolve`. `requireAuth`; validates `bankCode` non-empty and `accountNumber`
+  exactly 10 digits; in-memory per-user rate-limit (20/min); returns `{
+  accountName }` on success, 404 `account_not_found` on AccountNotFoundError,
+  503 `resolve_unavailable` on provider temp/timeout/retryable errors.
+- `src/app/(dashboard)/recipients/page.tsx` -- Replaced 4 free-text inputs
+  with (1) bank dropdown loaded from `/api/banks?country=NG` on mount, (2)
+  10-digit-only account number input (`\D` stripped, maxLength 10), (3)
+  debounced 400ms resolve with out-of-order `resolveSeqRef` guard and live
+  state display (loading / resolved / not_found / unavailable), (4) submit
+  button disabled until `resolveState.kind === 'resolved'`. Client sends the
+  resolved name to the unchanged `POST /api/recipients` contract.
+
+Tests added (+21, baseline 607 -> 628):
+- `tests/lib/payments/payout/flutterwave-resolve.test.ts` (+10) -- listBanks
+  dev fallback no-network, prod fetch + normalise, 24h cache; resolveAccount
+  dev stub determinism, prod body + Idempotency-Key hash, literal name
+  preservation, AccountNotFoundError on provider error / missing field.
+- `tests/app/api/banks/route.test.ts` (+5) -- 401, 400 missing country, 400
+  unsupported country, 200 + Cache-Control header + banks array, 503 on
+  provider failure.
+- `tests/app/api/recipients/resolve.test.ts` (+6 containing 7 `expect`-
+  groups) -- invalid JSON/body/account-length 400s, 401, 200 with
+  accountName, 404 AccountNotFoundError, 503 ProviderTemporaryError, 429
+  per-user rate-limit threshold.
+
+Key decisions:
+- Lazy env validation matches 15l: `createFlutterwaveProvider()` reads env
+  every call but the `FlutterwaveProvider` constructor is side-effect-free
+  and never throws. `npm run build` stays green without prod secrets.
+- In-memory rate-limit map in the resolve route (noted in the file header as
+  swap-for-shared-limiter-later). Scope per userId, 20 req / 60s rolling
+  window. Protects against account-number probing without adding Redis.
+- Submit button is **disabled** until resolved (not just warning-style) so
+  an unverified recipient cannot slip through even with rapid clicks.
+- Account name returned verbatim from provider — tested with whitespace-
+  padded input so a future "cleanup" refactor can't silently regress.
+- `POST /api/recipients` contract unchanged. The existing route, its tests,
+  and the server-side validation still expect `{fullName, bankName, bankCode,
+  accountNumber}`. The client now fills all four from verified sources.
+
+Manual smoke: DEFERRED. No `.env.local` in this workspace so the dev server
+can't reach Postgres. The 21 unit/integration tests exercise all branches
+(auth gate, validation, success, not-found, temporary-failure, rate-limit,
+bank-cache, idempotency-key shape). Richard may run the dev server himself
+with env wired — or punt smoke to QA gate after review.
+
+Known gaps (not in scope for 16):
+- `<select>` is a native dropdown. A searchable combobox (21 banks is fine
+  for NG but AU/KE/GH corridors will have 40+) is a polish step for a later
+  multi-corridor sprint.
+- Observability: the posttool validator flagged "no logging on route
+  handlers". Consistent across the codebase — will be wired when Sentry /
+  structured-logger lands project-wide.
+- Rate-limit is in-memory (single-process). Fine for single-Railway-worker
+  today; swap to Redis-backed limiter when we scale horizontally.
+- The in-memory rateLimitMap in `/api/recipients/resolve` has no eviction.
+  Grows unbounded on a long-lived worker as new userIds appear. Low-impact
+  (each entry is ~100 bytes) but should be either TTL-swept or replaced
+  with a Redis-backed limiter when the Redis limiter above lands.
+
+Post-review fixes applied (per Richard's Step 16 Should-Fix):
+- `flutterwave.ts` resolveAccount catch narrowed: only `ProviderPermanentError`
+  and generic `PayoutError` (exact class, not subclasses) with
+  `retryable=false` map to `AccountNotFoundError`. Future non-retryable
+  `PayoutError` subclasses (InvalidBankError, InsufficientBalanceError, etc.)
+  now bubble unchanged instead of being silently reclassified.
+- `flutterwave.ts` resolveAccount normalises `bankCode` / `accountNumber` via
+  `.trim()` BEFORE computing the idempotency-key hash, so whitespace-padded
+  and pre-trimmed inputs produce the same key.
+- `devListBanksLogged` flag annotated as intentionally module-scoped.
+- The rateLimitMap unbounded-growth concern kept in Known Gaps above.
+
+Phase D:
+- `npx tsc --noEmit` -> clean
+- `npx vitest run` -> 628 passed / 244 suites / 0 failed
+- `npm run build` -> `Compiled successfully`, 0 warnings, new routes
+  `/api/banks` and `/api/recipients/resolve` registered
+
+---
 
 ### Step 15l -- Final wholistic audit + fix pass (capstone) -- REVIEW PENDING
 *Date: 2026-04-16*

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import Decimal from 'decimal.js'
 import type {
   PayoutProvider,
@@ -11,6 +12,7 @@ import {
   InvalidBankError,
   ProviderTimeoutError,
   RateLimitError,
+  AccountNotFoundError,
 } from './types'
 import {
   withRetry,
@@ -18,6 +20,43 @@ import {
   ProviderTemporaryError,
   ProviderTimeoutError as HttpTimeoutError,
 } from '../../http/retry'
+
+/**
+ * Hardcoded NG bank list used in dev/test when `FLUTTERWAVE_SECRET_KEY` is
+ * absent. Production always fetches the live list from Flutterwave.
+ *
+ * This exists so local dev (and CI without a prod secret) can render a
+ * realistic bank dropdown without reaching out to the network. Covers the
+ * Tier-1 retail + mobile-money banks that matter for Nigerian remittance.
+ */
+export const NG_BANKS_FALLBACK = [
+  { name: 'Access Bank', code: '044' },
+  { name: 'EcoBank', code: '050' },
+  { name: 'Fidelity Bank', code: '070' },
+  { name: 'First Bank', code: '011' },
+  { name: 'First City Monument Bank (FCMB)', code: '214' },
+  { name: 'GTBank', code: '058' },
+  { name: 'Jaiz Bank', code: '301' },
+  { name: 'Keystone Bank', code: '082' },
+  { name: 'Kuda Microfinance Bank', code: '50211' },
+  { name: 'Moniepoint Microfinance Bank', code: '50515' },
+  { name: 'OPay', code: '999992' },
+  { name: 'PalmPay', code: '999991' },
+  { name: 'Polaris Bank', code: '076' },
+  { name: 'Providus Bank', code: '101' },
+  { name: 'Stanbic IBTC Bank', code: '221' },
+  { name: 'Sterling Bank', code: '232' },
+  { name: 'Union Bank', code: '032' },
+  { name: 'United Bank for Africa (UBA)', code: '033' },
+  { name: 'Unity Bank', code: '215' },
+  { name: 'Wema Bank', code: '035' },
+  { name: 'Zenith Bank', code: '057' },
+] as const
+
+export interface BankListEntry {
+  name: string
+  code: string
+}
 
 /**
  * Flutterwave payout client.
@@ -59,12 +98,152 @@ export function validateFlutterwaveConfig(): FlutterwaveConfig {
   }
 }
 
+const BANKS_CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+// Intentionally module-scoped so the "dev fallback" notice fires once per
+// process, even across multiple FlutterwaveProvider instances. Tests that
+// construct a fresh provider per case will only see the log on the first
+// instance — by design, not a test gap.
+let devListBanksLogged = false
+
+interface BanksCacheEntry {
+  fetchedAt: number
+  banks: BankListEntry[]
+}
+
 export class FlutterwaveProvider implements PayoutProvider {
   readonly name = 'FLUTTERWAVE' as const
   private readonly config: Pick<FlutterwaveConfig, 'secretKey' | 'apiUrl'>
+  private banksCache: Map<string, BanksCacheEntry> = new Map()
 
   constructor(config: Pick<FlutterwaveConfig, 'secretKey' | 'apiUrl'>) {
     this.config = config
+  }
+
+  /**
+   * Returns the bank list for a country. Dev mode (no secret key) returns the
+   * hardcoded `NG_BANKS_FALLBACK` and logs once per process. Production hits
+   * `/v3/banks/:country` via `withRetry` and caches the result in-memory for
+   * 24h (bank lists are near-static).
+   */
+  async listBanks(country: 'NG'): Promise<BankListEntry[]> {
+    if (!this.config.secretKey) {
+      if (!devListBanksLogged) {
+        // Single-shot notice: helpful in dev, silent in prod (never runs there).
+        console.log(`[flutterwave-dev] listBanks(${country}) -> hardcoded`)
+        devListBanksLogged = true
+      }
+      return NG_BANKS_FALLBACK.map((b) => ({ name: b.name, code: b.code }))
+    }
+
+    const cached = this.banksCache.get(country)
+    if (cached && Date.now() - cached.fetchedAt < BANKS_CACHE_TTL_MS) {
+      return cached.banks
+    }
+
+    const response = await withRetry(
+      (signal) => this.request('GET', `/banks/${country}`, undefined, { signal }),
+      { shouldRetry: flutterwaveShouldRetry },
+    )
+
+    const raw = response.data as unknown
+    const banks: BankListEntry[] = Array.isArray(raw)
+      ? raw
+          .map((b) => {
+            const entry = b as { name?: unknown; code?: unknown }
+            return {
+              name: typeof entry.name === 'string' ? entry.name : '',
+              code: typeof entry.code === 'string' ? entry.code : '',
+            }
+          })
+          .filter((b) => b.name && b.code)
+      : []
+
+    this.banksCache.set(country, { fetchedAt: Date.now(), banks })
+    return banks
+  }
+
+  /**
+   * Resolves a bank code + account number to the account holder's canonical
+   * name. Dev mode returns a deterministic stub (`DEMO ACCOUNT <last4>`) so
+   * local flows work without the provider. Production POSTs to
+   * `/v3/accounts/resolve` via `withRetry` with a stable SHA-256 idempotency
+   * key so retries of the same resolve don't count twice.
+   *
+   * Non-200 / `status: "error"` from the provider → `AccountNotFoundError`
+   * so the UI can show a specific "account not found" message rather than
+   * a generic failure.
+   */
+  async resolveAccount(input: {
+    bankCode: string
+    accountNumber: string
+  }): Promise<{ accountName: string }> {
+    // Normalise here so callers that pass padded input hash to the same
+    // idempotency key as callers that pre-trim. The outbound body uses the
+    // same normalised values — keep route-layer trimming and adapter-layer
+    // trimming agreeing on the canonical form.
+    const bankCode = input.bankCode.trim()
+    const accountNumber = input.accountNumber.trim()
+
+    if (!this.config.secretKey) {
+      const last4 = accountNumber.slice(-4)
+      return { accountName: `DEMO ACCOUNT ${last4}` }
+    }
+
+    const idempotencyKey = createHash('sha256')
+      .update(`${bankCode}:${accountNumber}`)
+      .digest('hex')
+
+    let response: { status: string; data: Record<string, unknown> }
+    try {
+      response = await withRetry(
+        (signal) =>
+          this.request(
+            'POST',
+            '/accounts/resolve',
+            { account_number: accountNumber, account_bank: bankCode },
+            { idempotencyKey, signal },
+          ),
+        { shouldRetry: flutterwaveShouldRetry },
+      )
+    } catch (err) {
+      // At /accounts/resolve the only meaningful permanent failure is "we
+      // couldn't match the account." Map two specific shapes to
+      // AccountNotFoundError; everything else (InvalidBankError,
+      // InsufficientBalanceError, RateLimitError, ProviderTimeoutError,
+      // retryable PayoutError) bubbles so callers see the real failure.
+      //
+      // 1. ProviderPermanentError from the retry layer (HTTP 4xx without
+      //    a provider-specific error class).
+      // 2. Generic PayoutError (exact class, NOT a subclass) with
+      //    retryable=false — this is what request() throws when
+      //    Flutterwave returns a 4xx with a non-matching error message at
+      //    this endpoint. The exact-class check guards against a future
+      //    non-retryable subclass being silently misclassified as
+      //    "account not found."
+      if (err instanceof ProviderPermanentError) {
+        throw new AccountNotFoundError('FLUTTERWAVE')
+      }
+      if (
+        err instanceof PayoutError &&
+        err.constructor === PayoutError &&
+        !err.retryable
+      ) {
+        throw new AccountNotFoundError('FLUTTERWAVE')
+      }
+      throw err
+    }
+
+    if (response.status === 'error') {
+      throw new AccountNotFoundError('FLUTTERWAVE')
+    }
+
+    const accountName = response.data.account_name
+    if (typeof accountName !== 'string' || !accountName.trim()) {
+      throw new AccountNotFoundError('FLUTTERWAVE')
+    }
+
+    // Do NOT re-case or trim — providers return canonical bank-held names.
+    return { accountName }
   }
 
   async initiatePayout(params: PayoutParams): Promise<PayoutResult> {
@@ -202,4 +381,16 @@ function flutterwaveShouldRetry(err: unknown): boolean {
   if (err instanceof PayoutError) return err.retryable
   if (err instanceof TypeError) return true
   return false
+}
+
+/**
+ * Lazy factory for route handlers. Reads env on every call but never validates
+ * at module-load time — matches the 15l pattern for build-time safety. In
+ * dev/test the secret will be empty and the adapter runs in stub mode.
+ */
+export function createFlutterwaveProvider(): FlutterwaveProvider {
+  return new FlutterwaveProvider({
+    secretKey: process.env.FLUTTERWAVE_SECRET_KEY ?? '',
+    apiUrl: process.env.FLUTTERWAVE_API_URL ?? 'https://api.flutterwave.com/v3',
+  })
 }

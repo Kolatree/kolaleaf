@@ -10,9 +10,16 @@ export {
   InvalidBankError,
   ProviderTimeoutError,
   RateLimitError,
+  AccountNotFoundError,
   generatePayoutReference,
 } from './types'
-export { FlutterwaveProvider, validateFlutterwaveConfig } from './flutterwave'
+export {
+  FlutterwaveProvider,
+  validateFlutterwaveConfig,
+  createFlutterwaveProvider,
+  NG_BANKS_FALLBACK,
+} from './flutterwave'
+export type { BankListEntry } from './flutterwave'
 export { PaystackProvider, validatePaystackConfig } from './paystack'
 export { PayoutOrchestrator } from './orchestrator'
 export { handleFlutterwaveWebhook, handlePaystackWebhook } from './webhooks'

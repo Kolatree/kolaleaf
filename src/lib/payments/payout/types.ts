@@ -65,6 +65,19 @@ export class RateLimitError extends PayoutError {
   }
 }
 
+/**
+ * Thrown by `resolveAccount` when the provider confirms the bank + account
+ * number combination does not map to a real account holder. Callers (the
+ * `/api/recipients/resolve` route) surface this to the UI as "account not
+ * found" — it is NOT retryable and NOT a transient error.
+ */
+export class AccountNotFoundError extends PayoutError {
+  constructor(provider: string) {
+    super(provider, 'Account not found for bank + number combination', false)
+    this.name = 'AccountNotFoundError'
+  }
+}
+
 export function generatePayoutReference(transferId: string): string {
   return `KL-PO-${transferId}-${Date.now()}`
 }

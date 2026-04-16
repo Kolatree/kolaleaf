@@ -1,4 +1,4 @@
-# Review Feedback — Step 15j
+# Review Feedback — Step 15k
 Date: 2026-04-15
 Ready for Builder: YES
 
@@ -6,64 +6,61 @@ Ready for Builder: YES
 None.
 
 ## Should Fix
-- `src/lib/rates/fx-fetcher.ts:70` — `FX_API_KEY` is passed as a URL query
-  parameter (`...&apikey=${this.config.apiKey}`). URL query strings leak to
-  upstream proxies, APM spans, and any telemetry that captures request URLs.
-  Pre-existing (not introduced by 15j), but now that the FX adapter is
-  hardened it is the weakest link. If the provider supports it, move the key
-  to an `Authorization: Bearer` header or `X-API-Key` header. If the provider
-  only accepts it via query, scrub the URL from any error/telemetry path.
-  Log to BUILD-LOG for Step 15k or wherever Arch routes it.
-- `tests/lib/http/retry.test.ts` — no test asserts that `random()` (jitter)
-  is invoked by default. Every test passes `random: zeroJitter`, which proves
-  the injection point works but not that jitter actually runs. Add one test
-  that spies on an injected `random` and asserts it was called once per
-  retry sleep. Two-minute fix.
-- `src/lib/payments/payout/flutterwave.ts:167` —
-  `(body as Record<string, string>).account_bank` is cast unconditionally
-  when `body` is possibly undefined (GET paths). It's guarded today because
-  `InvalidBankError` is only raised on the POST path that always supplies a
-  body, but the cast reads as unsafe. Narrow the type or guard with
-  `body && typeof body === 'object'`.
+- `src/app/(marketing)/compliance-info/page.tsx:80-82` — "Consumer protection"
+  section states "We separate customer funds from operating funds." This is a
+  factual operational claim, not a statutory restatement like the seven-year
+  retention line. If end-to-end segregation is not yet in place (the float engine
+  is still Wave 1), soften to something like "We operate our float with customer
+  funds segregated from operating funds — final treasury arrangements pending
+  counsel review," or hedge the sentence under the same "placeholder" framing
+  the rest of the page uses. The amber banner covers the page generally, but a
+  literal reading of this one sentence asserts a current-state control that the
+  build may not yet have. Log to BUILD-LOG if not addressed now.
 
 ## Escalate to Architect
 None.
 
 ## Cleared
+Reviewed 4 source files + 1 test file (privacy/terms/compliance-info `page.tsx`,
+`site-header.tsx`, `marketing-pages.test.tsx`) plus `site-footer.tsx` for link
+hygiene.
 
-Reviewed:
+**Content.** All three pages render the amber "Pending legal review" banner
+ABOVE the H1 via `<LegalBanner />`, with `role="note"` and an explicit
+`aria-label="Legal review pending"`. Each page also prints "Last updated:
+placeholder date — pending legal review" below the H1. The AUSTRAC number
+`IND100512345` is flagged inline as placeholder and matches the footer. The
+seven-year retention statement is correctly framed as a statutory obligation
+under the AML/CTF Act, not a Kolaleaf-invented commitment. Terms "Governing
+law" explicitly hedges NSW jurisdiction as placeholder. No invented AFCA
+member numbers, no concrete SLA commitments, no escape-hatch language that
+could be read as final policy.
 
-- `src/lib/http/retry.ts` — retry/timeout helper, typed error taxonomy.
-- `tests/lib/http/retry.test.ts` — 12 tests covering first-success,
-  retry-then-success, exhausted attempts, permanent-no-retry, custom
-  predicate, AbortSignal timeout translation, native TypeError translation,
-  per-attempt signal freshness, and the status-code classifier.
-- `src/lib/kyc/sumsub/client.ts` — `validateSumsubConfig()` runs at module
-  load (line 85). Production with missing vars throws clearly (line 69).
-  `createSumsubClient()` refuses to hand back a client in mock mode
-  (line 205). All three methods routed through `withRetry`. Natural
-  idempotency via `externalUserId` documented in module header.
-- `src/lib/payments/monoova/client.ts` — same pattern as Sumsub.
-  `validateMonoovaConfig()` at module load; `createMonoovaClient()` throws
-  in mock mode. Natural idempotency via `reference` documented.
-- `src/lib/payments/payout/flutterwave.ts` — `Idempotency-Key: <reference>`
-  on POST `/transfers` (verified in test line 67). Dual
-  `ProviderTimeoutError` classes (payout/types.ts + http/retry.ts) coexist
-  cleanly because `flutterwaveShouldRetry` explicitly lists both
-  (`ProviderTimeoutError` and `HttpTimeoutError` alias at lines 194-195).
-  `PayoutError` surface preserved for the orchestrator.
-- `src/lib/payments/payout/paystack.ts` — `Idempotency-Key: <reference>` on
-  POST `/transfer`. `createRecipient` is not keyed, but the comment
-  correctly notes Paystack's natural idempotency on account_number+bank_code.
-- `src/lib/rates/fx-fetcher.ts` — `validateFxConfig()` at module load; GET
-  only, no idempotency key needed; 10s timeout.
-- Module index re-exports for all four adapters.
-- `.env.example` — all five providers documented with production/dev
-  behavior and per-provider idempotency notes.
-- `package.json` — git diff confirms no new dependencies.
-- `src/lib/http/retry.ts` contains zero logging calls — no secret-leak
-  surface introduced by the retry layer itself.
+**Mobile hamburger.** `'use client'` present. Desktop nav (`hidden md:flex`)
+content is unchanged. Mobile toggle is `md:hidden`, 40×40, has `aria-expanded`,
+`aria-controls` bound via `useId()`, and a dynamic `aria-label` that flips
+between "Open menu" and "Close menu". ESC handler is correctly mounted and
+cleaned up inside `useEffect` keyed on `open`. Outside-click handled via a
+transparent `fixed inset-0` sibling button, only rendered when `open === true`
+so it never blocks initial paint. Every `MobileLink`, the gradient CTA, and
+the logo link all call `setOpen(false)` onClick — returning to a page will not
+leave the menu open. Z-index stacking is correct (catcher z-10, panel z-20).
+No server-only APIs used in the client component.
 
-Confirmed production fail-fast: every adapter runs `validate*Config()` at
-module load (stronger than lazy first-call validation — a bad deploy surfaces
-before the first transfer).
+**Metadata.** All three pages export a `Metadata` object with `title` and
+`description`.
+
+**Link hygiene.** Footer routes `/privacy`, `/terms`, `/compliance-info` match
+the new folder names exactly under `src/app/(marketing)/`.
+
+**Tests.** `npx vitest run tests/app/marketing-pages.test.tsx` → 3 passed, 0
+failed. `npx tsc --noEmit` → clean. The test walker invokes parameterless
+function components so helper components (`<LegalBanner />`, `<Section />`)
+contribute to the asserted text; the divergence from the admin/page walker is
+documented in a comment block in the file.
+
+**Scope.** `git status --short` shows only the files Bob listed in
+REVIEW-REQUEST (plus BUILD-LOG and REVIEW-REQUEST). No new deps, no schema
+changes, no new primitives, no out-of-scope drift.
+
+Step 15k is clear.

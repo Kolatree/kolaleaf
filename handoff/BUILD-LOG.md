@@ -5,13 +5,77 @@
 
 ## Current Status
 
-**Active step:** 15j -- Provider hardening (env validation + retry + timeout + idempotency) (review pending)
+**Active step:** 15k -- Public stub pages + mobile hamburger menu (review pending)
 **Last cleared:** Step 15b
 **Pending deploy:** NO
 
 ---
 
 ## Step History
+
+### Step 15k -- Public stub pages + mobile hamburger menu -- REVIEW PENDING
+*Date: 2026-04-15*
+
+Filled the three 404 footer links (`/privacy`, `/terms`,
+`/compliance-info`) with server-rendered stub pages carrying a prominent
+"Pending legal review" banner and tasteful placeholder sections.
+Replaced the mobile fallback in `SiteHeader` with a proper hamburger
+menu that opens a dropdown containing all nav links + both CTAs.
+
+No new deps. No schema migrations. No changes outside the public-chrome
+surface and three new route segments.
+
+Files changed:
+- `src/app/(marketing)/privacy/page.tsx` (new) -- server-component
+  privacy stub. `LegalBanner` at top. 6 placeholder sections (collection,
+  purpose, storage, sharing, rights, contact). Max-width 720px,
+  Variant-D tokens only.
+- `src/app/(marketing)/terms/page.tsx` (new) -- server-component terms
+  stub. `LegalBanner` at top. 7 sections (eligibility, your/our
+  responsibilities, prohibited uses, limitation, NSW governing law,
+  contact).
+- `src/app/(marketing)/compliance-info/page.tsx` (new) -- server-
+  component compliance stub. `LegalBanner` at top. 6 sections (AUSTRAC
+  registration with placeholder number, AML/CTF program, reporting,
+  fraud controls, consumer protection, contact).
+- `src/app/_components/site-header.tsx` -- replaced always-visible
+  "Sign in / Start sending" mobile fallback with a 40x40 hamburger
+  button (`md:hidden`). Tapping opens a full-width dropdown with
+  nav links + gradient Start-sending CTA. Closes on link tap, ESC,
+  and click outside. `aria-expanded` / `aria-controls` wired via
+  `useId()`.
+- `tests/app/marketing-pages.test.tsx` (new) -- 3 render-smoke tests,
+  one per page. Each invokes the component, walks the tree (including
+  function-component children), asserts the "Pending legal review"
+  banner and the page's H1 text appear.
+
+Decisions made:
+- Pages are plain server components (no `'use client'`). The layout's
+  `SiteHeader` + `SiteFooter` provide the public chrome automatically.
+- Banner renders inline at the top of each page (role="note",
+  aria-label="Legal review pending") with a warm amber background
+  (#fff7e0 / #f0c040 border). Legal-review language is prominent and
+  repeats each page's escalation email.
+- Placeholder AUSTRAC registration number ("IND100512345") kept
+  identical to the footer's existing copy. Flagged as placeholder in
+  body text.
+- Hamburger menu renders inline (not `fixed`) to avoid SSR/layout-shift
+  issues. Outside-click handled via a transparent sibling button
+  overlay that is focusable only via tab -1.
+- Test walker invokes parameterless function components (server
+  components with no state) so that helper components like
+  `<LegalBanner />` and `<Section />` get included in the collected
+  text. The admin/page test's walker is left unchanged because it
+  intentionally avoids function-component invocation.
+
+Verification:
+- `npx tsc --noEmit` -- 0 errors
+- `npm test -- --run` -- 599 passed (596 baseline + 3 new), 0 failures
+
+Reviewer findings: [pending review]
+Deploy: N/A
+
+---
 
 ### Step 15j -- Provider hardening: env validation + retry + timeout + idempotency -- REVIEW PENDING
 *Date: 2026-04-15*
@@ -739,8 +803,8 @@ Deploy: N/A
 
 Logged during Step 14 audit (deferred per brief):
 - `/activity/[id]` -- transfer detail page referenced by Activity row links, not yet implemented
-- `/privacy`, `/terms`, `/compliance-info` -- footer stub links (404 today)
-- Mobile hamburger menu in `SiteHeader` (current mobile fallback is "Sign in / Start sending" only)
+- ~~`/privacy`, `/terms`, `/compliance-info` -- footer stub links (404 today)~~ -- closed in Step 15k
+- ~~Mobile hamburger menu in `SiteHeader` (current mobile fallback is "Sign in / Start sending" only)~~ -- closed in Step 15k
 - Login rate limiting (no protection against brute force)
 - Account page user name/email display (not requested in any brief; nice-to-have)
 - Test flakiness in `tests/lib/transfers/queries.test.ts` (4 tests fail under `afterEach` cleanup race; pre-existing, not introduced by Step 14)

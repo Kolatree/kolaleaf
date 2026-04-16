@@ -1,110 +1,89 @@
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
-import { hashToken } from '@/lib/auth/tokens'
+import { setSessionCookie } from '@/lib/auth/middleware'
+import { createSession } from '@/lib/auth/sessions'
+import { verifyEmailWithCode } from '@/lib/auth/email-verification'
+import { logAuthEvent } from '@/lib/auth/audit'
 
-/**
- * GET /api/auth/verify-email?token=<raw>
- *
- * Public one-shot page. Renders minimal HTML (not part of the Variant D shell).
- * All failure modes collapse into a single generic "expired or already used"
- * page — we don't reveal whether a token never existed vs. was consumed.
- */
-export async function GET(request: Request) {
-  const url = new URL(request.url)
-  const raw = url.searchParams.get('token')
-
-  if (!raw || raw.length === 0) {
-    return htmlResponse(expiredPage(), 400)
+// POST /api/auth/verify-email
+//
+// Body: { email: string, code: string }
+//
+// Validates a 6-digit verification code, marks the email identifier as
+// verified, and (only on success) issues a session cookie. This is the
+// gate that turns a dormant just-registered account into a usable one,
+// and it is also the only way an unverified account can log in (the
+// /api/auth/login route returns `requiresVerification: true` for them
+// and triggers a fresh code).
+export async function POST(request: Request) {
+  let body: { email?: string; code?: string }
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  const tokenHash = hashToken(raw)
-  const token = await prisma.emailVerificationToken.findUnique({ where: { tokenHash } })
-
-  if (!token || token.usedAt !== null || token.expiresAt < new Date()) {
-    return htmlResponse(expiredPage(), 400)
+  const { email: rawEmail, code: rawCode } = body
+  if (!rawEmail || typeof rawEmail !== 'string' || !rawEmail.includes('@')) {
+    return NextResponse.json({ error: 'Email is required' }, { status: 400 })
+  }
+  if (!rawCode || typeof rawCode !== 'string' || !/^\d{6}$/.test(rawCode)) {
+    return NextResponse.json({ error: 'Code must be 6 digits' }, { status: 400 })
   }
 
-  // Flip the identifier first so we can detect a stale token (identifier
-  // deleted or re-created after the token was issued) via a zero-row result.
-  const updated = await prisma.userIdentifier.updateMany({
-    where: { userId: token.userId, type: 'EMAIL', identifier: token.email },
-    data: { verified: true, verifiedAt: new Date() },
+  const email = rawEmail.trim().toLowerCase()
+  const ip = request.headers.get('x-forwarded-for') ?? undefined
+  const userAgent = request.headers.get('user-agent') ?? undefined
+
+  const result = await verifyEmailWithCode({ email, code: rawCode })
+
+  if (!result.ok) {
+    const status = result.reason === 'too_many_attempts' ? 429 : 400
+    const message = ((): string => {
+      switch (result.reason) {
+        case 'wrong_code':
+          return 'Incorrect code'
+        case 'expired':
+          return 'Code expired. Please request a new one.'
+        case 'used':
+          return 'This code was already used. Please log in.'
+        case 'too_many_attempts':
+          return 'Too many wrong attempts. Please request a new code.'
+        case 'no_token':
+          return 'No verification in progress for this email. Please register or request a new code.'
+      }
+    })()
+    return NextResponse.json({ error: message, reason: result.reason }, { status })
+  }
+
+  const session = await createSession(result.userId, ip, userAgent)
+  await logAuthEvent({
+    userId: result.userId,
+    event: 'LOGIN',
+    ip,
+    metadata: { via: 'email-verification', email },
   })
 
-  if (updated.count === 0) {
-    // Identifier referenced by the token no longer exists. Leave the token
-    // unused (it'll expire on its own) and render the generic expired page —
-    // we don't want to leak that the identifier itself has gone away.
-    return htmlResponse(expiredPage(), 400)
-  }
+  const user = await prisma.user.findUnique({ where: { id: result.userId } })
 
-  await prisma.emailVerificationToken.update({
-    where: { id: token.id },
-    data: { usedAt: new Date() },
-  })
-
-  // Immutable audit log per CLAUDE.md — every auth state transition is logged.
-  await prisma.authEvent.create({
-    data: {
-      userId: token.userId,
-      event: 'EMAIL_VERIFIED',
-      metadata: { identifier: token.email, via: 'verify-email-link' },
+  const response = NextResponse.json(
+    {
+      ok: true,
+      user: user ? { id: user.id, fullName: user.fullName } : { id: result.userId },
     },
-  })
-
-  return htmlResponse(successPage(), 200)
-}
-
-function htmlResponse(body: string, status: number): Response {
-  return new Response(body, {
-    status,
-    headers: { 'content-type': 'text/html; charset=utf-8' },
-  })
-}
-
-function page(title: string, heading: string, body: string, link: { href: string; label: string }) {
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>${title}</title>
-    <style>
-      body { margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f6f7fb;color:#1a1a2e;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px; }
-      .card { max-width:440px;width:100%;background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.05);overflow:hidden; }
-      .header { padding:24px 32px;background:linear-gradient(90deg,#6d4aff 0%,#1aa85a 100%);color:#fff;font-weight:600; }
-      .body { padding:28px 32px; }
-      h1 { margin:0 0 12px 0;font-size:20px; }
-      p { margin:0 0 20px 0;color:#4a4a68;line-height:1.5; }
-      a.btn { display:inline-block;background:#6d4aff;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:500; }
-    </style>
-  </head>
-  <body>
-    <div class="card">
-      <div class="header">Kolaleaf</div>
-      <div class="body">
-        <h1>${heading}</h1>
-        <p>${body}</p>
-        <a class="btn" href="${link.href}">${link.label}</a>
-      </div>
-    </div>
-  </body>
-</html>`
-}
-
-function successPage(): string {
-  return page(
-    'Email verified — Kolaleaf',
-    'Email verified',
-    'Your email is verified. You can now send money on Kolaleaf.',
-    { href: '/', label: 'Continue to your account' },
+    { status: 200 },
   )
+  response.headers.set('Set-Cookie', setSessionCookie(session.token))
+  return response
 }
 
-function expiredPage(): string {
-  return page(
-    'Link expired — Kolaleaf',
-    'Link expired or already used',
-    'This verification link is no longer valid. Sign in and request a new one from your account.',
-    { href: '/login', label: 'Request a new verification link' },
+// GET preserved as a minimal stub for any links still in users' inboxes
+// from before the code-based flow shipped — redirects them to the login
+// page with a hint to enter the code from a fresh email.
+export async function GET(): Promise<Response> {
+  return new Response(
+    `<!doctype html><meta charset="utf-8"><title>Use the code instead</title>` +
+      `<meta http-equiv="refresh" content="0;url=/login">`,
+    { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } },
   )
 }

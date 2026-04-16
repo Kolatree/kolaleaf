@@ -5,13 +5,24 @@ vi.mock('@/lib/auth', () => ({
   registerUser: vi.fn(),
 }))
 
-vi.mock('@/lib/auth/middleware', () => ({
-  setSessionCookie: vi.fn(() => 'kolaleaf_session=mock; HttpOnly'),
+vi.mock('@/lib/auth/email-verification', () => ({
+  issueVerificationCode: vi.fn(async () => ({ ok: true })),
+}))
+
+vi.mock('@/lib/db/client', () => ({
+  prisma: {
+    session: {
+      deleteMany: vi.fn(async () => ({ count: 1 })),
+    },
+  },
 }))
 
 import { registerUser } from '@/lib/auth'
+import { issueVerificationCode } from '@/lib/auth/email-verification'
+import { prisma } from '@/lib/db/client'
 
 const mockRegister = vi.mocked(registerUser)
+const mockIssue = vi.mocked(issueVerificationCode)
 
 function makeRequest(body: unknown): Request {
   return new Request('http://localhost/api/auth/register', {
@@ -21,13 +32,13 @@ function makeRequest(body: unknown): Request {
   })
 }
 
-describe('POST /api/auth/register', () => {
+describe('POST /api/auth/register (verify-then-login)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockIssue.mockResolvedValue({ ok: true })
   })
 
-  // Complies with the production password policy:
-  // 8+ chars, 3 of 4 character classes.
+  // Complies with the production password policy: 8+ chars, 3 of 4 char classes.
   const VALID_PW = 'TestPass123!'
 
   it('returns 400 for missing fullName', async () => {
@@ -51,17 +62,41 @@ describe('POST /api/auth/register', () => {
     expect(json.error).toMatch(/8 character|Password/)
   })
 
-  it('returns 201 on successful registration', async () => {
+  it('returns 202 with requiresVerification on successful registration', async () => {
     mockRegister.mockResolvedValue({
       user: { id: 'u1', fullName: 'Test User' } as never,
       session: { token: 'tok123' } as never,
     })
 
     const res = await POST(makeRequest({ fullName: 'Test User', email: 'a@b.com', password: VALID_PW }))
-    expect(res.status).toBe(201)
+    expect(res.status).toBe(202)
     const json = await res.json()
-    expect(json.user.id).toBe('u1')
-    expect(res.headers.get('Set-Cookie')).toContain('kolaleaf_session')
+    expect(json.requiresVerification).toBe(true)
+    expect(json.email).toBe('a@b.com')
+    // Critical: no session cookie. Account is dormant until /verify-email.
+    expect(res.headers.get('Set-Cookie')).toBeNull()
+    // The auto-issued session from registerUser must be deleted so it can't
+    // be replayed via direct cookie injection.
+    expect(prisma.session.deleteMany).toHaveBeenCalledWith({ where: { userId: 'u1' } })
+    // And the verification code must be issued.
+    expect(mockIssue).toHaveBeenCalledWith({
+      userId: 'u1',
+      email: 'a@b.com',
+      recipientName: 'Test User',
+    })
+  })
+
+  it('returns 500 if code dispatch throws (account exists but unactivatable)', async () => {
+    mockRegister.mockResolvedValue({
+      user: { id: 'u1', fullName: 'Test User' } as never,
+      session: { token: 'tok123' } as never,
+    })
+    mockIssue.mockRejectedValueOnce(new Error('Resend down'))
+
+    const res = await POST(makeRequest({ fullName: 'Test User', email: 'a@b.com', password: VALID_PW }))
+    expect(res.status).toBe(500)
+    const json = await res.json()
+    expect(json.error).toMatch(/verification code/i)
   })
 
   it('returns 409 for duplicate email', async () => {
@@ -69,6 +104,7 @@ describe('POST /api/auth/register', () => {
 
     const res = await POST(makeRequest({ fullName: 'Test', email: 'dup@b.com', password: VALID_PW }))
     expect(res.status).toBe(409)
+    expect(mockIssue).not.toHaveBeenCalled()
   })
 
   it('returns 400 for invalid JSON body', async () => {

@@ -27,6 +27,28 @@ interface LoginResult {
   challengeId?: string
 }
 
+// Thrown when credentials are valid but the email identifier hasn't been
+// verified yet. The route catches it, issues a fresh verification code, and
+// returns 202 with `requiresVerification: true` — the user is bounced to
+// the /verify-email page rather than receiving a session cookie.
+//
+// Critically, this is thrown ONLY after password validation succeeds, so an
+// attacker can't use it to enumerate which emails exist (wrong password
+// always returns 'Invalid credentials' from earlier in the flow).
+export class EmailNotVerifiedError extends Error {
+  readonly userId: string
+  readonly email: string
+  readonly fullName: string
+
+  constructor(opts: { userId: string; email: string; fullName: string }) {
+    super('Email not verified')
+    this.name = 'EmailNotVerifiedError'
+    this.userId = opts.userId
+    this.email = opts.email
+    this.fullName = opts.fullName
+  }
+}
+
 export async function loginUser(params: LoginParams): Promise<LoginResult> {
   const { identifier, password, ip, userAgent } = params
 
@@ -41,11 +63,6 @@ export async function loginUser(params: LoginParams): Promise<LoginResult> {
     await bcrypt.compare(password, DUMMY_HASH)
     throw new Error('Invalid credentials')
   }
-
-  // NOTE: We deliberately do NOT gate login on identifier.verified anymore.
-  // Users must be able to sign in with an unverified email so they can request
-  // a fresh verification link. The real enforcement for money-moving actions
-  // lives in `requireEmailVerified` (see src/lib/auth/middleware.ts).
 
   const user = identRecord.user
 
@@ -62,6 +79,24 @@ export async function loginUser(params: LoginParams): Promise<LoginResult> {
       metadata: { identifier, reason: 'wrong password' },
     })
     throw new Error('Invalid credentials')
+  }
+
+  // Verify-then-login gate. Password is valid AND the identifier is an
+  // unverified email → throw a typed error. The route catches it, sends a
+  // fresh code, and bounces the user to the verify screen. Only EMAIL
+  // identifiers gate; phone-only logins (when we add them) bypass.
+  if (identRecord.type === 'EMAIL' && !identRecord.verified) {
+    await logAuthEvent({
+      userId: user.id,
+      event: 'LOGIN_FAILED',
+      ip,
+      metadata: { identifier, reason: 'email_not_verified' },
+    })
+    throw new EmailNotVerifiedError({
+      userId: user.id,
+      email: identRecord.identifier,
+      fullName: user.fullName,
+    })
   }
 
   const session = await createSession(user.id, ip, userAgent)

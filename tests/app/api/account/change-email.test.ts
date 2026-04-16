@@ -10,10 +10,6 @@ vi.mock('@/lib/db/client', () => ({
       update: vi.fn(),
       create: vi.fn(),
     },
-    emailVerificationToken: {
-      updateMany: vi.fn(),
-      create: vi.fn(),
-    },
     authEvent: {
       create: vi.fn(),
     },
@@ -24,17 +20,8 @@ vi.mock('@/lib/auth/password', () => ({
   verifyPassword: vi.fn(),
 }))
 
-vi.mock('@/lib/auth/tokens', () => ({
-  generateVerificationToken: () => ({ raw: 'raw_token', hash: 'hashed_token' }),
-}))
-
-vi.mock('@/lib/email', () => ({
-  sendEmail: vi.fn(async () => ({ ok: true, id: 'test' })),
-  renderVerificationEmail: () => ({
-    subject: 'Verify',
-    html: '<p/>',
-    text: 'verify',
-  }),
+vi.mock('@/lib/auth/email-verification', () => ({
+  issueVerificationCode: vi.fn(async () => ({ ok: true })),
 }))
 
 vi.mock('@/lib/auth/middleware', () => ({
@@ -52,6 +39,9 @@ import { POST } from '@/app/api/account/change-email/route'
 import { prisma } from '@/lib/db/client'
 import { verifyPassword } from '@/lib/auth/password'
 import { requireAuth, AuthError } from '@/lib/auth/middleware'
+import { issueVerificationCode } from '@/lib/auth/email-verification'
+
+const mockIssue = vi.mocked(issueVerificationCode)
 
 const USER_ID = 'user_1'
 const OTHER_USER_ID = 'user_other'
@@ -130,7 +120,7 @@ describe('POST /api/account/change-email', () => {
     expect(json.error).toBe('email_taken')
   })
 
-  it('happy path: creates unverified identifier, mints token, sends email, logs EMAIL_CHANGE_INITIATED', async () => {
+  it('happy path: creates unverified identifier, dispatches verification code, logs EMAIL_CHANGE_INITIATED', async () => {
     mockSession()
     ;(prisma.user.findUniqueOrThrow as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: USER_ID,
@@ -146,9 +136,7 @@ describe('POST /api/account/change-email', () => {
       identifier: 'new@b.com',
       verified: false,
     })
-    ;(prisma.emailVerificationToken.create as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      id: 't1',
-    })
+    mockIssue.mockResolvedValueOnce({ ok: true })
 
     const res = await POST(makeRequest({ currentPassword: 'ok', newEmail: 'new@b.com' }))
     expect(res.status).toBe(200)
@@ -166,15 +154,11 @@ describe('POST /api/account/change-email', () => {
         }),
       }),
     )
-    expect(prisma.emailVerificationToken.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          userId: USER_ID,
-          email: 'new@b.com',
-          tokenHash: 'hashed_token',
-        }),
-      }),
-    )
+    expect(mockIssue).toHaveBeenCalledWith({
+      userId: USER_ID,
+      email: 'new@b.com',
+      recipientName: 'Alice',
+    })
     expect(prisma.authEvent.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ event: 'EMAIL_CHANGE_INITIATED' }),
@@ -204,9 +188,7 @@ describe('POST /api/account/change-email', () => {
       identifier: 'new@b.com',
       verified: false,
     })
-    ;(prisma.emailVerificationToken.create as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      id: 't1',
-    })
+    mockIssue.mockResolvedValueOnce({ ok: true })
 
     const res = await POST(makeRequest({ currentPassword: 'ok', newEmail: 'new@b.com' }))
     expect(res.status).toBe(200)

@@ -44,6 +44,17 @@ describe('Auth Lifecycle E2E', () => {
     expect(validSession).not.toBeNull()
     expect(validSession!.userId).toBe(user.id)
 
+    // Verify-then-login gate: the email identifier is created unverified by
+    // registerUser (which still issues a session for legacy callers — the
+    // /api/auth/register route deletes that session and bounces to the
+    // verify screen). For this lifecycle test we mark the email verified
+    // directly so the rest of the flow can run end-to-end without going
+    // through the code-entry UI step.
+    await prisma.userIdentifier.updateMany({
+      where: { userId: user.id, type: 'EMAIL' },
+      data: { verified: true, verifiedAt: new Date() },
+    })
+
     // ── Step 2: Login ──
     const { session: loginSession, requires2FA } = await loginUser({
       identifier: email,

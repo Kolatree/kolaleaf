@@ -47,6 +47,13 @@ export default function RegisterPage() {
         return
       }
 
+      // 202 with requiresVerification means the account exists but is
+      // dormant pending email verification. Bounce to the code-entry page.
+      if (data.requiresVerification && data.email) {
+        router.push(`/verify-email?email=${encodeURIComponent(data.email)}`)
+        return
+      }
+
       router.push('/send')
     } catch {
       setError('Something went wrong. Please try again.')

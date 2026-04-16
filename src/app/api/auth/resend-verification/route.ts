@@ -1,78 +1,56 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
-import { requireAuth, AuthError } from '@/lib/auth/middleware'
-import { generateVerificationToken } from '@/lib/auth/tokens'
-import { sendEmail, renderVerificationEmail } from '@/lib/email'
+import { issueVerificationCode } from '@/lib/auth/email-verification'
 
-const VERIFICATION_TTL_HOURS = 24
-const RATE_LIMIT_PER_HOUR = 5
-
+// POST /api/auth/resend-verification
+//
+// Body: { email: string }
+//
+// Public, unauthenticated endpoint — the calling user has no session yet
+// (they're stuck on the /verify-email screen waiting for a code). To avoid
+// becoming an enumeration oracle ("does this email exist?") we always
+// return a 200 with the same shape, regardless of whether:
+//   - the email is unknown
+//   - the email is known and verified (no code needed)
+//   - the email is known and unverified (we send a code)
+//   - the per-user resend rate limit fires
+//
+// Rate limiting per-user (5/hr) lives in `issueVerificationCode`.
+// Network-level abuse should be rate-limited at the edge / WAF.
 export async function POST(request: Request) {
+  let body: { email?: string }
   try {
-    const { userId } = await requireAuth(request)
-
-    const emailId = await prisma.userIdentifier.findFirst({
-      where: { userId, type: 'EMAIL' },
-      orderBy: { createdAt: 'asc' },
-    })
-
-    if (!emailId) {
-      return NextResponse.json({ error: 'No email on file' }, { status: 404 })
-    }
-
-    if (emailId.verified) {
-      return NextResponse.json({ alreadyVerified: true }, { status: 200 })
-    }
-
-    // Rate limit: max N tokens created per user in the last hour.
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
-    const recent = await prisma.emailVerificationToken.count({
-      where: { userId, createdAt: { gte: oneHourAgo } },
-    })
-    if (recent >= RATE_LIMIT_PER_HOUR) {
-      return NextResponse.json(
-        { error: 'Too many requests. Try again later.' },
-        { status: 429 },
-      )
-    }
-
-    // Invalidate any outstanding unused tokens for this user+email.
-    await prisma.emailVerificationToken.updateMany({
-      where: { userId, email: emailId.identifier, usedAt: null },
-      data: { usedAt: new Date() },
-    })
-
-    const { raw, hash } = generateVerificationToken()
-    const expiresAt = new Date(Date.now() + VERIFICATION_TTL_HOURS * 60 * 60 * 1000)
-
-    await prisma.emailVerificationToken.create({
-      data: {
-        userId,
-        email: emailId.identifier,
-        tokenHash: hash,
-        expiresAt,
-      },
-    })
-
-    const appUrl = process.env.APP_URL ?? 'http://localhost:3000'
-    const verificationUrl = `${appUrl}/api/auth/verify-email?token=${raw}`
-
-    // Look up user for a friendly greeting; fall back to "there" if missing.
-    const user = await prisma.user.findUnique({ where: { id: userId } })
-    const { subject, html, text } = renderVerificationEmail({
-      recipientName: user?.fullName ?? 'there',
-      verificationUrl,
-      expiresInHours: VERIFICATION_TTL_HOURS,
-    })
-
-    await sendEmail({ to: emailId.identifier, subject, html, text })
-
-    return NextResponse.json({ ok: true }, { status: 200 })
-  } catch (error) {
-    if (error instanceof AuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.statusCode })
-    }
-    console.error('[auth/resend-verification]', error)
-    return NextResponse.json({ error: 'Unable to resend verification' }, { status: 500 })
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
+
+  const rawEmail = body.email
+  if (!rawEmail || typeof rawEmail !== 'string' || !rawEmail.includes('@')) {
+    return NextResponse.json({ error: 'Email is required' }, { status: 400 })
+  }
+  const email = rawEmail.trim().toLowerCase()
+
+  const ident = await prisma.userIdentifier.findUnique({
+    where: { identifier: email },
+    include: { user: true },
+  })
+
+  // Always return ok:true — see preamble. Real failures are logged for ops.
+  if (!ident || ident.type !== 'EMAIL' || ident.verified) {
+    return NextResponse.json({ ok: true }, { status: 200 })
+  }
+
+  try {
+    await issueVerificationCode({
+      userId: ident.userId,
+      email: ident.identifier,
+      recipientName: ident.user.fullName,
+    })
+  } catch (err) {
+    console.error('[auth/resend-verification] issue failed', err)
+    // Still return 200 — see preamble. The failure is captured in logs.
+  }
+
+  return NextResponse.json({ ok: true }, { status: 200 })
 }

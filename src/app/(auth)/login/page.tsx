@@ -32,6 +32,14 @@ export default function LoginPage() {
         return
       }
 
+      // 202 with requiresVerification: backend already issued a fresh code.
+      // Bounce to /verify-email so the user can enter it. Must run BEFORE
+      // the 2FA branch — verification gates everything, including 2FA.
+      if (data.requiresVerification && data.email) {
+        router.push(`/verify-email?email=${encodeURIComponent(data.email)}`)
+        return
+      }
+
       if (data.requires2FA) {
         setNeeds2FA(true)
         return

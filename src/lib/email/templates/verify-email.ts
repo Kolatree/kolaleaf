@@ -8,8 +8,8 @@
 
 export interface VerificationEmailParams {
   recipientName: string
-  verificationUrl: string
-  expiresInHours: number
+  code: string
+  expiresInMinutes: number
 }
 
 export interface RenderedEmail {
@@ -19,17 +19,17 @@ export interface RenderedEmail {
 }
 
 export function renderVerificationEmail(params: VerificationEmailParams): RenderedEmail {
-  const { recipientName, verificationUrl, expiresInHours } = params
+  const { recipientName, code, expiresInMinutes } = params
 
-  const subject = 'Verify your Kolaleaf email'
+  const subject = `Your Kolaleaf verification code: ${code}`
 
   const text = `Hi ${recipientName},
 
-Welcome to Kolaleaf. Please verify your email address to start sending money.
+Welcome to Kolaleaf. Use the code below to verify your email and finish creating your account.
 
-Verify here: ${verificationUrl}
+Verification code: ${code}
 
-This link expires in ${expiresInHours} hours. If you didn't create a Kolaleaf account, you can safely ignore this message.
+This code expires in ${expiresInMinutes} minutes. If you didn't request a Kolaleaf account, you can safely ignore this message.
 
 — The Kolaleaf team`
 
@@ -47,16 +47,14 @@ This link expires in ${expiresInHours} hours. If you didn't create a Kolaleaf ac
             </tr>
             <tr>
               <td style="padding:32px 40px;">
-                <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:600;color:#1a1a2e;">Verify your email</h1>
+                <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:600;color:#1a1a2e;">Your verification code</h1>
                 <p style="margin:0 0 16px 0;font-size:15px;line-height:1.55;color:#4a4a68;">Hi ${escapeHtml(recipientName)},</p>
-                <p style="margin:0 0 24px 0;font-size:15px;line-height:1.55;color:#4a4a68;">Welcome to Kolaleaf. Please verify your email to start sending money.</p>
-                <div style="margin:0 0 24px 0;">
-                  <a href="${escapeAttr(verificationUrl)}" style="display:inline-block;background:#6d4aff;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:500;">Verify email</a>
+                <p style="margin:0 0 24px 0;font-size:15px;line-height:1.55;color:#4a4a68;">Enter this code on the Kolaleaf verification screen to finish creating your account.</p>
+                <div style="margin:0 0 24px 0;text-align:center;">
+                  <div style="display:inline-block;font-family:'SF Mono','Menlo','Consolas',monospace;font-size:32px;font-weight:600;letter-spacing:0.35em;color:#1a1a2e;background:#f6f7fb;border:1px solid #eef0f5;border-radius:10px;padding:16px 24px 16px 30px;">${escapeHtml(code)}</div>
                 </div>
-                <p style="margin:0 0 8px 0;font-size:13px;line-height:1.5;color:#6a6a88;">Or paste this link into your browser:</p>
-                <p style="margin:0 0 24px 0;font-size:13px;line-height:1.5;color:#6a6a88;word-break:break-all;"><a href="${escapeAttr(verificationUrl)}" style="color:#6d4aff;text-decoration:underline;">${escapeHtml(verificationUrl)}</a></p>
-                <p style="margin:0 0 8px 0;font-size:13px;line-height:1.5;color:#6a6a88;">This link expires in ${expiresInHours} hours.</p>
-                <p style="margin:0;font-size:13px;line-height:1.5;color:#6a6a88;">If you didn't create a Kolaleaf account, you can safely ignore this message.</p>
+                <p style="margin:0 0 8px 0;font-size:13px;line-height:1.5;color:#6a6a88;">This code expires in ${expiresInMinutes} minutes.</p>
+                <p style="margin:0;font-size:13px;line-height:1.5;color:#6a6a88;">If you didn't request a Kolaleaf account, you can safely ignore this message.</p>
               </td>
             </tr>
             <tr>

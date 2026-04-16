@@ -145,6 +145,12 @@ describe('Auth Security', () => {
       email,
       password: 'LoginPass123!',
     })
+    // Verify-then-login gate: this test exercises the LOGIN audit event,
+    // not the verification path, so we flip verified directly.
+    await prisma.userIdentifier.updateMany({
+      where: { userId: user.id, type: 'EMAIL' },
+      data: { verified: true, verifiedAt: new Date() },
+    })
 
     await loginUser({
       identifier: email,

@@ -1,13 +1,19 @@
 import { NextResponse } from 'next/server'
 import { registerUser } from '@/lib/auth'
-import { setSessionCookie } from '@/lib/auth/middleware'
-import { prisma } from '@/lib/db/client'
-import { generateVerificationToken } from '@/lib/auth/tokens'
 import { validatePasswordComplexity } from '@/lib/auth/password'
-import { sendEmail, renderVerificationEmail } from '@/lib/email'
+import { issueVerificationCode } from '@/lib/auth/email-verification'
+import { prisma } from '@/lib/db/client'
 
-const VERIFICATION_TTL_HOURS = 24
-
+// POST /api/auth/register
+//
+// Creates the user + identifier, then sends a 6-digit email verification
+// code. Does NOT set a session cookie — the user must POST the code to
+// /api/auth/verify-email to receive their session. This is the strict
+// "verify-then-login" gate (see CLAUDE.md AUSTRAC notes — confirms the
+// customer controls the email account before any privileged surface).
+//
+// Returns 202 Accepted because account creation succeeded but the
+// account is dormant pending verification.
 export async function POST(request: Request) {
   let body: { fullName?: string; email?: string; password?: string; referralCode?: string }
   try {
@@ -29,29 +35,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: pwCheck.error }, { status: 400 })
   }
 
+  const normalizedEmail = email.trim().toLowerCase()
+
+  let userId: string
+  let userName: string
   try {
-    const { user, session } = await registerUser({
+    const { user } = await registerUser({
       fullName: fullName.trim(),
-      email: email.trim().toLowerCase(),
+      email: normalizedEmail,
       password: pwCheck.password,
       referralCode: referralCode || undefined,
     })
-
-    // Fire-and-forget verification email. Signup has already succeeded — if
-    // Resend is down or the token write fails, the user can use
-    // /api/auth/resend-verification later. We deliberately do NOT await or let
-    // a send failure reject the 201 response.
-    const normalizedEmail = email.trim().toLowerCase()
-    sendVerificationEmail(user.id, user.fullName, normalizedEmail).catch((err) => {
-      console.error('[auth/register] verification email dispatch failed', err)
-    })
-
-    const response = NextResponse.json(
-      { user: { id: user.id, fullName: user.fullName, email: normalizedEmail } },
-      { status: 201 },
-    )
-    response.headers.set('Set-Cookie', setSessionCookie(session.token))
-    return response
+    userId = user.id
+    userName = user.fullName
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Registration failed'
     if (message === 'Email already registered') {
@@ -59,24 +55,36 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ error: message }, { status: 400 })
   }
-}
 
-async function sendVerificationEmail(userId: string, fullName: string, email: string) {
-  const { raw, hash } = generateVerificationToken()
-  const expiresAt = new Date(Date.now() + VERIFICATION_TTL_HOURS * 60 * 60 * 1000)
+  // Drop the just-created session — registerUser still issues one for callers
+  // that want the legacy auto-login behaviour, but our flow rejects it. We
+  // delete by userId rather than by the returned token so we don't leak
+  // session shape across the verification boundary.
+  await prisma.session.deleteMany({ where: { userId } })
 
-  await prisma.emailVerificationToken.create({
-    data: { userId, email, tokenHash: hash, expiresAt },
-  })
+  // Send verification code. If Resend errors, propagate so the client can
+  // surface "we couldn't send the code, try again" — better than silently
+  // creating a dormant account the user can never activate.
+  try {
+    await issueVerificationCode({
+      userId,
+      email: normalizedEmail,
+      recipientName: userName,
+    })
+  } catch (err) {
+    console.error('[auth/register] code issue failed', err)
+    return NextResponse.json(
+      { error: 'Account created but we could not send the verification code. Please try logging in to retry.' },
+      { status: 500 },
+    )
+  }
 
-  const appUrl = process.env.APP_URL ?? 'http://localhost:3000'
-  const verificationUrl = `${appUrl}/api/auth/verify-email?token=${raw}`
-
-  const { subject, html, text } = renderVerificationEmail({
-    recipientName: fullName,
-    verificationUrl,
-    expiresInHours: VERIFICATION_TTL_HOURS,
-  })
-
-  await sendEmail({ to: email, subject, html, text })
+  return NextResponse.json(
+    {
+      requiresVerification: true,
+      email: normalizedEmail,
+      expiresInMinutes: 30,
+    },
+    { status: 202 },
+  )
 }

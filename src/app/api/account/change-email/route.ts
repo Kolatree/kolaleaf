@@ -1,19 +1,16 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { verifyPassword } from '@/lib/auth/password'
-import { generateVerificationToken } from '@/lib/auth/tokens'
-import { sendEmail, renderVerificationEmail } from '@/lib/email'
+import { issueVerificationCode } from '@/lib/auth/email-verification'
 import { requireAuth, AuthError } from '@/lib/auth/middleware'
-
-const VERIFICATION_TTL_HOURS = 24
 
 // POST /api/account/change-email { currentPassword, newEmail }
 //
 // Starts the change-email flow. Requires the current password to prove intent.
-// Creates an unverified UserIdentifier for the new email and sends a
-// verification link. When the user clicks the link, the existing
-// GET /api/auth/verify-email route flips the identifier to verified — no
-// changes needed there.
+// Creates an unverified UserIdentifier for the new email and sends a 6-digit
+// verification code via the same path as registration / login. The user
+// completes the change by POSTing the code to /api/auth/verify-email — the
+// `verifyEmailWithCode` helper flips the identifier to verified.
 //
 // Leaves the old email in place until the user removes it via
 // DELETE /api/account/email/[id], so the user cannot lock themselves out
@@ -106,39 +103,16 @@ export async function POST(request: Request) {
       identifierId = created.id
     }
 
-    // Invalidate any outstanding unused tokens for this user+email before
-    // minting a new one.
-    await prisma.emailVerificationToken.updateMany({
-      where: { userId, email: newEmail, usedAt: null },
-      data: { usedAt: new Date() },
-    })
-
-    const { raw, hash } = generateVerificationToken()
-    const expiresAt = new Date(
-      Date.now() + VERIFICATION_TTL_HOURS * 60 * 60 * 1000,
-    )
-    await prisma.emailVerificationToken.create({
-      data: {
-        userId,
-        email: newEmail,
-        tokenHash: hash,
-        expiresAt,
-      },
-    })
-
-    const appUrl = process.env.APP_URL ?? 'http://localhost:3000'
-    const verificationUrl = `${appUrl}/api/auth/verify-email?token=${raw}`
-
-    const { subject, html, text } = renderVerificationEmail({
+    // Issue + send the 6-digit code. Helper handles invalidation of prior
+    // unused tokens, attempts=0 on the new one, and the rate limit. Fire-
+    // and-forget — if Resend is down, the user can retry from the UI via
+    // /api/auth/resend-verification.
+    issueVerificationCode({
+      userId,
+      email: newEmail,
       recipientName: user.fullName,
-      verificationUrl,
-      expiresInHours: VERIFICATION_TTL_HOURS,
-    })
-
-    // Fire-and-forget — if Resend is down, the user can retry from the UI
-    // via the resend-verification flow.
-    sendEmail({ to: newEmail, subject, html, text }).catch((err) => {
-      console.error('[account/change-email] email dispatch failed', err)
+    }).catch((err) => {
+      console.error('[account/change-email] code dispatch failed', err)
     })
 
     await prisma.authEvent.create({

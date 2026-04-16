@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
-import { loginUser } from '@/lib/auth'
+import { loginUser, EmailNotVerifiedError } from '@/lib/auth/login'
 import { setSessionCookie } from '@/lib/auth/middleware'
+import { issueVerificationCode } from '@/lib/auth/email-verification'
 
 export async function POST(request: Request) {
   let body: { identifier?: string; password?: string }
@@ -37,6 +38,31 @@ export async function POST(request: Request) {
     response.headers.set('Set-Cookie', setSessionCookie(session.token))
     return response
   } catch (error) {
+    if (error instanceof EmailNotVerifiedError) {
+      // Password was correct but the email is unverified. Issue a fresh code
+      // (best-effort: rate limit may suppress) and tell the client to bounce
+      // to /verify-email. We do NOT set a session cookie.
+      try {
+        await issueVerificationCode({
+          userId: error.userId,
+          email: error.email,
+          recipientName: error.fullName,
+        })
+      } catch (issueErr) {
+        console.error('[auth/login] verification code issue failed', issueErr)
+        // Continue — surface the verification-required state to the client
+        // anyway; the user can hit "resend" from the verify page.
+      }
+      return NextResponse.json(
+        {
+          requiresVerification: true,
+          email: error.email,
+          message: 'Please verify your email to continue',
+        },
+        { status: 202 },
+      )
+    }
+
     // Never leak the underlying error to the client — a DB error or internal
     // failure would otherwise surface in the HTTP body. Log the raw error so
     // operators can debug, and respond with a uniform "Login failed".

@@ -10,5 +10,5 @@ export {
 } from './totp'
 export { addIdentifier, verifyIdentifier, findUserByIdentifier, getUserIdentifiers } from './identity'
 export { registerUser } from './register'
-export { loginUser } from './login'
+export { loginUser, EmailNotVerifiedError } from './login'
 export { logAuthEvent } from './audit'

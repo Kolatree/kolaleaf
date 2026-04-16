@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest'
 import { prisma } from '@/lib/db/client'
 import { registerUser } from '../register'
-import { loginUser } from '../login'
+import { loginUser, EmailNotVerifiedError } from '../login'
 import { hashPassword } from '../password'
 
 beforeEach(async () => {
@@ -68,12 +68,12 @@ describe('login service', () => {
     ).rejects.toThrow('Invalid credentials')
   })
 
-  it('allows login with an unverified email (post-15d); action gates happen downstream', async () => {
-    // Step 15d removed the login-time gate on identifier.verified. Users must
-    // be able to sign in to request a fresh verification link; money-moving
-    // routes are gated by requireEmailVerified instead.
+  it('throws EmailNotVerifiedError for an unverified email (verify-then-login gate)', async () => {
+    // Verify-then-login (post Step 15d revisit): valid credentials against an
+    // unverified email must NOT issue a session — the route catches this error,
+    // sends a fresh code, and bounces the user to /verify-email.
     const pw = await hashPassword('SomePass1!')
-    await prisma.user.create({
+    const user = await prisma.user.create({
       data: {
         fullName: 'LoginTest Unverified',
         passwordHash: pw,
@@ -82,11 +82,12 @@ describe('login service', () => {
         },
       },
     })
-    const result = await loginUser({
-      identifier: 'unverified@example.com',
-      password: 'SomePass1!',
-    })
-    expect(result.session.token).toMatch(/^[a-f0-9]{64}$/)
+    await expect(
+      loginUser({ identifier: 'unverified@example.com', password: 'SomePass1!' }),
+    ).rejects.toBeInstanceOf(EmailNotVerifiedError)
+    // No session created — sanity-check downstream contract.
+    const sessions = await prisma.session.findMany({ where: { userId: user.id } })
+    expect(sessions).toHaveLength(0)
   })
 
   it('returns requires2FA=true with method=TOTP when TOTP 2FA is enabled', async () => {

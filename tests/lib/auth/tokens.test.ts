@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { generateVerificationToken, hashToken } from '@/lib/auth/tokens'
+import {
+  generateVerificationToken,
+  generateVerificationCode,
+  hashToken,
+} from '@/lib/auth/tokens'
 
 describe('generateVerificationToken', () => {
   it('returns raw and hash', () => {
@@ -34,6 +38,41 @@ describe('generateVerificationToken', () => {
   it('hash(raw) matches the returned hash', () => {
     const { raw, hash } = generateVerificationToken()
     expect(hashToken(raw)).toBe(hash)
+  })
+})
+
+describe('generateVerificationCode', () => {
+  it('returns raw and hash', () => {
+    const c = generateVerificationCode()
+    expect(c.raw).toBeTypeOf('string')
+    expect(c.hash).toBeTypeOf('string')
+  })
+
+  it('raw is exactly 6 numeric digits, zero-padded', () => {
+    for (let i = 0; i < 50; i++) {
+      const { raw } = generateVerificationCode()
+      expect(raw).toHaveLength(6)
+      expect(raw).toMatch(/^\d{6}$/)
+    }
+  })
+
+  it('hash is 64 hex chars (sha256)', () => {
+    const { hash } = generateVerificationCode()
+    expect(hash).toHaveLength(64)
+    expect(hash).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it('hash(raw) matches the returned hash', () => {
+    const { raw, hash } = generateVerificationCode()
+    expect(hashToken(raw)).toBe(hash)
+  })
+
+  it('produces a varied distribution across many calls', () => {
+    // Not a strict statistical test — just confirms we're not stuck on
+    // one value or in a tiny range, which would indicate a broken RNG.
+    const seen = new Set<string>()
+    for (let i = 0; i < 100; i++) seen.add(generateVerificationCode().raw)
+    expect(seen.size).toBeGreaterThan(50)
   })
 })
 

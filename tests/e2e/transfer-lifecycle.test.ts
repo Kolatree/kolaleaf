@@ -222,15 +222,21 @@ describe('Transfer Lifecycle E2E — Golden Path', () => {
     expect(webhookEvent!.processed).toBe(true)
   })
 
-  it('login after registration returns session and user', async () => {
+  it('login after registration returns session and user (with email pre-verified)', async () => {
     const email = `login-e2e-${Date.now()}@test.com`
     const password = 'TestLogin123!'
 
-    // Register
-    await registerUser({
+    // Register, then mark the email verified directly — this test exercises
+    // the credential path, not the verify-then-login gate (which is covered
+    // in src/lib/auth/__tests__/login.test.ts).
+    const { user: regUser } = await registerUser({
       fullName: 'Login User',
       email,
       password,
+    })
+    await prisma.userIdentifier.updateMany({
+      where: { userId: regUser.id, type: 'EMAIL' },
+      data: { verified: true, verifiedAt: new Date() },
     })
 
     // Login

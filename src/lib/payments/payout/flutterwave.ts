@@ -12,17 +12,58 @@ import {
   ProviderTimeoutError,
   RateLimitError,
 } from './types'
+import {
+  withRetry,
+  ProviderPermanentError,
+  ProviderTemporaryError,
+  ProviderTimeoutError as HttpTimeoutError,
+} from '../../http/retry'
+
+/**
+ * Flutterwave payout client.
+ *
+ * Production: `FLUTTERWAVE_SECRET_KEY` and `FLUTTERWAVE_API_URL` are
+ * required; missing either is a startup failure via
+ * `validateFlutterwaveConfig()`.
+ *
+ * Idempotency: Flutterwave supports an `Idempotency-Key` header on POSTs.
+ * We use `params.reference` (our transfer reference) as the key so retries
+ * of the same logical payout collapse on their side.
+ *
+ * Error surface is preserved: call-sites still see `PayoutError` subclasses
+ * (`InsufficientBalanceError`, `InvalidBankError`, `ProviderTimeoutError`,
+ * `RateLimitError`) and the orchestrator's retry/failover logic is unchanged.
+ */
 
 interface FlutterwaveConfig {
   secretKey: string
   apiUrl: string
+  isMock: boolean
+}
+
+export function validateFlutterwaveConfig(): FlutterwaveConfig {
+  const secretKey = process.env.FLUTTERWAVE_SECRET_KEY
+  const apiUrl = process.env.FLUTTERWAVE_API_URL
+  const isProduction = process.env.NODE_ENV === 'production'
+
+  if (isProduction && !secretKey) {
+    throw new Error(
+      'Flutterwave config missing in production: FLUTTERWAVE_SECRET_KEY',
+    )
+  }
+
+  return {
+    secretKey: secretKey ?? '',
+    apiUrl: apiUrl ?? 'https://api.flutterwave.com/v3',
+    isMock: !secretKey,
+  }
 }
 
 export class FlutterwaveProvider implements PayoutProvider {
   readonly name = 'FLUTTERWAVE' as const
-  private readonly config: FlutterwaveConfig
+  private readonly config: Pick<FlutterwaveConfig, 'secretKey' | 'apiUrl'>
 
-  constructor(config: FlutterwaveConfig) {
+  constructor(config: Pick<FlutterwaveConfig, 'secretKey' | 'apiUrl'>) {
     this.config = config
   }
 
@@ -37,7 +78,14 @@ export class FlutterwaveProvider implements PayoutProvider {
       beneficiary_name: params.recipientName,
     }
 
-    const response = await this.request('POST', '/transfers', body)
+    const response = await withRetry(
+      (signal) =>
+        this.request('POST', '/transfers', body, {
+          idempotencyKey: params.reference,
+          signal,
+        }),
+      { shouldRetry: flutterwaveShouldRetry },
+    )
 
     return {
       providerRef: String(response.data.id),
@@ -46,7 +94,11 @@ export class FlutterwaveProvider implements PayoutProvider {
   }
 
   async getPayoutStatus(providerRef: string): Promise<PayoutStatusResult> {
-    const response = await this.request('GET', `/transfers/${providerRef}`)
+    const response = await withRetry(
+      (signal) =>
+        this.request('GET', `/transfers/${providerRef}`, undefined, { signal }),
+      { shouldRetry: flutterwaveShouldRetry },
+    )
 
     const result: PayoutStatusResult = { status: String(response.data.status) }
     if (response.data.status === 'FAILED' && response.data.complete_message) {
@@ -56,7 +108,11 @@ export class FlutterwaveProvider implements PayoutProvider {
   }
 
   async getWalletBalance(currency: string): Promise<Decimal> {
-    const response = await this.request('GET', `/balances/${currency}`)
+    const response = await withRetry(
+      (signal) =>
+        this.request('GET', `/balances/${currency}`, undefined, { signal }),
+      { shouldRetry: flutterwaveShouldRetry },
+    )
 
     const wallets = response.data
     if (Array.isArray(wallets)) {
@@ -73,6 +129,7 @@ export class FlutterwaveProvider implements PayoutProvider {
     method: string,
     path: string,
     body?: unknown,
+    opts: { idempotencyKey?: string; signal?: AbortSignal } = {},
   ): Promise<{ status: string; data: Record<string, unknown> }> {
     let response: Response
     try {
@@ -81,8 +138,12 @@ export class FlutterwaveProvider implements PayoutProvider {
         headers: {
           Authorization: `Bearer ${this.config.secretKey}`,
           'Content-Type': 'application/json',
+          ...(opts.idempotencyKey
+            ? { 'Idempotency-Key': opts.idempotencyKey }
+            : {}),
         },
         ...(body ? { body: JSON.stringify(body) } : {}),
+        ...(opts.signal ? { signal: opts.signal } : {}),
       })
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -103,11 +164,42 @@ export class FlutterwaveProvider implements PayoutProvider {
         throw new InsufficientBalanceError('FLUTTERWAVE')
       }
       if (msg.toLowerCase().includes('invalid bank')) {
-        throw new InvalidBankError('FLUTTERWAVE', body ? (body as Record<string, string>).account_bank : 'unknown')
+        const bank =
+          body && typeof body === 'object' && 'account_bank' in body
+            ? String((body as Record<string, unknown>).account_bank ?? 'unknown')
+            : 'unknown'
+        throw new InvalidBankError('FLUTTERWAVE', bank)
       }
-      throw new PayoutError('FLUTTERWAVE', msg)
+      throw new PayoutError(
+        'FLUTTERWAVE',
+        msg,
+        response.status >= 500,
+      )
     }
 
     return json as { status: string; data: Record<string, unknown> }
   }
+}
+
+/**
+ * Retry predicate tuned for Flutterwave's error taxonomy.
+ *
+ * Retry: rate limits, network errors, 5xx (PayoutError.retryable=true),
+ * timeouts, and the generic HTTP-layer temporary errors.
+ *
+ * Don't retry: InvalidBankError, InsufficientBalanceError — these are
+ * permanent business-logic failures that the orchestrator will route to
+ * failover / manual handling.
+ */
+function flutterwaveShouldRetry(err: unknown): boolean {
+  if (err instanceof InvalidBankError) return false
+  if (err instanceof InsufficientBalanceError) return false
+  if (err instanceof RateLimitError) return true
+  if (err instanceof ProviderTimeoutError) return true
+  if (err instanceof HttpTimeoutError) return true
+  if (err instanceof ProviderTemporaryError) return true
+  if (err instanceof ProviderPermanentError) return false
+  if (err instanceof PayoutError) return err.retryable
+  if (err instanceof TypeError) return true
+  return false
 }

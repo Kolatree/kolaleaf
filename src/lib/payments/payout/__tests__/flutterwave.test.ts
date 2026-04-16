@@ -1,6 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import Decimal from 'decimal.js'
-import { FlutterwaveProvider } from '../flutterwave'
+import {
+  FlutterwaveProvider,
+  validateFlutterwaveConfig,
+} from '../flutterwave'
 import {
   InsufficientBalanceError,
   InvalidBankError,
@@ -36,7 +39,7 @@ describe('FlutterwaveProvider', () => {
   })
 
   describe('initiatePayout', () => {
-    it('sends a successful NGN transfer', async () => {
+    it('sends a successful NGN transfer with an idempotency key', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -60,6 +63,10 @@ describe('FlutterwaveProvider', () => {
       expect(opts.method).toBe('POST')
       expect(opts.headers['Authorization']).toBe('Bearer FLWSECK_TEST-abc123')
       expect(opts.headers['Content-Type']).toBe('application/json')
+      // Idempotency key derived from the transfer reference.
+      expect(opts.headers['Idempotency-Key']).toBe(validParams.reference)
+      // Per-attempt timeout signal wired through by withRetry.
+      expect(opts.signal).toBeDefined()
 
       const body = JSON.parse(opts.body)
       expect(body.account_bank).toBe('044')
@@ -70,8 +77,8 @@ describe('FlutterwaveProvider', () => {
       expect(body.narration).toContain('John Doe')
     })
 
-    it('throws InsufficientBalanceError when balance is low', async () => {
-      mockFetch.mockResolvedValueOnce({
+    it('throws InsufficientBalanceError when balance is low (no retry)', async () => {
+      mockFetch.mockResolvedValue({
         ok: false,
         status: 400,
         json: async () => ({
@@ -83,10 +90,11 @@ describe('FlutterwaveProvider', () => {
       await expect(provider.initiatePayout(validParams)).rejects.toThrow(
         InsufficientBalanceError,
       )
+      expect(mockFetch).toHaveBeenCalledOnce()
     })
 
-    it('throws InvalidBankError for invalid bank code', async () => {
-      mockFetch.mockResolvedValueOnce({
+    it('throws InvalidBankError for invalid bank code (no retry)', async () => {
+      mockFetch.mockResolvedValue({
         ok: false,
         status: 400,
         json: async () => ({
@@ -98,19 +106,22 @@ describe('FlutterwaveProvider', () => {
       await expect(provider.initiatePayout(validParams)).rejects.toThrow(
         InvalidBankError,
       )
+      expect(mockFetch).toHaveBeenCalledOnce()
     })
 
-    it('throws ProviderTimeoutError on fetch timeout', async () => {
+    it('retries on fetch timeout then surfaces ProviderTimeoutError', async () => {
       const abortError = new DOMException('The operation was aborted', 'AbortError')
-      mockFetch.mockRejectedValueOnce(abortError)
+      mockFetch.mockRejectedValue(abortError)
 
       await expect(provider.initiatePayout(validParams)).rejects.toThrow(
         ProviderTimeoutError,
       )
+      // Default attempts = 3.
+      expect(mockFetch).toHaveBeenCalledTimes(3)
     })
 
-    it('throws RateLimitError on 429 response', async () => {
-      mockFetch.mockResolvedValueOnce({
+    it('retries on 429 then surfaces RateLimitError', async () => {
+      mockFetch.mockResolvedValue({
         ok: false,
         status: 429,
         json: async () => ({
@@ -122,6 +133,27 @@ describe('FlutterwaveProvider', () => {
       await expect(provider.initiatePayout(validParams)).rejects.toThrow(
         RateLimitError,
       )
+      expect(mockFetch).toHaveBeenCalledTimes(3)
+    })
+
+    it('retries 5xx then succeeds on the second attempt', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 503,
+          json: async () => ({ status: 'error', message: 'Service unavailable' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            status: 'success',
+            data: { id: 55555, reference: validParams.reference, status: 'NEW' },
+          }),
+        })
+
+      const result = await provider.initiatePayout(validParams)
+      expect(result.providerRef).toBe('55555')
+      expect(mockFetch).toHaveBeenCalledTimes(2)
     })
   })
 
@@ -187,5 +219,41 @@ describe('FlutterwaveProvider', () => {
         expect.objectContaining({ method: 'GET' }),
       )
     })
+  })
+})
+
+describe('validateFlutterwaveConfig', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    delete process.env.FLUTTERWAVE_SECRET_KEY
+    delete process.env.FLUTTERWAVE_API_URL
+  })
+
+  it('throws in production when FLUTTERWAVE_SECRET_KEY is missing', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    delete process.env.FLUTTERWAVE_SECRET_KEY
+
+    expect(() => validateFlutterwaveConfig()).toThrow(
+      /Flutterwave config missing/,
+    )
+  })
+
+  it('returns isMock=true in dev when secret key is missing', () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    delete process.env.FLUTTERWAVE_SECRET_KEY
+
+    const cfg = validateFlutterwaveConfig()
+    expect(cfg.isMock).toBe(true)
+    // Falls back to public API URL so mock-less dev shims still compile.
+    expect(cfg.apiUrl).toBe('https://api.flutterwave.com/v3')
+  })
+
+  it('returns isMock=false when secret key is present', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    process.env.FLUTTERWAVE_SECRET_KEY = 'FLWSECK-live-abc'
+
+    const cfg = validateFlutterwaveConfig()
+    expect(cfg.isMock).toBe(false)
+    expect(cfg.secretKey).toBe('FLWSECK-live-abc')
   })
 })

@@ -1,40 +1,69 @@
-# Review Feedback — Step 15i
+# Review Feedback — Step 15j
 Date: 2026-04-15
 Ready for Builder: YES
 
 ## Must Fix
-
 None.
 
 ## Should Fix
-
-- `src/workers/webhook-worker.ts:118,123` — after `verify()` succeeds, the worker re-reads `process.env.FLUTTERWAVE_WEBHOOK_SECRET!` / `PAYSTACK_SECRET_KEY!` with non-null assertions. Harmless today (verify already threw on missing, env vars don't mutate mid-function), but two lookups invite future drift. Cache the secret as a local after verify, or have `verify()` return the resolved secret. Log to BUILD-LOG if not fixed inline.
-
-- `src/workers/webhook-worker.ts` — no `worker.on('error', ...)` listener. ioredis connection errors can surface as unhandled `error` events on the Worker. Add a logging handler; BullMQ reconnects on its own. Not blocking; log to BUILD-LOG.
-
-- Test parity: only the Monoova route test was rewritten for the dispatcher path. Flutterwave / Paystack / Sumsub routes received identical treatment in code but no equivalent route-level test covers the 401-no-dispatch / 200-dispatch gate. The three new queue tests plus the Monoova route test are sufficient for this step, but a regression in one of the other three routes' sig-verify-before-dispatch ordering would slip through. Log a follow-up to bring the other three route tests to parity.
+- `src/lib/rates/fx-fetcher.ts:70` — `FX_API_KEY` is passed as a URL query
+  parameter (`...&apikey=${this.config.apiKey}`). URL query strings leak to
+  upstream proxies, APM spans, and any telemetry that captures request URLs.
+  Pre-existing (not introduced by 15j), but now that the FX adapter is
+  hardened it is the weakest link. If the provider supports it, move the key
+  to an `Authorization: Bearer` header or `X-API-Key` header. If the provider
+  only accepts it via query, scrub the URL from any error/telemetry path.
+  Log to BUILD-LOG for Step 15k or wherever Arch routes it.
+- `tests/lib/http/retry.test.ts` — no test asserts that `random()` (jitter)
+  is invoked by default. Every test passes `random: zeroJitter`, which proves
+  the injection point works but not that jitter actually runs. Add one test
+  that spies on an injected `random` and asserts it was called once per
+  retry sleep. Two-minute fix.
+- `src/lib/payments/payout/flutterwave.ts:167` —
+  `(body as Record<string, string>).account_bank` is cast unconditionally
+  when `body` is possibly undefined (GET paths). It's guarded today because
+  `InvalidBankError` is only raised on the POST path that always supplies a
+  body, but the cast reads as unsafe. Narrow the type or guard with
+  `body && typeof body === 'object'`.
 
 ## Escalate to Architect
-
 None.
 
 ## Cleared
 
-Reviewed the four dispatcher/queue source files, the worker, the extracted `verify-signature.ts`, all four webhook routes, and the three new queue tests plus the rewritten Monoova route test. Confirmed via `git status` / `git diff --stat` that untouched surfaces (Monoova / payout / Sumsub webhook handler internals, Prisma schema, state machine) were not modified.
+Reviewed:
 
-Verified:
+- `src/lib/http/retry.ts` — retry/timeout helper, typed error taxonomy.
+- `tests/lib/http/retry.test.ts` — 12 tests covering first-success,
+  retry-then-success, exhausted attempts, permanent-no-retry, custom
+  predicate, AbortSignal timeout translation, native TypeError translation,
+  per-attempt signal freshness, and the status-code classifier.
+- `src/lib/kyc/sumsub/client.ts` — `validateSumsubConfig()` runs at module
+  load (line 85). Production with missing vars throws clearly (line 69).
+  `createSumsubClient()` refuses to hand back a client in mock mode
+  (line 205). All three methods routed through `withRetry`. Natural
+  idempotency via `externalUserId` documented in module header.
+- `src/lib/payments/monoova/client.ts` — same pattern as Sumsub.
+  `validateMonoovaConfig()` at module load; `createMonoovaClient()` throws
+  in mock mode. Natural idempotency via `reference` documented.
+- `src/lib/payments/payout/flutterwave.ts` — `Idempotency-Key: <reference>`
+  on POST `/transfers` (verified in test line 67). Dual
+  `ProviderTimeoutError` classes (payout/types.ts + http/retry.ts) coexist
+  cleanly because `flutterwaveShouldRetry` explicitly lists both
+  (`ProviderTimeoutError` and `HttpTimeoutError` alias at lines 194-195).
+  `PayoutError` surface preserved for the orchestrator.
+- `src/lib/payments/payout/paystack.ts` — `Idempotency-Key: <reference>` on
+  POST `/transfer`. `createRecipient` is not keyed, but the comment
+  correctly notes Paystack's natural idempotency on account_number+bank_code.
+- `src/lib/rates/fx-fetcher.ts` — `validateFxConfig()` at module load; GET
+  only, no idempotency key needed; 10s timeout.
+- Module index re-exports for all four adapters.
+- `.env.example` — all five providers documented with production/dev
+  behavior and per-provider idempotency notes.
+- `package.json` — git diff confirms no new dependencies.
+- `src/lib/http/retry.ts` contains zero logging calls — no secret-leak
+  surface introduced by the retry layer itself.
 
-- **Route order**: `request.text()` once, JSON parse guard, secret check, signature verify BEFORE dispatch. Invalid signature → 401, no dispatcher call. Valid → dispatch + 200 `{ received: true }`. Dispatcher throw → 500 (provider retries). Bad JSON → 400.
-- **Defense-in-depth**: worker re-verifies signature per attempt against its own env-read secret before calling the handler. Does not trust the enqueued `signature` field.
-- **Secret handling**: job payload is `{ provider, rawBody, signature, receivedAt }` — no secrets on the wire. Dispatcher reads `FLUTTERWAVE_WEBHOOK_SECRET` / `PAYSTACK_SECRET_KEY` at dispatch time; worker re-reads at process time. Monoova and Sumsub handlers read their own secrets internally, matching pre-15i behavior.
-- **jobId correctness**: SHA-256 computed over `rawBody` (not `JSON.stringify(payload)`) — the 15a regression is not reintroduced. Dedup is stable across two identical rawBodies (`bullmq-dispatcher.test.ts:87-107`).
-- **Env-driven selector**: `getWebhookDispatcher()` returns `InProcessDispatcher` when `REDIS_URL` is unset OR blank-whitespace; `BullMQDispatcher` otherwise. Cached; `__resetWebhookDispatcher()` exposed for tests. No code path constructs a BullMQ `Queue` when Redis is absent.
-- **Handler call-site signatures** match every handler export:
-  - `handleMonoovaWebhook(rawBody, signature)` ✓
-  - `handleSumsubWebhook(rawBody, signature)` ✓
-  - `handleFlutterwaveWebhook(rawBody, signature, secret)` ✓
-  - `handlePaystackWebhook(rawBody, signature, secret)` ✓
-- **ioredis connection**: `maxRetriesPerRequest: null` for BullMQ compatibility, `enableReadyCheck: true`, reconnection defaults not disabled. `createRedisConnection` is reused via `BullMQDispatcher` construction; the Queue is cached in the selector so the connection is not per-dispatch.
-- **Graceful shutdown**: SIGINT/SIGTERM → `worker.close()` + `connection.quit()` + `process.exit(0)`. Production-ready; not a gap.
-
-Signal to Arch: **Step 15i is clear.**
+Confirmed production fail-fast: every adapter runs `validate*Config()` at
+module load (stronger than lazy first-call validation — a bad deploy surfaces
+before the first transfer).

@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import Decimal from 'decimal.js'
-import { PaystackProvider } from '../paystack'
+import { PaystackProvider, validatePaystackConfig } from '../paystack'
 import { PayoutError } from '../types'
 
 const mockFetch = vi.fn()
@@ -31,7 +31,7 @@ describe('PaystackProvider', () => {
   })
 
   describe('initiatePayout', () => {
-    it('creates a transfer recipient then initiates transfer', async () => {
+    it('creates a transfer recipient then initiates transfer with an idempotency key', async () => {
       // First call: create transfer recipient
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -72,10 +72,11 @@ describe('PaystackProvider', () => {
       expect(recipientBody.account_number).toBe('0123456789')
       expect(recipientBody.name).toBe('Jane Doe')
 
-      // Verify transfer initiation call
+      // Verify transfer initiation call (with Idempotency-Key)
       const [transferUrl, transferOpts] = mockFetch.mock.calls[1]
       expect(transferUrl).toBe('https://api.paystack.co/transfer')
       expect(transferOpts.method).toBe('POST')
+      expect(transferOpts.headers['Idempotency-Key']).toBe(validParams.reference)
 
       const transferBody = JSON.parse(transferOpts.body)
       expect(transferBody.source).toBe('balance')
@@ -86,8 +87,8 @@ describe('PaystackProvider', () => {
       expect(transferBody.reason).toContain('Jane Doe')
     })
 
-    it('throws PayoutError on recipient creation failure', async () => {
-      mockFetch.mockResolvedValueOnce({
+    it('throws PayoutError on recipient creation failure (4xx does not retry)', async () => {
+      mockFetch.mockResolvedValue({
         ok: false,
         status: 400,
         json: async () => ({
@@ -97,7 +98,8 @@ describe('PaystackProvider', () => {
       })
 
       await expect(provider.initiatePayout(validParams)).rejects.toThrow(PayoutError)
-      // Should only make one call (recipient) and fail before transfer
+      // Should only make one call (recipient) and fail before transfer; 400 is
+      // not retryable so only one fetch.
       expect(mockFetch).toHaveBeenCalledOnce()
     })
 
@@ -110,8 +112,8 @@ describe('PaystackProvider', () => {
           data: { recipient_code: 'RCP_abc123' },
         }),
       })
-      // Transfer fails
-      mockFetch.mockResolvedValueOnce({
+      // Transfer fails with 4xx — no retry
+      mockFetch.mockResolvedValue({
         ok: false,
         status: 400,
         json: async () => ({
@@ -121,6 +123,27 @@ describe('PaystackProvider', () => {
       })
 
       await expect(provider.initiatePayout(validParams)).rejects.toThrow(PayoutError)
+    })
+
+    it('retries 5xx on the transfer step then surfaces PayoutError', async () => {
+      // Recipient creation succeeds
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: true,
+          data: { recipient_code: 'RCP_abc123' },
+        }),
+      })
+      // Transfer repeatedly 500s
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: async () => ({ status: false, message: 'Server error' }),
+      })
+
+      await expect(provider.initiatePayout(validParams)).rejects.toThrow(PayoutError)
+      // 1 recipient call + 3 transfer attempts.
+      expect(mockFetch).toHaveBeenCalledTimes(4)
     })
   })
 
@@ -164,8 +187,8 @@ describe('PaystackProvider', () => {
       expect(result.failureReason).toBe('Account could not be credited')
     })
 
-    it('throws PayoutError on API error', async () => {
-      mockFetch.mockResolvedValueOnce({
+    it('retries then throws PayoutError on persistent 500', async () => {
+      mockFetch.mockResolvedValue({
         ok: false,
         status: 500,
         json: async () => ({
@@ -175,6 +198,40 @@ describe('PaystackProvider', () => {
       })
 
       await expect(provider.getPayoutStatus('TRF_xyz789')).rejects.toThrow(PayoutError)
+      expect(mockFetch).toHaveBeenCalledTimes(3)
     })
+  })
+})
+
+describe('validatePaystackConfig', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    delete process.env.PAYSTACK_SECRET_KEY
+    delete process.env.PAYSTACK_API_URL
+  })
+
+  it('throws in production when PAYSTACK_SECRET_KEY is missing', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    delete process.env.PAYSTACK_SECRET_KEY
+
+    expect(() => validatePaystackConfig()).toThrow(/Paystack config missing/)
+  })
+
+  it('returns isMock=true in dev when secret key is missing', () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    delete process.env.PAYSTACK_SECRET_KEY
+
+    const cfg = validatePaystackConfig()
+    expect(cfg.isMock).toBe(true)
+    expect(cfg.apiUrl).toBe('https://api.paystack.co')
+  })
+
+  it('returns isMock=false when secret key is present', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    process.env.PAYSTACK_SECRET_KEY = 'sk_live_abc'
+
+    const cfg = validatePaystackConfig()
+    expect(cfg.isMock).toBe(false)
+    expect(cfg.secretKey).toBe('sk_live_abc')
   })
 })

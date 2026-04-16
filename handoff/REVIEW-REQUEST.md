@@ -1,6 +1,6 @@
-# Review Request -- Step 15i
+# Review Request -- Step 15j
 
-**Step:** 15i -- BullMQ + Redis webhook queue
+**Step:** 15j -- Provider hardening (env validation + retry + timeout + idempotency)
 **Date:** 2026-04-15
 **Builder:** Bob
 **Ready for Review:** YES
@@ -9,21 +9,25 @@
 
 ## Summary
 
-Webhook routes no longer process inline. They now verify the provider
-signature synchronously and hand the raw payload to a dispatcher, returning
-200 immediately. The dispatcher is environment-driven:
+Every third-party provider adapter (Sumsub, Monoova, Flutterwave,
+Paystack, FX rate) now:
 
-- `REDIS_URL` set -> `BullMQDispatcher` enqueues on the `webhooks` queue;
-  a standalone worker (`npm run worker`) consumes and dispatches to the
-  existing handler functions.
-- `REDIS_URL` absent/blank -> `InProcessDispatcher` calls the handler
-  directly in-process (dev/tests path -- no Redis required).
+1. Validates env vars on module load — fail-fast in production, mock
+   shim in dev/test (pattern mirrors `src/lib/email/client.ts` and
+   `src/lib/sms/client.ts`).
+2. Routes outbound calls through a single shared `withRetry` helper
+   with exponential backoff + jitter and per-attempt `AbortController`
+   timeouts.
+3. Maps errors to typed `ProviderTimeoutError` /
+   `ProviderTemporaryError` / `ProviderPermanentError` so callers can
+   reason about retryability uniformly.
+4. Passes provider-supported idempotency keys on POSTs
+   (Flutterwave + Paystack `Idempotency-Key` header; Monoova natural
+   `reference` key; Sumsub natural `externalUserId`).
 
-No handler internals, schema, state-machine, audit, or idempotency logic
-changed. Handler-level signature verification stays. Handler-level
-WebhookEvent unique-constraint idempotency stays.
-
-New deps: `bullmq`, `ioredis`. Nothing else.
+No handler-level changes. No schema changes. No new deps. The
+`PayoutError` subclass surface used by the orchestrator's retry/failover
+is preserved.
 
 ---
 
@@ -31,92 +35,112 @@ New deps: `bullmq`, `ioredis`. Nothing else.
 
 ### New files
 
-- `src/lib/queue/webhook-dispatcher.ts` -- interface + `WebhookJob` type
-  + `WEBHOOK_QUEUE_NAME` constant.
-- `src/lib/queue/in-process-dispatcher.ts` -- `InProcessDispatcher`
-  implementation; switch on `provider`, hand to existing handler.
-- `src/lib/queue/bullmq-dispatcher.ts` -- `BullMQDispatcher`,
-  `WEBHOOK_JOB_OPTS`, `createRedisConnection`. `jobId` = SHA-256 of
-  rawBody for enqueue-time dedup.
-- `src/lib/queue/index.ts` -- `getWebhookDispatcher()` selector
-  (lazy + cached) + `__resetWebhookDispatcher()` test hook.
-- `src/lib/payments/payout/verify-signature.ts` --
-  `verifyFlutterwaveSignature` (static secret, constant-time) and
-  `verifyPaystackSignature` (HMAC-SHA512 over rawBody). Extracted
-  from what was inline in `payout/webhooks.ts` so the route can verify
-  BEFORE enqueue.
-- `src/workers/webhook-worker.ts` -- BullMQ Worker entry. Re-verifies
-  signature per attempt (defense-in-depth), dispatches to handlers,
-  structured JSON logs, graceful shutdown.
-- `tests/lib/queue/in-process-dispatcher.test.ts` (7 tests)
-- `tests/lib/queue/bullmq-dispatcher.test.ts` (7 tests)
-- `tests/lib/queue/selector.test.ts` (5 tests)
+- `src/lib/http/retry.ts` -- shared `withRetry(fn, opts)` helper, typed
+  errors (`ProviderTimeoutError`, `ProviderTemporaryError`,
+  `ProviderPermanentError`), `errorForStatus()` status-code classifier.
+- `tests/lib/http/retry.test.ts` -- 12 tests: first-success,
+  retry-then-success, exhausted attempts, permanent-no-retry, custom
+  `shouldRetry`, AbortSignal timeout translation, native TypeError
+  translation, per-attempt signal freshness, `errorForStatus`.
 
-### Modified files
+### Modified provider clients
 
-- `src/app/api/webhooks/monoova/route.ts` (lines 1-43) -- pre-flight
-  signature verification via `verifyMonoovaSignature`, then
-  `getWebhookDispatcher().dispatch(...)`. 200 received, 401 on bad sig
-  (no dispatch), 400 on bad JSON, 500 if dispatcher throws.
-- `src/app/api/webhooks/flutterwave/route.ts` (lines 1-43) -- same
-  shape, `verifyFlutterwaveSignature` + dispatch.
-- `src/app/api/webhooks/paystack/route.ts` (lines 1-43) -- same shape,
-  `verifyPaystackSignature` + dispatch.
-- `src/app/api/webhooks/sumsub/route.ts` (lines 1-41) -- same shape,
-  `verifySumsubSignature` + dispatch.
-- `tests/app/api/webhooks/monoova.test.ts` -- rewritten to mock the
-  dispatcher and signature-verify helper; asserts invalid-sig doesn't
-  dispatch, valid-sig dispatches + 200, dispatcher throw -> 500,
-  missing secret -> 500, bad JSON -> 400.
-- `package.json` (line 12) -- `"worker"` script, bullmq + ioredis deps.
-- `.env`, `.env.example` -- `REDIS_URL=` block with usage comment.
-- `handoff/BUILD-LOG.md` -- Step 15i entry.
+- `src/lib/kyc/sumsub/client.ts` (rewrite) -- `validateSumsubConfig()` +
+  module-load `sumsubConfig` constant; `request()` wrapped in
+  `withRetry`; errors mapped via `errorForStatus`; `createSumsubClient()`
+  throws clearly when creds are absent.
+- `src/lib/payments/monoova/client.ts` (rewrite) --
+  `validateMonoovaConfig()` + `monoovaConfig`; `createPayId` +
+  `getPaymentStatus` wrapped in `withRetry`.
+- `src/lib/payments/payout/flutterwave.ts` (rewrite) --
+  `validateFlutterwaveConfig()`; `initiatePayout` / `getPayoutStatus` /
+  `getWalletBalance` wrapped in `withRetry` with a Flutterwave-tuned
+  `shouldRetry` (retries 5xx + 429 + timeout; skips `InvalidBankError` /
+  `InsufficientBalanceError`). `Idempotency-Key: <reference>` on POST
+  /transfers.
+- `src/lib/payments/payout/paystack.ts` (rewrite) --
+  `validatePaystackConfig()`; `createRecipient` / `initiatePayout` /
+  `getPayoutStatus` wrapped in `withRetry`. `Idempotency-Key:
+  <reference>` on POST /transfer.
+- `src/lib/rates/fx-fetcher.ts` (rewrite) -- `validateFxConfig()` +
+  `fxConfig`; `fetchWholesaleRate` wrapped in `withRetry` with 10s
+  default timeout. Errors mapped via `errorForStatus`.
+
+### Modified module roots (re-exports only)
+
+- `src/lib/kyc/sumsub/index.ts` -- adds
+  `validateSumsubConfig`, `sumsubConfig`, `SumsubConfig`.
+- `src/lib/payments/monoova/index.ts` -- adds
+  `validateMonoovaConfig`, `monoovaConfig`, `MonoovaConfig`.
+- `src/lib/payments/payout/index.ts` -- adds
+  `validateFlutterwaveConfig`, `validatePaystackConfig`.
+- `src/lib/rates/index.ts` -- adds `validateFxConfig`, `fxConfig`.
+
+### Modified tests (existing + new cases)
+
+- `src/lib/kyc/sumsub/__tests__/client.test.ts` -- 4xx/5xx now assert
+  typed errors; added retry count assertions; new
+  `validateSumsubConfig` suite (3 tests).
+- `src/lib/payments/monoova/__tests__/client.test.ts` -- same pattern;
+  new `validateMonoovaConfig` suite (3 tests).
+- `src/lib/payments/payout/__tests__/flutterwave.test.ts` -- uses
+  `mockRejectedValue` (persistent) where retry is expected; asserts
+  `Idempotency-Key`; new `validateFlutterwaveConfig` suite (3 tests).
+- `src/lib/payments/payout/__tests__/paystack.test.ts` -- same pattern;
+  new `validatePaystackConfig` suite (3 tests).
+- `src/lib/rates/__tests__/fx-fetcher.test.ts` -- updated timeout /
+  error-shape expectations; new `validateFxConfig` suite (3 tests).
+
+### Config
+
+- `.env.example` -- documented SUMSUB_*, MONOOVA_*, FLUTTERWAVE_*,
+  PAYSTACK_*, FX_* with per-provider idempotency notes and
+  dev-vs-production behavior.
 
 ---
 
-## One-sentence-per-change highlights
+## Key Decisions
 
-- Dispatcher abstraction isolates routes from BullMQ so tests stay
-  hermetic without Redis.
-- SHA-256(rawBody) `jobId` gives enqueue-time dedup on top of the
-  handler's WebhookEvent unique constraint.
-- Routes verify signature BEFORE dispatch to prevent junk-payload DoS
-  on the queue.
-- Worker re-verifies signature per attempt for defense-in-depth against
-  a compromised producer.
-- `InProcessDispatcher` preserves current dev/test semantics exactly:
-  the route awaits the handler, 500 on handler error, 200 on success.
-- No schema migration, no new handler behavior, no change to
-  idempotency or state machine.
+1. **Two `ProviderTimeoutError` classes coexist.** One in
+   `src/lib/http/retry.ts` (generic; used by Sumsub, Monoova, FX) and
+   one already in `src/lib/payments/payout/types.ts` (extends
+   `PayoutError`; feeds the orchestrator's retryable flag). Renaming
+   either would churn unrelated code. The Flutterwave retry predicate
+   explicitly handles both.
+2. **AbortError normalisation.** `withRetry` always converts any
+   `DOMException('AbortError')` (ours or the runtime's) into
+   `ProviderTimeoutError` so callers never sniff DOMException names.
+3. **Idempotency keys per provider (documented in module headers):**
+   - Flutterwave: `Idempotency-Key: <params.reference>` header on POST.
+   - Paystack: `Idempotency-Key: <params.reference>` header on POST.
+   - Monoova: natural key via `reference` field (payIdReference).
+   - Sumsub: natural key via `externalUserId` (our userId).
+   - FX: GET-only, idempotent by definition.
+4. **Test env mutation.** Switched to `vi.stubEnv` +
+   `vi.unstubAllEnvs` because Node types `process.env.NODE_ENV` as
+   readonly.
+5. **No dep additions.** Everything uses native `fetch`,
+   `AbortController`, `crypto` (already imported by Sumsub for HMAC).
 
 ---
 
 ## Open Questions
 
-None. Scope was locked to what the brief specified.
+None. Scope matched the brief; all Phase D checks are green.
 
 ---
 
-## Phase D verification
-
-- `npx tsc --noEmit` -> 0 errors
-- `npm test -- --run` -> **565 passed / 0 failed** across 80 files
-  (545 pre-existing + 20 new queue/route tests)
-- Manual smoke (`REDIS_URL` unset): signed Monoova payload via
-  `POST` -> 200 `{received:true}`; bad signature -> 401. In-process
-  dispatcher invoked the handler, payment event was processed via the
-  existing `handleMonoovaWebhook` path.
-
----
-
-## Local Redis (optional, for the queue path)
+## Verification
 
 ```
-docker run --name kolaleaf-redis -p 6379:6379 -d redis:7
-export REDIS_URL=redis://localhost:6379
-npm run worker   # one terminal
-npm run dev      # another
+$ npx tsc --noEmit
+(0 errors, 0 exclusions)
+
+$ npm test -- --run
+ Test Files  81 passed (81)
+      Tests  595 passed (595)
 ```
 
-Leave `REDIS_URL` blank for normal dev/tests. The dispatcher selector
-transparently picks the in-process fallback.
+72 of those 595 are the provider + retry tests touched in this step
+(12 retry + 11 FX + 10 Flutterwave + 10 Paystack + 14 Sumsub + 15
+Monoova) — all green.

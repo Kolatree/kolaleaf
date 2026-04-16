@@ -12,8 +12,8 @@ export {
   RateLimitError,
   generatePayoutReference,
 } from './types'
-export { FlutterwaveProvider } from './flutterwave'
-export { PaystackProvider } from './paystack'
+export { FlutterwaveProvider, validateFlutterwaveConfig } from './flutterwave'
+export { PaystackProvider, validatePaystackConfig } from './paystack'
 export { PayoutOrchestrator } from './orchestrator'
 export { handleFlutterwaveWebhook, handlePaystackWebhook } from './webhooks'
 export { FloatMonitor } from './float-monitor'

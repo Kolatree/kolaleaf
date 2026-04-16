@@ -5,13 +5,110 @@
 
 ## Current Status
 
-**Active step:** 15i -- BullMQ + Redis webhook queue (review pending)
+**Active step:** 15j -- Provider hardening (env validation + retry + timeout + idempotency) (review pending)
 **Last cleared:** Step 15b
 **Pending deploy:** NO
 
 ---
 
 ## Step History
+
+### Step 15j -- Provider hardening: env validation + retry + timeout + idempotency -- REVIEW PENDING
+*Date: 2026-04-15*
+
+Every third-party adapter (Sumsub, Monoova, Flutterwave, Paystack, FX rate)
+now validates its env vars on module load (fail-fast in production, mock
+shim in dev/test), routes outbound calls through a shared `withRetry`
+helper with exponential backoff + jitter and per-attempt
+`AbortController` timeouts, maps errors to typed `ProviderTimeoutError` /
+`ProviderTemporaryError` / `ProviderPermanentError`, and passes provider-
+supported idempotency keys on POSTs.
+
+No new deps. No schema migrations. No changes at the handler layer --
+only the outbound-call layer. The `PayoutError` subclass surface (used
+by the orchestrator's retry/failover) is unchanged.
+
+Files changed:
+- `src/lib/http/retry.ts` (new) -- shared `withRetry(fn, opts)` helper
+  with `AbortSignal` timeout, exponential backoff + jitter, and a default
+  `shouldRetry` that retries network / timeout / 5xx / 429 but not 4xx.
+  Exports typed errors (`ProviderTimeoutError`,
+  `ProviderTemporaryError`, `ProviderPermanentError`) and
+  `errorForStatus()` for providers to classify responses uniformly.
+- `src/lib/kyc/sumsub/client.ts` -- `validateSumsubConfig()` +
+  `sumsubConfig` module constant; `request()` wrapped in `withRetry`;
+  `createSumsubClient()` throws clearly when called with mock creds.
+  Idempotency via `externalUserId` (documented in module header).
+- `src/lib/payments/monoova/client.ts` -- `validateMonoovaConfig()` +
+  `monoovaConfig`; `createPayId`/`getPaymentStatus` wrapped in
+  `withRetry`. Idempotency via `reference` (payIdReference).
+- `src/lib/payments/payout/flutterwave.ts` --
+  `validateFlutterwaveConfig()`; `initiatePayout` /`getPayoutStatus` /
+  `getWalletBalance` wrapped in `withRetry` with a Flutterwave-tuned
+  `shouldRetry` predicate (retries 5xx + rate-limit + timeout, skips
+  `InvalidBankError` / `InsufficientBalanceError`). POSTs carry
+  `Idempotency-Key: <reference>`.
+- `src/lib/payments/payout/paystack.ts` -- `validatePaystackConfig()`;
+  `createRecipient` / `initiatePayout` / `getPayoutStatus` wrapped in
+  `withRetry` with a Paystack-tuned `shouldRetry` predicate. Transfer
+  POST carries `Idempotency-Key: <reference>`.
+- `src/lib/rates/fx-fetcher.ts` -- `validateFxConfig()` + `fxConfig`;
+  `fetchWholesaleRate` wrapped in `withRetry` with 10s timeout default.
+  Errors map to typed provider errors instead of raw strings.
+- `src/lib/kyc/sumsub/index.ts`,
+  `src/lib/payments/monoova/index.ts`,
+  `src/lib/payments/payout/index.ts`,
+  `src/lib/rates/index.ts` -- re-export the new validators + config
+  constants so call-sites and tests can import them from the module
+  root.
+- `.env.example` -- added SUMSUB_*, MONOOVA_*, FLUTTERWAVE_*,
+  PAYSTACK_*, FX_* with per-provider idempotency notes and dev/prod
+  behavior documented inline.
+- `tests/lib/http/retry.test.ts` (new) -- 12 tests: first-success,
+  retry-then-success, exhausted attempts, permanent-no-retry, custom
+  predicate, AbortSignal timeout translation, TypeError translation,
+  per-attempt signal freshness, `errorForStatus` classification.
+- `src/lib/kyc/sumsub/__tests__/client.test.ts` -- updated 3xx/4xx/5xx
+  expectations to use typed provider errors; added
+  `validateSumsubConfig` suite (prod throws, dev mock, full creds ok).
+- `src/lib/payments/monoova/__tests__/client.test.ts` -- same pattern;
+  added `validateMonoovaConfig` suite.
+- `src/lib/payments/payout/__tests__/flutterwave.test.ts` -- updated
+  `mockRejectedValueOnce` -> `mockRejectedValue` where retry is expected;
+  asserts `Idempotency-Key` header; added retry count assertions; added
+  `validateFlutterwaveConfig` suite.
+- `src/lib/payments/payout/__tests__/paystack.test.ts` -- same pattern;
+  added `validatePaystackConfig` suite.
+- `src/lib/rates/__tests__/fx-fetcher.test.ts` -- updated timeout +
+  error-shape expectations; added `validateFxConfig` suite.
+
+Decisions made:
+- Two `ProviderTimeoutError`s coexist: one in `src/lib/http/retry.ts`
+  (generic, for Sumsub/Monoova/FX) and one already in
+  `src/lib/payments/payout/types.ts` (`extends PayoutError`). Kept both
+  because the payout one feeds the orchestrator's `retryable` contract;
+  renaming would churn unrelated code. The Flutterwave retry predicate
+  handles both.
+- `AbortError` from any source (our signal firing, or fetch bubbling
+  one up on its own) is normalised to `ProviderTimeoutError` inside
+  `withRetry` so callers never have to sniff `DOMException.name`.
+- Idempotency choice per provider documented in each module header:
+  Flutterwave + Paystack use `Idempotency-Key: <reference>` header;
+  Monoova relies on natural `reference` dedup; Sumsub relies on
+  `externalUserId`; FX is GET-only.
+- In dev/test without creds, providers expose `isMock:true` on their
+  config and `createXClient()` factories throw clearly if invoked --
+  existing tests construct clients directly with explicit creds, so
+  nothing regresses.
+- Tests use `vi.stubEnv()` + `vi.unstubAllEnvs()` because Node now
+  types `process.env.NODE_ENV` as readonly.
+
+Tests: `npx tsc --noEmit` 0 errors. `npm test -- --run` 595/595.
+
+Reviewer findings: [pending review]
+Deploy: N/A
+
+---
 
 ### Step 15i -- BullMQ + Redis webhook queue -- REVIEW PENDING
 *Date: 2026-04-15*

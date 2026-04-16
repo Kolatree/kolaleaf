@@ -1,5 +1,5 @@
-export type { SumsubClient, CreateApplicantParams, CreateApplicantResult, AccessTokenResult, ApplicantStatusResult } from './client'
-export { SumsubHttpClient, createSumsubClient } from './client'
+export type { SumsubClient, CreateApplicantParams, CreateApplicantResult, AccessTokenResult, ApplicantStatusResult, SumsubConfig } from './client'
+export { SumsubHttpClient, createSumsubClient, validateSumsubConfig, sumsubConfig } from './client'
 export { initiateKyc, handleKycApproved, handleKycRejected, getKycStatus, retryKyc } from './kyc-service'
 export { handleSumsubWebhook } from './webhook'
 export { verifySumsubSignature } from './verify-signature'

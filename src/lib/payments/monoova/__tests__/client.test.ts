@@ -1,7 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import Decimal from 'decimal.js'
-import { MonoovaHttpClient } from '../client'
+import {
+  MonoovaHttpClient,
+  validateMonoovaConfig,
+} from '../client'
 import type { MonoovaClient } from '../client'
+import {
+  ProviderPermanentError,
+  ProviderTemporaryError,
+} from '@/lib/http/retry'
 
 describe('MonoovaHttpClient', () => {
   let client: MonoovaClient
@@ -43,12 +50,18 @@ describe('MonoovaHttpClient', () => {
           'Content-Type': 'application/json',
         })
       )
+      // Retry helper wires an AbortSignal through for per-attempt timeout.
+      expect(opts.signal).toBeDefined()
     })
 
-    it('throws on non-200 API response', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        new Response(JSON.stringify({ error: 'Bad Request' }), { status: 400 })
-      )
+    it('throws ProviderPermanentError on 4xx (no retry)', async () => {
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(
+          new Response(JSON.stringify({ error: 'Bad Request' }), {
+            status: 400,
+          }),
+        )
 
       await expect(
         client.createPayId({
@@ -56,11 +69,20 @@ describe('MonoovaHttpClient', () => {
           amount: new Decimal('100.00'),
           reference: 'KL-txn-456-1700000000',
         })
-      ).rejects.toThrow('Monoova API error: 400')
+      ).rejects.toBeInstanceOf(ProviderPermanentError)
+
+      // 4xx does NOT retry.
+      expect(fetchSpy).toHaveBeenCalledOnce()
     })
 
-    it('throws on network timeout / fetch failure', async () => {
-      vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('network timeout'))
+    it('retries transient 5xx then surfaces ProviderTemporaryError', async () => {
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(
+          new Response(JSON.stringify({ error: 'Server error' }), {
+            status: 503,
+          }),
+        )
 
       await expect(
         client.createPayId({
@@ -68,7 +90,10 @@ describe('MonoovaHttpClient', () => {
           amount: new Decimal('50.00'),
           reference: 'KL-txn-789-1700000000',
         })
-      ).rejects.toThrow('network timeout')
+      ).rejects.toBeInstanceOf(ProviderTemporaryError)
+
+      // Default attempts = 3.
+      expect(fetchSpy).toHaveBeenCalledTimes(3)
     })
 
     it('throws on invalid response shape (missing payId)', async () => {
@@ -122,14 +147,51 @@ describe('MonoovaHttpClient', () => {
       expect(result.receivedAt).toBeUndefined()
     })
 
-    it('throws on non-200 response', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+    it('throws ProviderPermanentError on 404', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
         new Response(JSON.stringify({ error: 'Not Found' }), { status: 404 })
       )
 
       await expect(
         client.getPaymentStatus('KL-unknown')
-      ).rejects.toThrow('Monoova API error: 404')
+      ).rejects.toBeInstanceOf(ProviderPermanentError)
     })
+  })
+})
+
+describe('validateMonoovaConfig', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    delete process.env.MONOOVA_API_URL
+    delete process.env.MONOOVA_API_KEY
+  })
+
+  it('throws in production when MONOOVA_API_URL/API_KEY are missing', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    delete process.env.MONOOVA_API_URL
+    delete process.env.MONOOVA_API_KEY
+
+    expect(() => validateMonoovaConfig()).toThrow(/Monoova config missing/)
+  })
+
+  it('returns isMock=true in dev when creds are missing', () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    delete process.env.MONOOVA_API_URL
+    delete process.env.MONOOVA_API_KEY
+
+    const cfg = validateMonoovaConfig()
+    expect(cfg.isMock).toBe(true)
+    expect(cfg.apiKey).toBe('')
+  })
+
+  it('returns isMock=false when creds are present', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    process.env.MONOOVA_API_URL = 'https://api.monoova.com'
+    process.env.MONOOVA_API_KEY = 'live-key'
+
+    const cfg = validateMonoovaConfig()
+    expect(cfg.isMock).toBe(false)
+    expect(cfg.apiUrl).toBe('https://api.monoova.com')
+    expect(cfg.apiKey).toBe('live-key')
   })
 })

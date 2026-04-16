@@ -1,6 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { SumsubHttpClient } from '../client'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { SumsubHttpClient, validateSumsubConfig } from '../client'
 import type { SumsubClient } from '../client'
+import {
+  ProviderPermanentError,
+  ProviderTemporaryError,
+} from '@/lib/http/retry'
 
 describe('SumsubHttpClient', () => {
   let client: SumsubClient
@@ -47,10 +51,14 @@ describe('SumsubHttpClient', () => {
       expect((opts.headers as Record<string, string>)['X-App-Access-Ts']).toBeDefined()
     })
 
-    it('throws on non-2xx API response', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        new Response(JSON.stringify({ description: 'Bad Request' }), { status: 400 })
-      )
+    it('throws ProviderPermanentError on 4xx (no retry)', async () => {
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(
+          new Response(JSON.stringify({ description: 'Bad Request' }), {
+            status: 400,
+          }),
+        )
 
       await expect(
         client.createApplicant({
@@ -58,7 +66,9 @@ describe('SumsubHttpClient', () => {
           email: 'bad@example.com',
           fullName: 'Bad User',
         })
-      ).rejects.toThrow('Sumsub API error: 400')
+      ).rejects.toBeInstanceOf(ProviderPermanentError)
+
+      expect(fetchSpy).toHaveBeenCalledOnce()
     })
 
     it('throws on invalid response shape (missing id)', async () => {
@@ -75,8 +85,10 @@ describe('SumsubHttpClient', () => {
       ).rejects.toThrow('Invalid Sumsub response: missing applicant id')
     })
 
-    it('throws on network failure', async () => {
-      vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('network timeout'))
+    it('retries network failure then surfaces ProviderTemporaryError', async () => {
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockRejectedValue(new TypeError('fetch failed'))
 
       await expect(
         client.createApplicant({
@@ -84,7 +96,10 @@ describe('SumsubHttpClient', () => {
           email: 'timeout@example.com',
           fullName: 'Timeout User',
         })
-      ).rejects.toThrow('network timeout')
+      ).rejects.toBeInstanceOf(ProviderTemporaryError)
+
+      // Default attempts = 3.
+      expect(fetchSpy).toHaveBeenCalledTimes(3)
     })
   })
 
@@ -110,14 +125,16 @@ describe('SumsubHttpClient', () => {
       )
     })
 
-    it('throws on non-2xx API response', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        new Response(JSON.stringify({ description: 'Not Found' }), { status: 404 })
+    it('throws ProviderPermanentError on 404', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(JSON.stringify({ description: 'Not Found' }), {
+          status: 404,
+        }),
       )
 
       await expect(
         client.getAccessToken('unknown-applicant')
-      ).rejects.toThrow('Sumsub API error: 404')
+      ).rejects.toBeInstanceOf(ProviderPermanentError)
     })
 
     it('throws on invalid response (missing token)', async () => {
@@ -189,14 +206,20 @@ describe('SumsubHttpClient', () => {
       expect(result.reviewResult).toBeUndefined()
     })
 
-    it('throws on non-2xx API response', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        new Response(JSON.stringify({ description: 'Server Error' }), { status: 500 })
-      )
+    it('retries 5xx then surfaces ProviderTemporaryError', async () => {
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(
+          new Response(JSON.stringify({ description: 'Server Error' }), {
+            status: 500,
+          }),
+        )
 
       await expect(
         client.getApplicantStatus('applicant-abc-123')
-      ).rejects.toThrow('Sumsub API error: 500')
+      ).rejects.toBeInstanceOf(ProviderTemporaryError)
+
+      expect(fetchSpy).toHaveBeenCalledTimes(3)
     })
   })
 
@@ -220,5 +243,48 @@ describe('SumsubHttpClient', () => {
       // Timestamp should be a numeric string (unix seconds)
       expect(Number(headers['X-App-Access-Ts'])).toBeGreaterThan(0)
     })
+  })
+})
+
+describe('validateSumsubConfig', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    delete process.env.SUMSUB_API_URL
+    delete process.env.SUMSUB_APP_TOKEN
+    delete process.env.SUMSUB_SECRET_KEY
+    delete process.env.SUMSUB_LEVEL_NAME
+  })
+
+  it('throws in production when Sumsub env vars are missing', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    delete process.env.SUMSUB_API_URL
+    delete process.env.SUMSUB_APP_TOKEN
+    delete process.env.SUMSUB_SECRET_KEY
+    delete process.env.SUMSUB_LEVEL_NAME
+
+    expect(() => validateSumsubConfig()).toThrow(/Sumsub config missing/)
+  })
+
+  it('returns isMock=true in dev when creds are missing', () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    delete process.env.SUMSUB_API_URL
+    delete process.env.SUMSUB_APP_TOKEN
+    delete process.env.SUMSUB_SECRET_KEY
+    delete process.env.SUMSUB_LEVEL_NAME
+
+    const cfg = validateSumsubConfig()
+    expect(cfg.isMock).toBe(true)
+  })
+
+  it('returns isMock=false when all creds are present', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    process.env.SUMSUB_API_URL = 'https://api.sumsub.com'
+    process.env.SUMSUB_APP_TOKEN = 'app-token'
+    process.env.SUMSUB_SECRET_KEY = 'secret'
+    process.env.SUMSUB_LEVEL_NAME = 'basic-kyc-level'
+
+    const cfg = validateSumsubConfig()
+    expect(cfg.isMock).toBe(false)
+    expect(cfg.levelName).toBe('basic-kyc-level')
   })
 })

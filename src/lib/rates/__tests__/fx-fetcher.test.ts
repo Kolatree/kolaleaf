@@ -1,6 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import Decimal from 'decimal.js'
-import { DefaultFxRateProvider } from '../fx-fetcher'
+import { DefaultFxRateProvider, validateFxConfig } from '../fx-fetcher'
+import {
+  ProviderPermanentError,
+  ProviderTemporaryError,
+  ProviderTimeoutError,
+} from '@/lib/http/retry'
 
 const mockFetch = vi.fn()
 global.fetch = mockFetch
@@ -42,16 +47,30 @@ describe('DefaultFxRateProvider', () => {
       expect(url).toContain('apikey=test-api-key-123')
     })
 
-    it('throws on API error response (non-ok status)', async () => {
-      mockFetch.mockResolvedValueOnce({
+    it('throws ProviderPermanentError on 4xx (no retry)', async () => {
+      mockFetch.mockResolvedValue({
         ok: false,
         status: 401,
         statusText: 'Unauthorized',
       })
 
-      await expect(provider.fetchWholesaleRate('AUD', 'NGN')).rejects.toThrow(
-        'FX API error: 401 Unauthorized',
+      await expect(provider.fetchWholesaleRate('AUD', 'NGN')).rejects.toBeInstanceOf(
+        ProviderPermanentError,
       )
+      expect(mockFetch).toHaveBeenCalledOnce()
+    })
+
+    it('retries 5xx then surfaces ProviderTemporaryError', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 502,
+        statusText: 'Bad Gateway',
+      })
+
+      await expect(provider.fetchWholesaleRate('AUD', 'NGN')).rejects.toBeInstanceOf(
+        ProviderTemporaryError,
+      )
+      expect(mockFetch).toHaveBeenCalledTimes(3)
     })
 
     it('throws on invalid response (missing rates)', async () => {
@@ -82,21 +101,59 @@ describe('DefaultFxRateProvider', () => {
       )
     })
 
-    it('throws on fetch timeout (AbortError)', async () => {
+    it('retries on fetch AbortError then surfaces ProviderTimeoutError', async () => {
       const abortError = new DOMException('The operation was aborted', 'AbortError')
-      mockFetch.mockRejectedValueOnce(abortError)
+      mockFetch.mockRejectedValue(abortError)
 
-      await expect(provider.fetchWholesaleRate('AUD', 'NGN')).rejects.toThrow(
-        'FX API request timed out',
+      await expect(provider.fetchWholesaleRate('AUD', 'NGN')).rejects.toBeInstanceOf(
+        ProviderTimeoutError,
       )
+      expect(mockFetch).toHaveBeenCalledTimes(3)
     })
 
-    it('re-throws unexpected fetch errors', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network failure'))
+    it('retries on generic network failure then surfaces ProviderTemporaryError', async () => {
+      mockFetch.mockRejectedValue(new Error('Network failure'))
 
-      await expect(provider.fetchWholesaleRate('AUD', 'NGN')).rejects.toThrow(
-        'Network failure',
+      await expect(provider.fetchWholesaleRate('AUD', 'NGN')).rejects.toBeInstanceOf(
+        ProviderTemporaryError,
       )
+      expect(mockFetch).toHaveBeenCalledTimes(3)
     })
+  })
+})
+
+describe('validateFxConfig', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    delete process.env.FX_API_KEY
+    delete process.env.FX_API_URL
+  })
+
+  it('throws in production when FX_API_KEY/FX_API_URL are missing', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    delete process.env.FX_API_KEY
+    delete process.env.FX_API_URL
+
+    expect(() => validateFxConfig()).toThrow(
+      /FX rate provider config missing/,
+    )
+  })
+
+  it('returns isMock=true in dev when creds are missing', () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    delete process.env.FX_API_KEY
+    delete process.env.FX_API_URL
+
+    const cfg = validateFxConfig()
+    expect(cfg.isMock).toBe(true)
+  })
+
+  it('returns isMock=false when creds are present', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    process.env.FX_API_KEY = 'key'
+    process.env.FX_API_URL = 'https://api.example.com'
+
+    const cfg = validateFxConfig()
+    expect(cfg.isMock).toBe(false)
   })
 })

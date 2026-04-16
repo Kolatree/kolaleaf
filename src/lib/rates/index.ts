@@ -1,4 +1,4 @@
-export { DefaultFxRateProvider } from './fx-fetcher'
+export { DefaultFxRateProvider, validateFxConfig, fxConfig } from './fx-fetcher'
 export type { FxRateProvider } from './fx-fetcher'
 export { calculateCustomerRate, calculateReceiveAmount } from './spread'
 export { RateService, getCurrentRateByPair } from './rate-service'

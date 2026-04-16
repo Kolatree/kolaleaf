@@ -1,4 +1,11 @@
 import Decimal from 'decimal.js'
+import {
+  withRetry,
+  errorForStatus,
+  ProviderPermanentError,
+  ProviderTemporaryError,
+  ProviderTimeoutError,
+} from '../http/retry'
 
 // ─── Interface ──────────────────────────────────────
 
@@ -7,48 +14,90 @@ export interface FxRateProvider {
   fetchWholesaleRate(baseCurrency: string, targetCurrency: string): Promise<Decimal>
 }
 
-// ─── Default implementation ─────────────────────────
+// ─── Config + validation ────────────────────────────
 
 interface FxApiConfig {
   apiKey: string
   apiUrl: string
   timeoutMs?: number
+  isMock?: boolean
 }
+
+/**
+ * FX rate API config.
+ *
+ * Production: `FX_API_KEY` and `FX_API_URL` are required; missing either
+ * is a startup failure via `validateFxConfig()`.
+ *
+ * Dev/test: config may be absent. Call-sites that construct
+ * `DefaultFxRateProvider` directly with explicit creds (existing tests)
+ * are unaffected.
+ *
+ * Idempotency: GET-only, naturally idempotent — no key needed.
+ */
+export function validateFxConfig(): FxApiConfig {
+  const apiKey = process.env.FX_API_KEY
+  const apiUrl = process.env.FX_API_URL
+  const isProduction = process.env.NODE_ENV === 'production'
+
+  if (isProduction && (!apiKey || !apiUrl)) {
+    throw new Error(
+      'FX rate provider config missing in production: FX_API_KEY, FX_API_URL',
+    )
+  }
+
+  return {
+    apiKey: apiKey ?? '',
+    apiUrl: apiUrl ?? '',
+    isMock: !apiKey || !apiUrl,
+  }
+}
+
+// Module-load validation: fail fast in production if env vars are absent.
+export const fxConfig = validateFxConfig()
+
+// ─── Default implementation ─────────────────────────
 
 export class DefaultFxRateProvider implements FxRateProvider {
   readonly name = 'default-fx'
   private readonly config: FxApiConfig
 
   constructor(config?: FxApiConfig) {
-    this.config = config ?? {
-      apiKey: process.env.FX_API_KEY ?? '',
-      apiUrl: process.env.FX_API_URL ?? '',
-    }
+    this.config = config ?? fxConfig
   }
 
   async fetchWholesaleRate(baseCurrency: string, targetCurrency: string): Promise<Decimal> {
     const url = `${this.config.apiUrl}/latest?base=${baseCurrency}&symbols=${targetCurrency}&apikey=${this.config.apiKey}`
 
-    let response: Response
-    try {
-      response = await fetch(url, {
-        method: 'GET',
-        signal: AbortSignal.timeout(this.config.timeoutMs ?? 10_000),
-      })
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        throw new Error('FX API request timed out')
-      }
-      throw err
-    }
+    const data = await withRetry<{ rates?: Record<string, number> }>(
+      async (signal) => {
+        let response: Response
+        try {
+          response = await fetch(url, { method: 'GET', signal })
+        } catch (err) {
+          if (err instanceof DOMException && err.name === 'AbortError') throw err
+          throw new ProviderTemporaryError(`FX network error: ${String(err)}`)
+        }
 
-    if (!response.ok) {
-      throw new Error(`FX API error: ${response.status} ${response.statusText}`)
-    }
+        if (!response.ok) {
+          throw errorForStatus(
+            response.status,
+            `FX API error: ${response.status} ${response.statusText}`,
+          )
+        }
 
-    const data = await response.json()
+        try {
+          return (await response.json()) as { rates?: Record<string, number> }
+        } catch (err) {
+          throw new ProviderPermanentError(
+            `FX response parse error: ${String(err)}`,
+          )
+        }
+      },
+      { timeoutMs: this.config.timeoutMs ?? 10_000 },
+    )
+
     const rate = data?.rates?.[targetCurrency]
-
     if (rate == null) {
       throw new Error(`No rate returned for ${targetCurrency}`)
     }
@@ -56,3 +105,7 @@ export class DefaultFxRateProvider implements FxRateProvider {
     return new Decimal(rate)
   }
 }
+
+// Re-export the timeout error for callers that want to distinguish
+// timeout from other failures when consuming the FX provider.
+export { ProviderTimeoutError as FxTimeoutError }

@@ -9,14 +9,17 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "worker": "tsx src/workers/webhook-worker.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.7.0",
     "@prisma/client": "^7.7.0",
     "bcrypt": "^6.0.0",
+    "bullmq": "^5.74.1",
     "decimal.js": "^10.6.0",
     "dotenv": "^17.4.2",
+    "ioredis": "^5.10.1",
     "next": "16.2.3",
     "otplib": "^13.4.0",
     "pg": "^8.20.0",

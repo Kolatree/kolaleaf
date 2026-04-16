@@ -1,29 +1,40 @@
-# Review Feedback — Step 15h
+# Review Feedback — Step 15i
 Date: 2026-04-15
 Ready for Builder: YES
 
 ## Must Fix
+
 None.
 
 ## Should Fix
-- `src/app/(dashboard)/activity/[id]/page.tsx:141-146` — The synthetic `Request` dance to reuse `getSessionFromRequest` works, but it diverges from how the rest of the dashboard reads sessions. `src/app/(dashboard)/layout.tsx:14-26` uses `cookies()` + `getSessionTokenFromCookie()` + `validateSession()` directly, which is cheaper and reads more naturally in a server component. Recommendation: future pass — align `getSession()` with the layout's pattern so there is one established way to read a session from a server component. Log to BUILD-LOG if not fixed inline; not a blocker because (a) the dashboard layout already redirects unauthenticated users, so this page's `redirect('/login')` is defense-in-depth, and (b) behaviour is equivalent.
+
+- `src/workers/webhook-worker.ts:118,123` — after `verify()` succeeds, the worker re-reads `process.env.FLUTTERWAVE_WEBHOOK_SECRET!` / `PAYSTACK_SECRET_KEY!` with non-null assertions. Harmless today (verify already threw on missing, env vars don't mutate mid-function), but two lookups invite future drift. Cache the secret as a local after verify, or have `verify()` return the resolved secret. Log to BUILD-LOG if not fixed inline.
+
+- `src/workers/webhook-worker.ts` — no `worker.on('error', ...)` listener. ioredis connection errors can surface as unhandled `error` events on the Worker. Add a logging handler; BullMQ reconnects on its own. Not blocking; log to BUILD-LOG.
+
+- Test parity: only the Monoova route test was rewritten for the dispatcher path. Flutterwave / Paystack / Sumsub routes received identical treatment in code but no equivalent route-level test covers the 401-no-dispatch / 200-dispatch gate. The three new queue tests plus the Monoova route test are sufficient for this step, but a regression in one of the other three routes' sig-verify-before-dispatch ordering would slip through. Log a follow-up to bring the other three route tests to parity.
 
 ## Escalate to Architect
+
 None.
 
 ## Cleared
 
-Reviewed the five files listed in the request — `getUserTransferWithEvents` + new user-safe event projection in `src/lib/transfers/queries.ts:104-155`, exports in `src/lib/transfers/index.ts`, the server page `src/app/(dashboard)/activity/[id]/page.tsx`, the client Cancel button, and the 5 new tests.
+Reviewed the four dispatcher/queue source files, the worker, the extracted `verify-signature.ts`, all four webhook routes, and the three new queue tests plus the rewritten Monoova route test. Confirmed via `git status` / `git diff --stat` that untouched surfaces (Monoova / payout / Sumsub webhook handler internals, Prisma schema, state machine) were not modified.
 
-Checked and confirmed:
+Verified:
 
-- **Ownership**: `findFirst where: { id, userId }` → returns null for non-owners → `notFound()`. No cross-user leak path. Tests at lines 37-46 cover both "not owned" and "non-existent" cases.
-- **User-safe projection**: Transfer `select` enumerates allowed columns only; `failureReason`, `payoutProviderRef`, `payoutProvider`, `payidProviderRef`, `payidReference`, `retryCount` are all excluded. Events expose only `id, fromStatus, toStatus, actor, createdAt` — `metadata` and `actorId` omitted. Tests at lines 74-104 explicitly assert these omissions, including after direct `prisma.transfer.update` writing fake values for all the forbidden columns. Recipient projection is also bank-fields-safe (lines 106-118).
-- **Cancel gate**: Client `CANCELLABLE = {'CREATED', 'AWAITING_AUD'}` matches `VALID_TRANSITIONS` in `transitions.ts:4-5` exactly (those are the only two states with `CANCELLED` as a valid target). The cancel API at `src/app/api/transfers/[id]/cancel/route.ts` is the real gate — `InvalidTransitionError` → 409, surfaced to the user via `data.error`. `router.refresh()` on success re-fetches the server component so the status pill updates in place.
-- **Status copy**: `STATUS_TONE` covers all 13 `TransferStatus` enum values: CREATED, AWAITING_AUD, AUD_RECEIVED, PROCESSING_NGN, NGN_SENT, COMPLETED, EXPIRED, NGN_FAILED, NGN_RETRY, NEEDS_MANUAL, REFUNDED, CANCELLED, FLOAT_INSUFFICIENT. A fallback branch at page.tsx:164-170 handles any future enum additions without crashing.
-- **Design tokens**: Uses `DashboardShell`, `colors`, `radius`, `shadow`, `spacing`, `GRADIENT`. Inline hex exceptions (`#b00020`, `#8a6d0a`, `#8a4a0a`) match the existing KolaPrimitives convention for warning/error tones. No raw Tailwind colour classes.
-- **Accessibility**: `confirm()` dialog in `CancelTransferButton` matches existing pattern in `account-identity-section.tsx` (Remove email). Acceptable for now; flagging for a future design-system pass along with the rest of the confirm() call sites.
-- **Transfer ID display**: Full cuid shown at page.tsx:389 is fine — it's the user's own transfer, under their own auth.
-- **Scope**: `git diff --stat` + untracked files show exactly the five files in the brief. No drift.
+- **Route order**: `request.text()` once, JSON parse guard, secret check, signature verify BEFORE dispatch. Invalid signature → 401, no dispatcher call. Valid → dispatch + 200 `{ received: true }`. Dispatcher throw → 500 (provider retries). Bad JSON → 400.
+- **Defense-in-depth**: worker re-verifies signature per attempt against its own env-read secret before calling the handler. Does not trust the enqueued `signature` field.
+- **Secret handling**: job payload is `{ provider, rawBody, signature, receivedAt }` — no secrets on the wire. Dispatcher reads `FLUTTERWAVE_WEBHOOK_SECRET` / `PAYSTACK_SECRET_KEY` at dispatch time; worker re-reads at process time. Monoova and Sumsub handlers read their own secrets internally, matching pre-15i behavior.
+- **jobId correctness**: SHA-256 computed over `rawBody` (not `JSON.stringify(payload)`) — the 15a regression is not reintroduced. Dedup is stable across two identical rawBodies (`bullmq-dispatcher.test.ts:87-107`).
+- **Env-driven selector**: `getWebhookDispatcher()` returns `InProcessDispatcher` when `REDIS_URL` is unset OR blank-whitespace; `BullMQDispatcher` otherwise. Cached; `__resetWebhookDispatcher()` exposed for tests. No code path constructs a BullMQ `Queue` when Redis is absent.
+- **Handler call-site signatures** match every handler export:
+  - `handleMonoovaWebhook(rawBody, signature)` ✓
+  - `handleSumsubWebhook(rawBody, signature)` ✓
+  - `handleFlutterwaveWebhook(rawBody, signature, secret)` ✓
+  - `handlePaystackWebhook(rawBody, signature, secret)` ✓
+- **ioredis connection**: `maxRetriesPerRequest: null` for BullMQ compatibility, `enableReadyCheck: true`, reconnection defaults not disabled. `createRedisConnection` is reused via `BullMQDispatcher` construction; the Queue is cached in the selector so the connection is not per-dispatch.
+- **Graceful shutdown**: SIGINT/SIGTERM → `worker.close()` + `connection.quit()` + `process.exit(0)`. Production-ready; not a gap.
 
-Signal to Arch: **Step 15h is clear.**
+Signal to Arch: **Step 15i is clear.**

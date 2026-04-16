@@ -5,13 +5,131 @@
 
 ## Current Status
 
-**Active step:** 15f-2 -- 2FA setup API routes + /account UI section (review pending)
+**Active step:** 15i -- BullMQ + Redis webhook queue (review pending)
 **Last cleared:** Step 15b
 **Pending deploy:** NO
 
 ---
 
 ## Step History
+
+### Step 15i -- BullMQ + Redis webhook queue -- REVIEW PENDING
+*Date: 2026-04-15*
+
+Replaces INLINE webhook processing with a queue. Webhook routes now verify
+signatures synchronously and hand off to a dispatcher, returning 200
+immediately per the CLAUDE.md rule "Webhook handlers must be fast.
+Acknowledge immediately (200 OK), process via queue." The dispatcher
+selection is environment-driven: BullMQ when `REDIS_URL` is set,
+in-process fallback when it is not (so dev and tests never need Redis).
+
+New deps: `bullmq`, `ioredis` only. No schema migrations. No changes to
+handler internals, state machine, audit events, or idempotency logic (the
+create-as-lock pattern on `WebhookEvent` is still the authoritative
+dedup).
+
+Files changed:
+- `src/lib/queue/webhook-dispatcher.ts` (new) -- `WebhookProvider`,
+  `WebhookJob`, `WebhookDispatcher` interface, `WEBHOOK_QUEUE_NAME`
+  constant.
+- `src/lib/queue/in-process-dispatcher.ts` (new) -- `InProcessDispatcher`
+  calls the provider handler directly in-process. Used when `REDIS_URL`
+  is absent. Throws if Flutterwave/Paystack secrets are missing
+  (symmetric with the route-layer checks).
+- `src/lib/queue/bullmq-dispatcher.ts` (new) -- `BullMQDispatcher` wraps
+  a `Queue('webhooks')`. Job opts locked to
+  `{attempts:5, backoff:{type:'exponential', delay:2000},
+  removeOnComplete:1000, removeOnFail:5000}`. `jobId` = SHA-256 of
+  `rawBody`, so identical provider retries dedup at enqueue. Uses
+  `maxRetriesPerRequest:null` on the ioredis connection (BullMQ
+  requirement for blocking ops).
+- `src/lib/queue/index.ts` (new) -- `getWebhookDispatcher()` selector
+  lazily picks the implementation at first call and caches. Exposes
+  `__resetWebhookDispatcher()` for tests.
+- `src/lib/payments/payout/verify-signature.ts` (new) -- exported
+  `verifyFlutterwaveSignature` and `verifyPaystackSignature` so the
+  routes can reject invalid signatures BEFORE enqueue (junk-payload DoS
+  gate). Logic matches what lived inline in `payout/webhooks.ts`.
+- `src/app/api/webhooks/monoova/route.ts` -- verifies signature with
+  `verifyMonoovaSignature`, dispatches `{provider:'monoova', rawBody,
+  signature, receivedAt}`, returns 200. 401 on bad sig (no dispatch),
+  400 on bad JSON, 500 if the dispatcher throws (Redis unreachable ->
+  provider retries).
+- `src/app/api/webhooks/flutterwave/route.ts` -- same pattern with
+  `verifyFlutterwaveSignature`.
+- `src/app/api/webhooks/paystack/route.ts` -- same pattern with
+  `verifyPaystackSignature`.
+- `src/app/api/webhooks/sumsub/route.ts` -- same pattern with
+  `verifySumsubSignature`.
+- `src/workers/webhook-worker.ts` (new) -- standalone BullMQ worker.
+  Re-verifies the signature (defense-in-depth: routes verify once,
+  worker verifies again per attempt). Dispatches by `provider` to the
+  same handlers the in-process dispatcher uses. Structured JSON logs for
+  start/success/failure. Concurrency via `WEBHOOK_WORKER_CONCURRENCY`
+  (default 4). Graceful SIGINT/SIGTERM shutdown.
+- `package.json` -- `"worker": "tsx src/workers/webhook-worker.ts"`
+  script, plus bullmq/ioredis deps.
+- `.env`, `.env.example` -- `REDIS_URL=` (blank) with a comment
+  explaining the in-process fallback.
+- `tests/lib/queue/in-process-dispatcher.test.ts` (new, 7 tests) -- each
+  provider routes to the right handler, errors bubble, missing secrets
+  throw.
+- `tests/lib/queue/bullmq-dispatcher.test.ts` (new, 7 tests) -- Queue
+  constructed with `'webhooks'`, correct job opts, SHA-256 rawBody
+  jobId, stable jobIds for identical payloads, connection passthrough,
+  close().
+- `tests/lib/queue/selector.test.ts` (new, 5 tests) -- in-process when
+  `REDIS_URL` absent/blank, BullMQ when set, caching, reset.
+- `tests/app/api/webhooks/monoova.test.ts` -- updated: mocks the
+  dispatcher, asserts (1) invalid sig returns 401 WITHOUT dispatch,
+  (2) valid sig dispatches and returns 200, (3) dispatcher throwing
+  returns 500, (4) missing secret returns 500 without verification,
+  (5) bad JSON returns 400.
+
+Decisions made:
+- **Signature verification at BOTH route and worker layers.** Route
+  verification is the DoS gate (don't enqueue junk). Worker verification
+  is defense-in-depth against a compromised producer. CPU cost of the
+  second HMAC is negligible.
+- **SHA-256(rawBody) jobId.** BullMQ rejects duplicate jobIds at enqueue.
+  This is a second layer on top of the handler's `WebhookEvent` unique
+  constraint. Ensures provider retries of the same body don't create
+  duplicate jobs.
+- **Lazy dispatcher selection** (`getWebhookDispatcher()` caches on first
+  call). Tests can call `__resetWebhookDispatcher()` to re-evaluate
+  `REDIS_URL` between cases.
+- **Per-provider secret reads in `InProcessDispatcher`** rather than
+  threading them through `WebhookJob`. Secrets never serialize to the
+  queue; the worker reads them from env per attempt, same shape.
+- **`WEBHOOK_JOB_OPTS` exported** so the worker config stays in one
+  place and the test can assert against the exact object.
+- **No handler changes.** The four handlers still own signature-check
+  as their first step (they're called by the worker too). The route's
+  pre-enqueue check is an additional edge layer, not a replacement.
+
+Local dev Redis (when you WANT to exercise the queue path):
+```
+docker run --name kolaleaf-redis -p 6379:6379 -d redis:7
+export REDIS_URL=redis://localhost:6379
+npm run worker        # in one terminal
+npm run dev           # in another
+```
+
+Leave `REDIS_URL` blank for normal dev/tests -- the in-process
+dispatcher is transparent to callers.
+
+Phase D results:
+- `npx tsc --noEmit` -- 0 errors
+- `npm test -- --run` -- 80 files, 565 tests passed (545 pre-existing +
+  20 new queue/route tests)
+- Manual smoke (REDIS_URL unset, signed monoova payload via `POST`):
+  valid sig -> 200 `{received:true}`, invalid sig -> 401. In-process
+  dispatcher invoked the handler exactly as before.
+
+Reviewer findings: [pending review]
+Deploy: N/A
+
+---
 
 ### Step 15f-2 -- 2FA setup API routes + /account UI section -- REVIEW PENDING
 *Date: 2026-04-15*

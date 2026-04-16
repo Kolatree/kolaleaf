@@ -135,12 +135,20 @@ async function processJob(job: Job<WebhookJob>): Promise<void> {
   log('info', 'webhook.job.success', { jobId: job.id, provider })
 }
 
-function main(): Worker<WebhookJob> {
-  const redisUrl = process.env.REDIS_URL
-  if (!redisUrl) {
-    throw new Error('REDIS_URL is required to run the webhook worker')
-  }
+// Module-scoped guard so booting in-process (via Next.js instrumentation)
+// is idempotent — the worker is constructed at most once per Node process,
+// even if `bootInProcess()` is called more than once during dev hot-reload.
+let inProcessWorker: Worker<WebhookJob> | undefined
 
+interface CreatedWorker {
+  worker: Worker<WebhookJob>
+  connection: ReturnType<typeof createRedisConnection>
+}
+
+// Build the worker + ioredis connection. Caller decides whether to attach
+// process-level shutdown handlers (standalone main) or let the host
+// runtime manage lifecycle (Next.js instrumentation).
+function createWebhookWorker(redisUrl: string): CreatedWorker {
   const connection = createRedisConnection(redisUrl)
 
   const worker = new Worker<WebhookJob>(WEBHOOK_QUEUE_NAME, processJob, {
@@ -168,6 +176,58 @@ function main(): Worker<WebhookJob> {
     log('error', 'webhook.worker.error', { error: err.message })
   })
 
+  return { worker, connection }
+}
+
+// Boot the worker in the same Node process as the Next.js server. Called
+// from `src/instrumentation.ts` so a single Railway service handles HTTP +
+// queue consumption. Idempotent — repeated calls are no-ops.
+//
+// Returns null when REDIS_URL is absent (dev/test). The dispatcher in
+// `src/lib/queue/index.ts` runs in-process under the same condition, so
+// the system stays consistent: with Redis, real queue + real worker;
+// without Redis, no queue at all.
+export function bootInProcessWorker(): Worker<WebhookJob> | null {
+  if (inProcessWorker) return inProcessWorker
+
+  const redisUrl = process.env.REDIS_URL
+  if (!redisUrl) {
+    log('info', 'webhook.worker.skip', {
+      reason: 'REDIS_URL not set; in-process dispatcher will handle webhooks',
+    })
+    return null
+  }
+
+  const { worker, connection } = createWebhookWorker(redisUrl)
+  inProcessWorker = worker
+
+  // Graceful shutdown when the host process receives a termination signal
+  // (Railway sends SIGTERM on deploy). We close the worker so in-flight
+  // jobs drain, then quit the Redis connection. We do NOT call
+  // process.exit — let the host runtime decide when to exit.
+  const shutdown = async (signal: string) => {
+    log('info', 'webhook.worker.shutdown', { signal })
+    try {
+      await worker.close()
+      await connection.quit()
+    } catch (err) {
+      log('error', 'webhook.worker.shutdown.error', { error: String(err) })
+    }
+  }
+  process.once('SIGINT', () => void shutdown('SIGINT'))
+  process.once('SIGTERM', () => void shutdown('SIGTERM'))
+
+  return worker
+}
+
+function main(): Worker<WebhookJob> {
+  const redisUrl = process.env.REDIS_URL
+  if (!redisUrl) {
+    throw new Error('REDIS_URL is required to run the webhook worker')
+  }
+
+  const { worker, connection } = createWebhookWorker(redisUrl)
+
   const shutdown = async (signal: string) => {
     log('info', 'webhook.worker.shutdown', { signal })
     await worker.close()
@@ -181,7 +241,8 @@ function main(): Worker<WebhookJob> {
   return worker
 }
 
-// Run when invoked directly (not when imported).
+// Run when invoked directly via `npm run worker` (kept for local debugging
+// and as a fallback if we ever split the worker into its own service).
 if (require.main === module) {
   main()
 }

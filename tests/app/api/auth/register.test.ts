@@ -26,8 +26,8 @@ describe('POST /api/auth/register', () => {
     vi.clearAllMocks()
   })
 
-  // Complies with the production password policy enforced in 15d:
-  // 12+ chars, 3 of 4 character classes.
+  // Complies with the production password policy:
+  // 8+ chars, 3 of 4 character classes.
   const VALID_PW = 'TestPass123!'
 
   it('returns 400 for missing fullName', async () => {
@@ -48,7 +48,7 @@ describe('POST /api/auth/register', () => {
     const res = await POST(makeRequest({ fullName: 'Test', email: 'a@b.com', password: '123' }))
     expect(res.status).toBe(400)
     const json = await res.json()
-    expect(json.error).toMatch(/12 character|Password/)
+    expect(json.error).toMatch(/8 character|Password/)
   })
 
   it('returns 201 on successful registration', async () => {

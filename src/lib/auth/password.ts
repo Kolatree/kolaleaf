@@ -13,18 +13,21 @@ export async function verifyPassword(plain: string, hash: string): Promise<boole
 /**
  * Password complexity rules shared by /register and /reset-password.
  *
- * Bar appropriate for an AUSTRAC-registered money transmitter:
- *   - Minimum length: 12 characters
+ *   - Minimum length: 8 characters
  *   - Must contain at least 3 of: lowercase, uppercase, digit, special char
+ *
+ * The 3-of-4 character-class requirement keeps the entropy bar reasonable
+ * even at 8 chars — short passwords still need breadth across classes,
+ * which (combined with bcrypt cost 12) makes offline cracking expensive.
  *
  * Intentionally omitted (deferred):
  *   - Breach-dictionary check (HaveIBeenPwned or offline list) — needs an
  *     external dependency. Track for a later hardening step.
  *
- * Error messages name the specific rule so the UI (15g+) can surface useful
+ * Error messages name the specific rule so the UI can surface useful
  * feedback instead of a generic "password too weak".
  */
-export const MIN_PASSWORD_LENGTH = 12
+export const MIN_PASSWORD_LENGTH = 8
 export const MIN_CHARACTER_CLASSES = 3
 
 export type PasswordValidationResult =

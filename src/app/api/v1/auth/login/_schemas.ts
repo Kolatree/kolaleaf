@@ -1,16 +1,26 @@
 import { z } from 'zod'
 import { registry } from '@/lib/openapi/registry'
-import { ErrorEnvelope, ValidationErrorEnvelope } from '@/lib/schemas/common'
+import {
+  Email,
+  ErrorEnvelope,
+  ValidationErrorEnvelope,
+} from '@/lib/schemas/common'
 
 // POST /api/v1/auth/login
 //
-// `identifier` intentionally stays as a bare non-empty string — today it
-// is an email, but Step 21 replaces this with a discriminated-union
-// identifier body (email | phone | apple | google). Keeping the schema
-// loose here avoids a breaking contract churn when 21 lands.
+// Step 21: `identifier` is now a discriminated-union object with
+// `type` + `value`. Only `type: 'email'` is implemented today —
+// Apple/Google sign-in will widen this schema when those routes
+// land. Keeping the body narrow prevents advertising OAuth types
+// we don't actually authenticate.
+
+export const LoginIdentifier = z.object({
+  type: z.literal('email'),
+  value: Email,
+})
 
 export const LoginBody = z.object({
-  identifier: z.string().trim().min(1, 'Email is required'),
+  identifier: LoginIdentifier,
   password: z.string().min(1, 'Password is required'),
 })
 

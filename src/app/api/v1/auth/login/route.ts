@@ -15,8 +15,10 @@ export async function POST(request: Request) {
   const userAgent = request.headers.get('user-agent') ?? undefined
 
   try {
+    // Email is already trimmed + lowercased by the Email primitive in
+    // common.ts, so identifier.value arrives normalised.
     const { user, session, requires2FA } = await loginUser({
-      identifier: identifier.trim().toLowerCase(),
+      identifier: identifier.value,
       password,
       ip,
       userAgent,

@@ -32,6 +32,12 @@ function makeRequest(body: unknown): Request {
   })
 }
 
+// Step 21: identifier is now a discriminated union, email-only today.
+const validBody = (email = 'a@b.com', password = 'TestPass123!') => ({
+  identifier: { type: 'email', value: email },
+  password,
+})
+
 describe('POST /api/v1/auth/login', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -47,14 +53,37 @@ describe('POST /api/v1/auth/login', () => {
   })
 
   it('returns 422 for missing password (Zod)', async () => {
-    const res = await POST(makeRequest({ identifier: 'a@b.com' }))
+    const res = await POST(
+      makeRequest({ identifier: { type: 'email', value: 'a@b.com' } }),
+    )
     expect(res.status).toBe(422)
     const json = await res.json()
     expect(json.fields?.password).toBeInstanceOf(Array)
   })
 
-  it('returns 422 when identifier is wrong type', async () => {
-    const res = await POST(makeRequest({ identifier: 123, password: '12345678' }))
+  it('returns 422 for legacy bare-string identifier (Step 21 contract)', async () => {
+    const res = await POST(makeRequest({ identifier: 'a@b.com', password: 'x' }))
+    expect(res.status).toBe(422)
+  })
+
+  it('returns 422 for malformed email inside the union', async () => {
+    const res = await POST(
+      makeRequest({
+        identifier: { type: 'email', value: 'not-an-email' },
+        password: 'x',
+      }),
+    )
+    expect(res.status).toBe(422)
+  })
+
+  it('returns 422 for unsupported identifier type', async () => {
+    // Only type: 'email' is implemented today; schema narrows there.
+    const res = await POST(
+      makeRequest({
+        identifier: { type: 'google', value: 'tok' },
+        password: 'x',
+      }),
+    )
     expect(res.status).toBe(422)
   })
 
@@ -75,12 +104,25 @@ describe('POST /api/v1/auth/login', () => {
       twoFactorMethod: 'NONE',
     })
 
-    const res = await POST(makeRequest({ identifier: 'a@b.com', password: 'TestPass123!' }))
+    const res = await POST(makeRequest(validBody()))
     expect(res.status).toBe(200)
     const json = await res.json()
     expect(json.user.id).toBe('u1')
     expect(json.requires2FA).toBe(false)
     expect(res.headers.get('Set-Cookie')).toContain('kolaleaf_session')
+  })
+
+  it('passes the normalised email (identifier.value) into loginUser', async () => {
+    mockLogin.mockResolvedValue({
+      user: { id: 'u1', fullName: 'Test' } as never,
+      session: { token: 'tok' } as never,
+      requires2FA: false,
+      twoFactorMethod: 'NONE',
+    })
+    await POST(makeRequest(validBody('  A@B.COM  ')))
+    expect(mockLogin).toHaveBeenCalledWith(
+      expect.objectContaining({ identifier: 'a@b.com' }),
+    )
   })
 
   it('returns requires2FA true when user has TOTP enabled', async () => {
@@ -91,7 +133,7 @@ describe('POST /api/v1/auth/login', () => {
       twoFactorMethod: 'TOTP',
     })
 
-    const res = await POST(makeRequest({ identifier: 'a@b.com', password: 'TestPass123!' }))
+    const res = await POST(makeRequest(validBody()))
     const json = await res.json()
     expect(json.requires2FA).toBe(true)
   })
@@ -99,7 +141,7 @@ describe('POST /api/v1/auth/login', () => {
   it('returns 401 for invalid credentials', async () => {
     mockLogin.mockRejectedValue(new Error('Invalid credentials'))
 
-    const res = await POST(makeRequest({ identifier: 'a@b.com', password: 'wrong' }))
+    const res = await POST(makeRequest(validBody('a@b.com', 'wrong')))
     expect(res.status).toBe(401)
   })
 
@@ -108,14 +150,12 @@ describe('POST /api/v1/auth/login', () => {
       new EmailNotVerifiedError({ userId: 'u1', email: 'a@b.com', fullName: 'Test User' }),
     )
 
-    const res = await POST(makeRequest({ identifier: 'a@b.com', password: 'TestPass123!' }))
+    const res = await POST(makeRequest(validBody()))
     expect(res.status).toBe(202)
     const json = await res.json()
     expect(json.requiresVerification).toBe(true)
     expect(json.email).toBe('a@b.com')
-    // Critical: no session cookie issued — caller must verify first.
     expect(res.headers.get('Set-Cookie')).toBeNull()
-    // A fresh code should have been triggered.
     expect(mockIssue).toHaveBeenCalledWith({
       userId: 'u1',
       email: 'a@b.com',
@@ -129,7 +169,7 @@ describe('POST /api/v1/auth/login', () => {
     )
     mockIssue.mockRejectedValueOnce(new Error('Resend down'))
 
-    const res = await POST(makeRequest({ identifier: 'a@b.com', password: 'TestPass123!' }))
+    const res = await POST(makeRequest(validBody()))
     expect(res.status).toBe(202)
     const json = await res.json()
     expect(json.requiresVerification).toBe(true)

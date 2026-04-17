@@ -9,6 +9,8 @@ import {
   DecimalString,
   SuccessEnvelope,
   ErrorEnvelope,
+  IdentifierInput,
+  IDENTIFIER_TYPE_TO_PRISMA,
 } from '@/lib/schemas/common'
 import { z } from 'zod'
 
@@ -66,5 +68,28 @@ describe('common schema primitives', () => {
     const v = ErrorEnvelope.parse({ error: 'Nope', reason: 'bad_request' })
     expect(v.reason).toBe('bad_request')
     expect(v.error).toBe('Nope')
+  })
+
+  it('IdentifierInput accepts email + phone, rejects invalid discriminator', () => {
+    expect(IdentifierInput.parse({ type: 'email', value: 'a@b.com' })).toMatchObject({
+      type: 'email',
+      value: 'a@b.com',
+    })
+    expect(IdentifierInput.parse({ type: 'phone', value: '+61412345678' })).toMatchObject({
+      type: 'phone',
+    })
+    expect(() => IdentifierInput.parse({ type: 'bogus', value: 'x' })).toThrow()
+  })
+
+  it('IdentifierInput validates value against its type', () => {
+    expect(() => IdentifierInput.parse({ type: 'email', value: 'not-email' })).toThrow()
+    expect(() => IdentifierInput.parse({ type: 'phone', value: '0412345678' })).toThrow()
+  })
+
+  it('IDENTIFIER_TYPE_TO_PRISMA maps wire-format to Prisma enum', () => {
+    expect(IDENTIFIER_TYPE_TO_PRISMA.email).toBe('EMAIL')
+    expect(IDENTIFIER_TYPE_TO_PRISMA.phone).toBe('PHONE')
+    expect(IDENTIFIER_TYPE_TO_PRISMA.apple).toBe('APPLE')
+    expect(IDENTIFIER_TYPE_TO_PRISMA.google).toBe('GOOGLE')
   })
 })

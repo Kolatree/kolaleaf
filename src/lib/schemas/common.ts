@@ -95,3 +95,28 @@ export const ValidationErrorEnvelope = z.object({
   reason: z.literal('validation_failed'),
   fields: z.record(z.string(), z.array(z.string())),
 })
+
+// Polymorphic identifier shape for auth flows. Wire-format `type` is
+// lowercase (REST/OpenAPI convention); callers translate to Prisma's
+// uppercase IdentifierType enum via IDENTIFIER_TYPE_TO_PRISMA below.
+// Individual route schemas narrow this to the set of types they
+// actually handle — advertising google/apple in a route that only
+// implements email would be a spec lie.
+export const IdentifierTypeValue = z.enum(['email', 'phone', 'apple', 'google'])
+
+export const IdentifierInput = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('email'), value: Email }),
+  z.object({ type: z.literal('phone'), value: Phone }),
+  z.object({ type: z.literal('apple'), value: z.string().min(1) }),
+  z.object({ type: z.literal('google'), value: z.string().min(1) }),
+])
+
+// Lowercase wire-format -> Prisma uppercase enum. `satisfies` ensures
+// the keyset matches IdentifierTypeValue exhaustively — drop a type
+// or add one and tsc breaks at this declaration.
+export const IDENTIFIER_TYPE_TO_PRISMA = {
+  email: 'EMAIL',
+  phone: 'PHONE',
+  apple: 'APPLE',
+  google: 'GOOGLE',
+} as const satisfies Record<z.infer<typeof IdentifierTypeValue>, string>

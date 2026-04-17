@@ -16,21 +16,24 @@ import { ChangePasswordBody } from './_schemas'
 // existing one. On success every OTHER session for this user is deleted
 // (force-logout other devices) and an AuthEvent is recorded.
 export async function POST(request: Request) {
-  const parsed = await parseBody(request, ChangePasswordBody)
-  if (!parsed.ok) return parsed.response
-  const { currentPassword, newPassword: rawNewPassword } = parsed.data
-
-  // Password-complexity check (char-class mix) isn't covered by the
-  // length-only Zod Password primitive. Keep the helper for defense-
-  // in-depth.
-  const pwCheck = validatePasswordComplexity(rawNewPassword)
-  if (!pwCheck.ok) {
-    return NextResponse.json({ error: pwCheck.error }, { status: 400 })
-  }
-  const newPassword = pwCheck.password
-
   try {
+    // Auth before parseBody — schema 422 from an unauth caller would
+    // leak endpoint existence and body shape.
     const { userId, session } = await requireAuth(request)
+
+    const parsed = await parseBody(request, ChangePasswordBody)
+    if (!parsed.ok) return parsed.response
+    const { currentPassword, newPassword: rawNewPassword } = parsed.data
+
+    // Password-complexity check (char-class mix) isn't covered by the
+    // length-only Zod Password primitive. Keep the helper for defense-
+    // in-depth.
+    const pwCheck = validatePasswordComplexity(rawNewPassword)
+    if (!pwCheck.ok) {
+      return NextResponse.json({ error: pwCheck.error }, { status: 400 })
+    }
+    const newPassword = pwCheck.password
+
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } })
 
     if (!user.passwordHash) {

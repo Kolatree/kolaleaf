@@ -6,17 +6,18 @@ import { parseBody } from '@/lib/http/validate'
 import { CreateTransferBody } from './_schemas'
 
 export async function POST(request: Request) {
-  const parsed = await parseBody(request, CreateTransferBody)
-  if (!parsed.ok) return parsed.response
-  const { recipientId, corridorId, sendAmount, exchangeRate, fee } = parsed.data
-
   try {
-    // Email verification must land before KYC — an unverified email means we
-    // can't safely contact the user about their transfer (failure, refund,
-    // compliance holds). This is additive: existing callers who are already
-    // KYC-verified will also have been email-verified at signup.
+    // Auth MUST run before Zod — a 422 on a schema failure from an
+    // unauthenticated caller leaks endpoint existence and body shape.
+    // Email verification lands before KYC because we can't safely
+    // contact the user about a transfer (failure, refund, compliance
+    // holds) without a verified email. Matches admin/rates ordering.
     await requireEmailVerified(request)
     const { userId } = await requireKyc(request)
+
+    const parsed = await parseBody(request, CreateTransferBody)
+    if (!parsed.ok) return parsed.response
+    const { recipientId, corridorId, sendAmount, exchangeRate, fee } = parsed.data
 
     const transfer = await createTransfer({
       userId,

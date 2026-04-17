@@ -43,6 +43,9 @@ function makeRequest(body: unknown, opts: { userId?: string } = {}): Request {
 describe('POST /api/v1/recipients/resolve', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Auth runs before parseBody; schema-validation cases need a
+    // passing auth mock so parseBody is reached.
+    mockRequireAuth.mockResolvedValue({ userId: 'u1' } as never)
   })
 
   it('returns 400 malformed_json on invalid JSON', async () => {

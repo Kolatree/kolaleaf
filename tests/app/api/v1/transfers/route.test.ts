@@ -23,6 +23,7 @@ vi.mock('@/lib/auth/middleware', () => ({
 }))
 
 import { POST } from '@/app/api/v1/transfers/route'
+import { requireKyc, requireEmailVerified } from '@/lib/auth/middleware'
 
 function postRequest(body: unknown): Request {
   return new Request('http://localhost/api/v1/transfers', {
@@ -35,6 +36,10 @@ function postRequest(body: unknown): Request {
 describe('POST /api/v1/transfers (schema validation)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Auth runs before parseBody; schema-validation cases need passing
+    // auth mocks so parseBody is reached.
+    vi.mocked(requireEmailVerified).mockResolvedValue(undefined as never)
+    vi.mocked(requireKyc).mockResolvedValue({ userId: 'u1' } as never)
   })
 
   it('returns 400 malformed_json for invalid JSON', async () => {

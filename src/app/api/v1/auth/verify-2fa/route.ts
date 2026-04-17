@@ -16,12 +16,15 @@ import { Verify2faBody } from './_schemas'
 // On success writes an AuthEvent with metadata.method indicating which path
 // verified (TOTP, SMS, or BACKUP_CODE). Backup codes are consumed on use.
 export async function POST(request: Request) {
-  const parsed = await parseBody(request, Verify2faBody)
-  if (!parsed.ok) return parsed.response
-  const { code, challengeId } = parsed.data
-
   try {
+    // Auth before parseBody — schema 422 from an unauth caller would
+    // leak endpoint existence and body shape.
     const { userId } = await requireAuth(request)
+
+    const parsed = await parseBody(request, Verify2faBody)
+    if (!parsed.ok) return parsed.response
+    const { code, challengeId } = parsed.data
+
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } })
 
     if (user.twoFactorMethod === 'NONE') {

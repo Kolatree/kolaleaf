@@ -5,12 +5,14 @@ import { parseBody } from '@/lib/http/validate'
 import { CreateRecipientBody } from './_schemas'
 
 export async function POST(request: Request) {
-  const parsed = await parseBody(request, CreateRecipientBody)
-  if (!parsed.ok) return parsed.response
-  const { fullName, bankName, bankCode, accountNumber } = parsed.data
-
   try {
+    // Auth before parseBody — schema 422 from an unauth caller would
+    // leak endpoint existence and body shape.
     const { userId } = await requireAuth(request)
+
+    const parsed = await parseBody(request, CreateRecipientBody)
+    if (!parsed.ok) return parsed.response
+    const { fullName, bankName, bankCode, accountNumber } = parsed.data
 
     const recipient = await prisma.recipient.create({
       data: {

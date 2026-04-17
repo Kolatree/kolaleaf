@@ -6,6 +6,7 @@ import {
   Postcode,
   Phone,
   CurrencyCode,
+  DecimalString,
   SuccessEnvelope,
   ErrorEnvelope,
 } from '@/lib/schemas/common'
@@ -43,6 +44,16 @@ describe('common schema primitives', () => {
   it('CurrencyCode rejects lowercase `usd`, accepts `USD`', () => {
     expect(() => CurrencyCode.parse('usd')).toThrow()
     expect(CurrencyCode.parse('USD')).toBe('USD')
+  })
+
+  it('DecimalString rejects negative, empty, and non-numeric input', () => {
+    expect(() => DecimalString.parse('-1')).toThrow()
+    expect(() => DecimalString.parse('-0.5')).toThrow()
+    expect(() => DecimalString.parse('')).toThrow()
+    expect(() => DecimalString.parse('abc')).toThrow()
+    expect(DecimalString.parse('100')).toBe('100')
+    expect(DecimalString.parse('0.5')).toBe('0.5')
+    expect(DecimalString.parse(42)).toBe('42')
   })
 
   it('SuccessEnvelope wraps arbitrary data of a given inner schema', () => {

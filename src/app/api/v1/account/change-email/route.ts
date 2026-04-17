@@ -18,12 +18,15 @@ import { ChangeEmailBody } from './_schemas'
 // DELETE /api/account/email/[id], so the user cannot lock themselves out
 // by fat-fingering the new address.
 export async function POST(request: Request) {
-  const parsed = await parseBody(request, ChangeEmailBody)
-  if (!parsed.ok) return parsed.response
-  const { currentPassword, newEmail } = parsed.data
-
   try {
+    // Auth before parseBody — schema 422 from an unauth caller would
+    // leak endpoint existence and body shape.
     const { userId } = await requireAuth(request)
+
+    const parsed = await parseBody(request, ChangeEmailBody)
+    if (!parsed.ok) return parsed.response
+    const { currentPassword, newEmail } = parsed.data
+
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } })
 
     if (!user.passwordHash) {

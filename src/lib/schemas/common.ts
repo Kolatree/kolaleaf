@@ -55,12 +55,13 @@ export const Cuid = z.string().min(1)
 
 // Amount string. Prisma `Decimal` is stored via its string constructor,
 // so the API accepts either a string or a number and normalises to
-// string. Negative / NaN rejected; precision preserved by the string
-// path.
+// string. Negative and NaN rejected; precision preserved by the string
+// path. Money flows in this codebase are always non-negative — refunds
+// are modeled as separate ledger rows, not sign flips.
 export const DecimalString = z.union([z.string(), z.number()]).transform((v, ctx) => {
   const s = String(v).trim()
-  if (s.length === 0 || !/^-?\d+(\.\d+)?$/.test(s)) {
-    ctx.addIssue({ code: 'custom', message: 'Must be a numeric string' })
+  if (s.length === 0 || !/^\d+(\.\d+)?$/.test(s)) {
+    ctx.addIssue({ code: 'custom', message: 'Must be a non-negative numeric string' })
     return z.NEVER
   }
   return s

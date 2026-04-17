@@ -45,6 +45,8 @@ describe('GET /api/v1/openapi', () => {
     const keys = Object.keys(doc.paths)
     // `/api/v1/openapi` itself is the meta endpoint and is NOT part of
     // the 41 data routes it describes — brief counts 41 excluding it.
-    expect(keys.length).toBeGreaterThanOrEqual(41)
+    // Exact match gates the contract: an accidental double-registration
+    // or an unexpected new path will break this test loudly.
+    expect(keys.length).toBe(41)
   })
 })

@@ -49,12 +49,14 @@ function checkRateLimit(userId: string): boolean {
 }
 
 export async function POST(request: Request) {
-  const parsed = await parseBody(request, ResolveRecipientBody)
-  if (!parsed.ok) return parsed.response
-  const { bankCode, accountNumber } = parsed.data
-
   try {
+    // Auth before parseBody — schema 422 from an unauth caller would
+    // leak endpoint existence and body shape.
     const { userId } = await requireAuth(request)
+
+    const parsed = await parseBody(request, ResolveRecipientBody)
+    if (!parsed.ok) return parsed.response
+    const { bankCode, accountNumber } = parsed.data
 
     if (!checkRateLimit(userId)) {
       return NextResponse.json(

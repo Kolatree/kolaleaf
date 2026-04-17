@@ -104,6 +104,12 @@ model User {
   postcode     String?
   country      String?
   referralCode  String           @unique @default(cuid())
+  // Soft-delete marker (Step 25). NULL means the user is live; a
+  // timestamp means the row is archived and is hidden from the
+  // default query filter in src/lib/db/client.ts. We never hard-
+  // delete User rows because AuthEvent has onDelete: Restrict and
+  // AUSTRAC requires a 7-year audit chain.
+  deletedAt     DateTime?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
   identifiers   UserIdentifier[]

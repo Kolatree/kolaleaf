@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { AdminShell, FieldLabel, colors, radius, shadow, spacing, GRADIENT } from '@/components/design/KolaPrimitives'
+import { apiFetch } from '@/lib/http/api-client'
 
 interface RateEntry {
   id: string
@@ -43,7 +44,7 @@ export default function AdminRatesPage() {
 
   async function fetchRates() {
     setLoading(true)
-    const res = await fetch('/api/admin/rates')
+    const res = await apiFetch('admin/rates')
     if (res.ok) {
       const data = await res.json()
       setRates(data.rates ?? [])
@@ -64,7 +65,7 @@ export default function AdminRatesPage() {
     setSubmitError(null)
     setSubmitSuccess(false)
 
-    const res = await fetch('/api/admin/rates', {
+    const res = await apiFetch('admin/rates', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

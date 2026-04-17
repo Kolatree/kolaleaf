@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { AdminShell, colors, radius, shadow, GRADIENT } from '@/components/design/KolaPrimitives'
+import { apiFetch } from '@/lib/http/api-client'
 
 const STATUSES = [
   'ALL', 'CREATED', 'AWAITING_AUD', 'AUD_RECEIVED', 'PROCESSING_NGN',
@@ -49,7 +50,7 @@ export default function AdminTransfersPage() {
     if (search) params.set('search', search)
     if (cursor) params.set('cursor', cursor)
 
-    const res = await fetch(`/api/admin/transfers?${params}`)
+    const res = await apiFetch(`admin/transfers?${params}`)
     if (res.ok) {
       const data = await res.json()
       if (cursor) setTransfers((prev) => [...prev, ...data.transfers])

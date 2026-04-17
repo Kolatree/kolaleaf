@@ -12,6 +12,7 @@ import {
   type as typeT,
   GRADIENT,
 } from '@/components/design/KolaPrimitives'
+import { apiFetch } from '@/lib/http/api-client'
 
 // Fallback rate matches the approved sketch (1 AUD = 1,042.50 NGN).
 // Overridden by a live fetch if the public endpoint is reachable.
@@ -25,7 +26,7 @@ export function LandingPage() {
     let cancelled = false
     async function fetchRate() {
       try {
-        const res = await fetch('/api/rates/public?base=AUD&target=NGN')
+        const res = await apiFetch('rates/public?base=AUD&target=NGN')
         if (res.ok) {
           const data = await res.json()
           const val = parseFloat(data.customerRate)

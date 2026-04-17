@@ -27,7 +27,7 @@ export default function RegisterPage() {
     e.preventDefault()
     const normalized = email.trim().toLowerCase()
     await submit({
-      endpoint: '/api/auth/send-code',
+      endpoint: 'auth/send-code',
       body: { email: normalized },
       onOk: () => {
         // /send-code is enumeration-proof: always 200. We unconditionally

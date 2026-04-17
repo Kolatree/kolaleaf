@@ -31,7 +31,7 @@ function RegisterVerifyInner() {
     e.preventDefault()
     setInfo('')
     await verify.submit({
-      endpoint: '/api/auth/verify-code',
+      endpoint: 'auth/verify-code',
       body: { email, code },
       onOk: () => router.push(`/register/details?email=${encodeURIComponent(email)}`),
       onFail: (data) => {
@@ -55,7 +55,7 @@ function RegisterVerifyInner() {
     // /send-code is always 200. Show the friendly confirmation regardless
     // of whether a code was actually dispatched.
     await resend.submit({
-      endpoint: '/api/auth/send-code',
+      endpoint: 'auth/send-code',
       body: { email },
       onOk: () => setInfo('If this email is on file, a new code is on its way.'),
     })

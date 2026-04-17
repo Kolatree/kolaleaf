@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { colors, radius, shadow, spacing } from '@/components/design/KolaPrimitives'
+import { apiFetch } from '@/lib/http/api-client'
 
 // Displays the user's name + primary email (with verified/unverified badge),
 // any secondary email identifiers, and provides the entry points for the
 // three self-service flows: change password, change email, remove email.
 //
-// Reads the extended /api/account/me response added in 15g. All action
+// Reads the extended /api/v1/account/me response added in 15g. All action
 // dispatching is done inline to keep the surface contained; no global state.
 
 type MeResponse = {
@@ -79,7 +80,7 @@ export function AccountIdentitySection() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch('/api/account/me')
+      const res = await apiFetch('account/me')
       if (res.status === 401) {
         window.location.href = '/login'
         return
@@ -213,7 +214,7 @@ function ChangePasswordForm({ onDone }: { onDone: () => void }) {
     }
     setBusy(true)
     try {
-      const res = await fetch('/api/account/change-password', {
+      const res = await apiFetch('account/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ currentPassword: current, newPassword: next }),
@@ -283,7 +284,7 @@ function ChangeEmailForm({ onDone }: { onDone: () => void }) {
     setErr(null)
     setBusy(true)
     try {
-      const res = await fetch('/api/account/change-email', {
+      const res = await apiFetch('account/change-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ currentPassword: current, newEmail }),
@@ -349,7 +350,7 @@ function RemoveEmailButton({ id, onRemoved }: { id: string; onRemoved: () => voi
     setBusy(true)
     setErr(null)
     try {
-      const res = await fetch(`/api/account/email/${id}`, { method: 'DELETE' })
+      const res = await apiFetch(`account/email/${id}`, { method: 'DELETE' })
       if (res.ok) {
         onRemoved()
         return

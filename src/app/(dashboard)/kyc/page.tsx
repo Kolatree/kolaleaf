@@ -36,7 +36,7 @@ export default function KycPage() {
 
   async function handleVerifyNow() {
     await submit({
-      endpoint: '/api/kyc/initiate',
+      endpoint: 'kyc/initiate',
       onOk: (data) => {
         if (isAllowedSumsubUrl(data.verificationUrl)) {
           window.location.href = data.verificationUrl as string

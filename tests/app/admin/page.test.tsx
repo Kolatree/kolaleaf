@@ -43,16 +43,16 @@ describe('admin/page partial-fetch banner', () => {
     vi.restoreAllMocks()
   })
 
-  it('renders <AdminAlert> when /api/admin/stats fetch fails', async () => {
+  it('renders <AdminAlert> when /api/v1/admin/stats fetch fails', async () => {
     // First fetch (stats) returns non-OK → fetchAdminJson returns null.
     // The other two return ok with shape the page expects.
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) => {
-        if (url.endsWith('/api/admin/stats')) {
+        if (url.endsWith('/api/v1/admin/stats')) {
           return Promise.resolve({ ok: false, json: async () => ({}) } as Response)
         }
-        if (url.endsWith('/api/admin/float')) {
+        if (url.endsWith('/api/v1/admin/float')) {
           return Promise.resolve({
             ok: true,
             json: async () => ({

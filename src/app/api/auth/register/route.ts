@@ -7,16 +7,16 @@ export async function POST() {
   return NextResponse.json(
     {
       error:
-        'This endpoint was removed in Step 18. Use /api/auth/send-code, ' +
-        'then /api/auth/verify-code, then /api/auth/complete-registration.',
+        'This endpoint was removed in Step 18. Use /api/v1/auth/send-code, ' +
+        'then /api/v1/auth/verify-code, then /api/v1/auth/complete-registration.',
       reason: 'endpoint_removed',
-      migrate_to: '/api/auth/send-code',
+      migrate_to: '/api/v1/auth/send-code',
     },
     {
       status: 410,
       headers: {
         Deprecation: 'true',
-        Link: '</api/auth/send-code>; rel="successor-version"',
+        Link: '</api/v1/auth/send-code>; rel="successor-version"',
       },
     },
   )

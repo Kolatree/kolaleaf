@@ -30,9 +30,9 @@ vi.mock('@/lib/auth/tokens', async () => {
   }
 })
 
-import { POST as sendCode } from '@/app/api/auth/send-code/route'
-import { POST as verifyCode } from '@/app/api/auth/verify-code/route'
-import { POST as completeRegistration } from '@/app/api/auth/complete-registration/route'
+import { POST as sendCode } from '@/app/api/v1/auth/send-code/route'
+import { POST as verifyCode } from '@/app/api/v1/auth/verify-code/route'
+import { POST as completeRegistration } from '@/app/api/v1/auth/complete-registration/route'
 
 beforeAll(async () => {
   await cleanupTestData()
@@ -69,7 +69,7 @@ describe('Register wizard E2E', () => {
     // /send-code now dispatches the code fire-and-forget (moved off
     // the request path for latency). Wait for the background handler
     // to land the row + push the captured code before asserting.
-    const r1 = await sendCode(req('/api/auth/send-code', { email }))
+    const r1 = await sendCode(req('/api/v1/auth/send-code', { email }))
     expect(r1.status).toBe(200)
     await vi.waitFor(() => expect(capturedCodes).toHaveLength(1))
     const code = capturedCodes[0]
@@ -82,7 +82,7 @@ describe('Register wizard E2E', () => {
     expect(pending!.verifiedAt).toBeNull()
 
     // Step 2: verify-code
-    const r2 = await verifyCode(req('/api/auth/verify-code', { email, code }))
+    const r2 = await verifyCode(req('/api/v1/auth/verify-code', { email, code }))
     expect(r2.status).toBe(200)
     const r2body = await r2.json()
     expect(r2body.verified).toBe(true)
@@ -97,7 +97,7 @@ describe('Register wizard E2E', () => {
 
     // Step 3: complete-registration
     const r3 = await completeRegistration(
-      req('/api/auth/complete-registration', {
+      req('/api/v1/auth/complete-registration', {
         email,
         fullName: 'E2E Wizard User',
         password: 'WizardPass123!',
@@ -168,7 +168,7 @@ describe('Register wizard E2E', () => {
       },
     })
 
-    const r = await sendCode(req('/api/auth/send-code', { email }))
+    const r = await sendCode(req('/api/v1/auth/send-code', { email }))
     expect(r.status).toBe(200)
     const body = await r.json()
     expect(body.ok).toBe(true)
@@ -184,12 +184,12 @@ describe('Register wizard E2E', () => {
   it('complete-registration without verify is rejected 400', async () => {
     const email = `unv-${Date.now()}-${crypto.randomUUID().slice(0, 8)}@test.com`
 
-    await sendCode(req('/api/auth/send-code', { email }))
+    await sendCode(req('/api/v1/auth/send-code', { email }))
     await vi.waitFor(() => expect(capturedCodes).toHaveLength(1))
     // Do NOT call verify-code.
 
     const r = await completeRegistration(
-      req('/api/auth/complete-registration', {
+      req('/api/v1/auth/complete-registration', {
         email,
         fullName: 'Skipper',
         password: 'WizardPass123!',

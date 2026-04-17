@@ -33,7 +33,7 @@ function VerifyEmailInner() {
     e.preventDefault()
     setInfo('')
     await verify.submit({
-      endpoint: '/api/auth/verify-email',
+      endpoint: 'auth/verify-email',
       body: { email, code },
       onOk: () => router.push('/send'),
     })
@@ -42,7 +42,7 @@ function VerifyEmailInner() {
   async function handleResend() {
     setInfo('')
     await resend.submit({
-      endpoint: '/api/auth/resend-verification',
+      endpoint: 'auth/resend-verification',
       body: { email },
       onOk: () => setInfo('If this email is on file, a new code is on its way.'),
     })

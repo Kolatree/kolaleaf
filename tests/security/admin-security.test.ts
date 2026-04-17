@@ -31,7 +31,7 @@ function makeRequest(cookieHeader?: string): Request {
   if (cookieHeader) {
     headers.set('cookie', cookieHeader)
   }
-  return new Request('http://localhost/api/admin/test', { headers })
+  return new Request('http://localhost/api/v1/admin/test', { headers })
 }
 
 describe('Admin Security', () => {

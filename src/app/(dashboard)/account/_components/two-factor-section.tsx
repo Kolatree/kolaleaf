@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { colors, radius, shadow, spacing } from '@/components/design/KolaPrimitives'
+import { apiFetch } from '@/lib/http/api-client'
 
 type Method = 'NONE' | 'TOTP' | 'SMS'
 
@@ -197,7 +198,7 @@ export function TwoFactorSection() {
     let cancelled = false
     async function load() {
       try {
-        const res = await fetch('/api/account/me')
+        const res = await apiFetch('account/me')
         if (cancelled) return
         if (res.status === 401) {
           // Session expired between page load and this fetch. Rather than
@@ -243,7 +244,7 @@ export function TwoFactorSection() {
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch('/api/account/2fa/setup', {
+      const res = await apiFetch('account/2fa/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ method }),
@@ -280,7 +281,7 @@ export function TwoFactorSection() {
         mode.kind === 'totp-setup'
           ? { method: 'TOTP', secret: mode.secret, code }
           : { method: 'SMS', challengeId: mode.challengeId, code }
-      const res = await fetch('/api/account/2fa/enable', {
+      const res = await apiFetch('account/2fa/enable', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -306,7 +307,7 @@ export function TwoFactorSection() {
     try {
       const body: Record<string, unknown> = { code }
       if (mode.kind === 'disable-sms-challenge') body.challengeId = mode.challengeId
-      const res = await fetch('/api/account/2fa/disable', {
+      const res = await apiFetch('account/2fa/disable', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -332,7 +333,7 @@ export function TwoFactorSection() {
     try {
       const body: Record<string, unknown> = { code }
       if (mode.kind === 'regen-sms-challenge') body.challengeId = mode.challengeId
-      const res = await fetch('/api/account/2fa/regenerate-backup-codes', {
+      const res = await apiFetch('account/2fa/regenerate-backup-codes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -359,7 +360,7 @@ export function TwoFactorSection() {
   async function continueAfterBackupCodes() {
     // Refresh state from server so the view reflects enabled/disabled.
     try {
-      const res = await fetch('/api/account/me')
+      const res = await apiFetch('account/me')
       if (res.status === 401) {
         window.location.href = '/login'
         return

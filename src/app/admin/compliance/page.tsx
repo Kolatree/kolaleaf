@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { AdminShell, colors, radius, shadow } from '@/components/design/KolaPrimitives'
+import { apiFetch } from '@/lib/http/api-client'
 
 const REPORT_TYPES = ['ALL', 'THRESHOLD', 'SUSPICIOUS', 'IFTI']
 
@@ -34,7 +35,7 @@ export default function AdminCompliancePage() {
     if (type !== 'ALL') params.set('type', type)
     if (cursor) params.set('cursor', cursor)
 
-    const res = await fetch(`/api/admin/compliance?${params}`)
+    const res = await apiFetch(`admin/compliance?${params}`)
     if (res.ok) {
       const data = await res.json()
       if (cursor) setReports((prev) => [...prev, ...data.reports])

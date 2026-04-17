@@ -18,7 +18,7 @@ import { useWizardSubmit } from '@/lib/hooks/use-wizard-submit'
 import { REGISTER_TIMEOUT_MS } from '@/lib/http/fetch-with-timeout'
 
 // Step 3 of the verify-first wizard: collect full name + AU address +
-// password, POST /api/auth/complete-registration, and bounce to /kyc.
+// password, POST /api/v1/auth/complete-registration, and bounce to /kyc.
 // Only on success does the User row get created and a session issued.
 function RegisterDetailsInner() {
   const router = useRouter()
@@ -37,7 +37,7 @@ function RegisterDetailsInner() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     await submit({
-      endpoint: '/api/auth/complete-registration',
+      endpoint: 'auth/complete-registration',
       body: {
         email,
         fullName,

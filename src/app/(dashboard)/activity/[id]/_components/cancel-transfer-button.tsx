@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { colors } from '@/components/design/KolaPrimitives'
+import { apiFetch } from '@/lib/http/api-client'
 
 export function CancelTransferButton({ transferId }: { transferId: string }) {
   const router = useRouter()
@@ -14,7 +15,7 @@ export function CancelTransferButton({ transferId }: { transferId: string }) {
     setBusy(true)
     setErr(null)
     try {
-      const res = await fetch(`/api/transfers/${transferId}/cancel`, {
+      const res = await apiFetch(`transfers/${transferId}/cancel`, {
         method: 'POST',
       })
       if (res.ok) {

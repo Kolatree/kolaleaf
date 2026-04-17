@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { DashboardShell, FieldLabel, colors, radius, shadow, spacing, type as typeT, GRADIENT } from '@/components/design/KolaPrimitives'
+import { apiFetch } from '@/lib/http/api-client'
 
 interface Recipient {
   id: string
@@ -71,7 +72,7 @@ export default function RecipientsPage() {
     const seq = ++resolveSeqRef.current
     resolveTimerRef.current = setTimeout(async () => {
       try {
-        const res = await fetch('/api/recipients/resolve', {
+        const res = await apiFetch('recipients/resolve', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ bankCode, accountNumber }),
@@ -98,7 +99,7 @@ export default function RecipientsPage() {
 
   async function loadBanks() {
     try {
-      const res = await fetch('/api/banks?country=NG')
+      const res = await apiFetch('banks?country=NG')
       if (res.ok) {
         const data = await res.json()
         setBanks(Array.isArray(data.banks) ? data.banks : [])
@@ -112,7 +113,7 @@ export default function RecipientsPage() {
 
   async function loadRecipients() {
     try {
-      const res = await fetch('/api/recipients')
+      const res = await apiFetch('recipients')
       if (res.ok) {
         const data = await res.json()
         setRecipients(data.recipients)
@@ -133,7 +134,7 @@ export default function RecipientsPage() {
     }
     setSaving(true)
     try {
-      const res = await fetch('/api/recipients', {
+      const res = await apiFetch('recipients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -162,7 +163,7 @@ export default function RecipientsPage() {
 
   async function handleDelete(id: string) {
     try {
-      const res = await fetch(`/api/recipients/${id}`, { method: 'DELETE' })
+      const res = await apiFetch(`recipients/${id}`, { method: 'DELETE' })
       if (res.ok) {
         setRecipients((prev) => prev.filter((r) => r.id !== id))
       }

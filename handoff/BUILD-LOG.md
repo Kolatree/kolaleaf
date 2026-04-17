@@ -5,13 +5,64 @@
 
 ## Current Status
 
-**Active step:** 18 -- Verify-first registration 3-step wizard (review pending)
-**Last cleared:** Step 15b
-**Pending deploy:** NO
+**Active step:** 19 -- /api/v1 versioning (APPROVED, deploy pending)
+**Last cleared:** Step 18
+**Pending deploy:** YES -- Step 19 (commit + Railway push)
 
 ---
 
 ## Step History
+
+### Step 19 -- /api/v1 versioning -- APPROVED (deploy pending)
+*Date: 2026-04-17*
+
+Every client-facing API route moved under `/api/v1/`. All in-repo callers
+rewired through a new single-source HTTP client `apiFetch`. Webhooks (4
+routes) and cron (5 routes) stay at legacy `/api/*` paths because their
+URLs are registered off-platform (providers + Railway cron). The
+`/api/auth/register` 410-Gone stub is preserved at its legacy path with
+its migration hint updated to point at `/api/v1/*` successors.
+
+This is the foundation for Steps 20-25 of Pile B -- each of those
+assumes a versioned surface.
+
+Files added (3):
+- `src/lib/http/api-client.ts` -- `API_V1 = '/api/v1'` + `apiFetch(path, init)` wrapping `fetchWithTimeout`. 17 lines.
+- `tests/lib/http/api-client.test.ts` -- 4 unit tests (prefix, leading-slash tolerance, method/headers/body passthrough, timeout abort).
+- `tests/e2e/versioning-smoke.test.ts` -- 4 smoke tests (v1 200, legacy 404, register 410, webhook still at legacy path).
+
+Files moved (42 routes + 22 paired tests):
+- `src/app/api/{auth,account,admin,transfers,recipients,rates,kyc,banks}/*` -> `src/app/api/v1/{same}/*` (41 routes under v1).
+- `tests/app/api/<area>/*` -> `tests/app/api/v1/<area>/*` for moved areas.
+- `/api/auth/register` 410 stub restored at legacy path after the initial auth rename.
+
+Files modified (18):
+- `src/lib/hooks/use-wizard-submit.ts` -- swapped `fetchWithTimeout` for `apiFetch`.
+- 5 wizard pages, 8 dashboard pages/components, 4 admin pages -- all call sites updated to `apiFetch('area/path', ...)` tail paths.
+- `fetchAdminJson` in `src/app/admin/page.tsx` -- sources prefix from exported `API_V1`, preserves RSC absolute-URL + cookie-forwarding pattern.
+- 3 test files patched for string URLs (`tests/app/admin/page.test.tsx`, `tests/e2e/register-wizard.test.ts`, `tests/e2e/phone-verification.test.ts`, `tests/security/admin-security.test.ts`).
+
+Files deleted: none.
+
+Review findings applied (N1+N2 from Richard):
+- 410 stub migration hint updated: `/api/auth/send-code` -> `/api/v1/auth/send-code` in both the JSON `migrate_to` field, the `Link` response header, and the prose `error` field. Stale clients parsing the hint now land on the live endpoint instead of a 404.
+- Comment-only legacy path references refreshed in `account-identity-section.tsx:11` and `register/details/page.tsx:21`.
+
+Decisions made (not explicit in brief):
+- `fetchAdminJson` kept as RSC-side wrapper over raw `fetch` (not `apiFetch`). Relative URLs don't resolve in server components; absolute-URL + cookie-forwarding pattern preserved. Prefix sourced from exported `API_V1` constant so "one prefix, one source" still holds.
+- Versioning smoke test uses `await import(variable)` to defer module resolution to runtime -- static `import()` of a deleted module would fail type-check; the runtime rejection is what the test asserts.
+
+Verification:
+- `npm test -- --run` -- 706 passed / 0 failed (baseline 698 + 4 api-client unit + 4 versioning smoke).
+- `npx tsc --noEmit` -- 0 errors.
+- `rm -rf .next && npm run build` -- success, 41 `/api/v1/*` routes + 4 webhooks + 5 crons + 1 `/api/auth/register` 410 stub all listed.
+- Local curl smoke: `/api/v1/auth/send-code` -> 200, `/api/auth/login` -> 404, `/api/auth/register` -> 410, `/api/webhooks/monoova` -> 405. All match brief.
+- Grep evidence: zero `fetch("/api/[^v]` call sites in src/app or tests; the only non-v1 `/api/` string in src/app is the (intentional) migration hint in the 410 stub.
+
+Reviewer findings: Richard APPROVE with 2 non-blocking nits. Both applied before deploy.
+Deploy: pending Arch -- no migration, rollback is a single-commit revert.
+
+---
 
 ### Step 18 -- Verify-first registration (3-step wizard) -- REVIEW PENDING
 *Date: 2026-04-17*

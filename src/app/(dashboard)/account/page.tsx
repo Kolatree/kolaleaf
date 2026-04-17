@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardShell, colors, radius, shadow, spacing } from '@/components/design/KolaPrimitives'
+import { apiFetch } from '@/lib/http/api-client'
 import { TwoFactorSection } from './_components/two-factor-section'
 import { AccountIdentitySection } from './_components/account-identity-section'
 
@@ -27,7 +28,7 @@ export default function AccountPage() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch('/api/kyc/status')
+        const res = await apiFetch('kyc/status')
         if (res.ok) {
           const data = await res.json()
           setKyc(data)
@@ -44,7 +45,7 @@ export default function AccountPage() {
   async function handleLogout() {
     setLoggingOut(true)
     try {
-      await fetch('/api/auth/logout', { method: 'POST' })
+      await apiFetch('auth/logout', { method: 'POST' })
     } catch {
       // Proceed even if logout API fails
     }
@@ -53,7 +54,7 @@ export default function AccountPage() {
 
   async function handleInitiateKyc() {
     try {
-      const res = await fetch('/api/kyc/initiate', { method: 'POST' })
+      const res = await apiFetch('kyc/initiate', { method: 'POST' })
       if (res.ok) {
         const data = await res.json()
         if (data.verificationUrl) {

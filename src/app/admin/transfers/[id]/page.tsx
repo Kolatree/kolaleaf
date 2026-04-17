@@ -3,6 +3,7 @@
 import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
 import { AdminShell, colors, radius, shadow, spacing, GRADIENT } from '@/components/design/KolaPrimitives'
+import { apiFetch } from '@/lib/http/api-client'
 
 interface TransferEvent {
   id: string
@@ -47,7 +48,7 @@ export default function AdminTransferDetailPage({
   const [actionLoading, setActionLoading] = useState(false)
 
   async function fetchTransfer() {
-    const res = await fetch(`/api/admin/transfers/${id}`)
+    const res = await apiFetch(`admin/transfers/${id}`)
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
       setError(data.error ?? 'Failed to load transfer')
@@ -65,7 +66,7 @@ export default function AdminTransferDetailPage({
   async function handleRetry() {
     setActionLoading(true)
     setError(null)
-    const res = await fetch(`/api/admin/transfers/${id}/retry`, { method: 'POST' })
+    const res = await apiFetch(`admin/transfers/${id}/retry`, { method: 'POST' })
     if (res.ok) await fetchTransfer()
     else {
       const data = await res.json()
@@ -77,7 +78,7 @@ export default function AdminTransferDetailPage({
   async function handleRefund() {
     setActionLoading(true)
     setError(null)
-    const res = await fetch(`/api/admin/transfers/${id}/refund`, { method: 'POST' })
+    const res = await apiFetch(`admin/transfers/${id}/refund`, { method: 'POST' })
     if (res.ok) await fetchTransfer()
     else {
       const data = await res.json()

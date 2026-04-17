@@ -1,9 +1,16 @@
 import { cookies } from 'next/headers'
 import { AdminShell, AdminAlert, colors, radius, shadow, spacing, GRADIENT } from '@/components/design/KolaPrimitives'
+import { API_V1 } from '@/lib/http/api-client'
 
+// Server-side helper: server components can't use the client-side apiFetch
+// (relative URLs don't resolve without a host). We still centralise the
+// version prefix via API_V1 so the admin dashboard shares one source of
+// truth with the rest of the app. `path` is the tail ('admin/stats'), not
+// a fully-qualified URL.
 async function fetchAdminJson(path: string, cookieHeader: string) {
   const base = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000'
-  const res = await fetch(`${base}${path}`, {
+  const tail = path.startsWith('/') ? path.slice(1) : path
+  const res = await fetch(`${base}${API_V1}/${tail}`, {
     headers: { cookie: cookieHeader },
     cache: 'no-store',
   })
@@ -37,9 +44,9 @@ export default async function AdminDashboard() {
   const cookieHeader = cookieStore.getAll().map((c) => `${c.name}=${c.value}`).join('; ')
 
   const [statsData, floatData, ratesData] = await Promise.all([
-    fetchAdminJson('/api/admin/stats', cookieHeader),
-    fetchAdminJson('/api/admin/float', cookieHeader),
-    fetchAdminJson('/api/admin/rates', cookieHeader),
+    fetchAdminJson('admin/stats', cookieHeader),
+    fetchAdminJson('admin/float', cookieHeader),
+    fetchAdminJson('admin/rates', cookieHeader),
   ])
 
   const stats: Stats | undefined = statsData?.stats

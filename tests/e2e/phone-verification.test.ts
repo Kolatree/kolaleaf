@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterEach, afterAll } from 'vitest'
 import { prisma, cleanupTestData, sessionCookie } from './helpers'
-import { POST as phoneAdd } from '@/app/api/account/phone/add/route'
-import { POST as phoneVerify } from '@/app/api/account/phone/verify/route'
+import { POST as phoneAdd } from '@/app/api/v1/account/phone/add/route'
+import { POST as phoneVerify } from '@/app/api/v1/account/phone/verify/route'
 import crypto from 'crypto'
 
 /**
@@ -82,7 +82,7 @@ describe('Phone verification — cross-user ownership transfer (regression)', ()
 
     // Alice calls /add — creates an unverified identifier owned by Alice.
     const aliceAddRes = await phoneAdd(
-      makeReq('http://localhost/api/account/phone/add', alice.token, { phone: PHONE }),
+      makeReq('http://localhost/api/v1/account/phone/add', alice.token, { phone: PHONE }),
     )
     expect(aliceAddRes.status).toBe(200)
 
@@ -93,7 +93,7 @@ describe('Phone verification — cross-user ownership transfer (regression)', ()
 
     // Bob calls /add on the same phone — ownership must transfer to Bob.
     const bobAddRes = await phoneAdd(
-      makeReq('http://localhost/api/account/phone/add', bob.token, { phone: PHONE }),
+      makeReq('http://localhost/api/v1/account/phone/add', bob.token, { phone: PHONE }),
     )
     expect(bobAddRes.status).toBe(200)
 
@@ -117,7 +117,7 @@ describe('Phone verification — cross-user ownership transfer (regression)', ()
 
     // Bob calls /verify with the known code.
     const bobVerifyRes = await phoneVerify(
-      makeReq('http://localhost/api/account/phone/verify', bob.token, {
+      makeReq('http://localhost/api/v1/account/phone/verify', bob.token, {
         phone: PHONE,
         code: knownCode,
       }),
@@ -160,7 +160,7 @@ describe('Phone verification — cross-user ownership transfer (regression)', ()
     })
 
     const res = await phoneAdd(
-      makeReq('http://localhost/api/account/phone/add', bob.token, { phone: PHONE }),
+      makeReq('http://localhost/api/v1/account/phone/add', bob.token, { phone: PHONE }),
     )
     expect(res.status).toBe(409)
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { DashboardShell, colors, radius, shadow, GRADIENT } from '@/components/design/KolaPrimitives'
+import { apiFetch } from '@/lib/http/api-client'
 
 interface Transfer {
   id: string
@@ -47,7 +48,7 @@ export default function ActivityPage() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch('/api/transfers')
+        const res = await apiFetch('transfers')
         if (res.ok) {
           const data = await res.json()
           setTransfers(data.transfers)

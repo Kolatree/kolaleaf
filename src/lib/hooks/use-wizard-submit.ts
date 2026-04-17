@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { fetchWithTimeout, isAbortError, AUTH_TIMEOUT_MS, GENERIC_ERROR, SERVER_SLOW_ERROR } from '@/lib/http/fetch-with-timeout'
+import { apiFetch } from '@/lib/http/api-client'
+import { isAbortError, AUTH_TIMEOUT_MS, GENERIC_ERROR, SERVER_SLOW_ERROR } from '@/lib/http/fetch-with-timeout'
 
 // Shared submit pattern for the onboarding / auth wizard pages. Every
 // step's handler boils down to: clear error → loading on → fetch with
@@ -44,7 +45,7 @@ export function useWizardSubmit() {
       setError('')
       setLoading(true)
       try {
-        const res = await fetchWithTimeout(config.endpoint, {
+        const res = await apiFetch(config.endpoint, {
           method: config.method ?? 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: config.body === undefined ? undefined : JSON.stringify(config.body),

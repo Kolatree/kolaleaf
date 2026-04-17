@@ -16,6 +16,7 @@ import {
   type as typeT,
   GRADIENT,
 } from '@/components/design/KolaPrimitives'
+import { apiFetch } from '@/lib/http/api-client'
 
 interface Recipient {
   id: string
@@ -42,7 +43,7 @@ export default function SendPage() {
 
   const fetchRate = useCallback(async () => {
     try {
-      const res = await fetch('/api/rates/public?base=AUD&target=NGN')
+      const res = await apiFetch('rates/public?base=AUD&target=NGN')
       if (res.ok) {
         const data = await res.json()
         setRate(data)
@@ -67,8 +68,8 @@ export default function SendPage() {
     async function load() {
       try {
         const [recipientsRes, kycRes] = await Promise.all([
-          fetch('/api/recipients'),
-          fetch('/api/kyc/status'),
+          apiFetch('recipients'),
+          apiFetch('kyc/status'),
         ])
         if (recipientsRes.ok) {
           const data = await recipientsRes.json()
@@ -98,7 +99,7 @@ export default function SendPage() {
     setSending(true)
 
     try {
-      const res = await fetch('/api/transfers', {
+      const res = await apiFetch('transfers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

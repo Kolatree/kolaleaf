@@ -5,10 +5,31 @@
 
 ## Current Status
 
-**Active step:** 20 -- Zod + OpenAPI contracts (Bob building)
-**Last cleared:** Step 19 -- shipped as 6d3db06 (Railway auto-deployed; prod curl verification deferred, left as-shipped per Arch)
-**Pending deploy:** local commits only going forward; Arch pushes manually after each Pile B step
-**Pile B briefs queued:** Step 22 (enum), Step 23 (BullMQ email), Step 25 (soft-delete, Option B locked)
+**Active step:** Pile B COMPLETE (Steps 19-25 all landed locally). Awaiting push.
+**Last cleared:** Step 24 -- observability foundation (24c9657)
+**Pending deploy:** 8 local commits on top of 6d3db06 (the pushed Step 19). Arch pushes when ready.
+**Tests:** 827 passing (baseline 706 + 121 new). tsc clean. build clean.
+
+### Pile B commit ledger
+
+| Step | Hash | Title | State |
+|---|---|---|---|
+| 19 | 6d3db06 | /api/v1 versioning — 42 routes moved | **pushed** + Railway auto-deployed |
+| 20a | 3cc886f | Zod + OpenAPI — tooling + 5 pilot routes | local |
+| 20b | ae9b6a4 | Zod schemas for remaining 36 routes + barrel | local |
+| 20c | e3911de | Richard's Step 20 review feedback | local |
+| 22 | 47d9c84 | User.state → Postgres AuState enum | local |
+| 23 | 89ad06e | BullMQ email queue with FailedEmail sink | local |
+| 25 | 408fa2b | soft-delete User rows (Option B) + cleanup script | local |
+| 21 | 3333e08 | discriminated-union identifier body on /auth/login | local |
+| 24 | 24c9657 | observability foundation — pino + request ID + /api/health + alert sinks | local |
+
+### Pre-push checklist for Arch
+
+- [ ] Run `SELECT DISTINCT state FROM "User"` against prod — confirm only enum-legal values or NULL before Step 22's migration runs
+- [ ] Confirm prod `REDIS_URL` is set (Step 23's email worker + Step 24's /api/health redis check)
+- [ ] Optional dry-run: `pnpm tsx scripts/cleanup-legacy-users.ts` against a prod snapshot to preview candidate list before running `--apply`
+- [ ] First push: `git push origin main` — Railway runs `prisma migrate deploy` (3 new migrations: user_state_enum, failed_email, user_soft_delete) during release phase
 
 ---
 

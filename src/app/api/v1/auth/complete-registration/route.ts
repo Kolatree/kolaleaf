@@ -9,34 +9,27 @@ import {
 import { setSessionCookie } from '@/lib/auth/middleware'
 import { buildSessionData } from '@/lib/auth/sessions'
 import { logAuthEvent, logAuthEventsMany } from '@/lib/auth/audit'
-import { AU_STATE_SET, AU_POSTCODE_RE } from '@/lib/auth/constants'
 import type { CompleteRegistrationReason } from '@/lib/auth/reasons'
 import { getClientIp } from '@/lib/http/ip'
 import { jsonError } from '@/lib/http/json-error'
+import { parseBody } from '@/lib/http/validate'
+import { CompleteRegistrationBody } from './_schemas'
 
-// POST /api/auth/complete-registration
+// POST /api/v1/auth/complete-registration
 //
 // Step 3 — and the only step that writes to User. The caller must have
 // previously completed /send-code and /verify-code; that leaves a
 // PendingEmailVerification row with verifiedAt set and claimExpiresAt
 // still in the future. This endpoint consumes that claim to create the
 // User, the verified UserIdentifier, and the Session, and deletes the
-// pending row — all in one transaction. Error responses always carry
-// both a human-readable `error` and a stable machine-readable `reason`.
+// pending row — all in one transaction.
 //
-// Validation is AU-only for v1:
-//   - state must be one of the AU_STATE_SET codes (case-insensitive)
-//   - postcode must be 4 digits (trimmed before test)
-//   - country is always written as "AU" — not accepted from the client
-//   - fullName is NFKC-normalised and must contain at least one letter
+// Shape-level validation (email format, field lengths, AU_STATE /
+// postcode regex) lives in _schemas.ts. Business-logic validation
+// (NFKC normalisation, password complexity, letter-required name
+// guard, idempotent-retry password match) stays here because it can't
+// be expressed cleanly in a Zod rule.
 const HAS_LETTER_RE = /\p{L}/u
-const MAX_LENGTHS = {
-  fullName: 200,
-  addressLine1: 200,
-  addressLine2: 200,
-  city: 100,
-  password: 128,
-} as const
 const TX_TIMEOUT_MS = 15_000
 const TX_MAX_WAIT_MS = 5_000
 
@@ -46,75 +39,25 @@ function fail(reason: Reason, message: string, status: number) {
   return jsonError(reason, message, status)
 }
 
-interface CompleteRegistrationBody {
-  email?: string
-  fullName?: string
-  password?: string
-  addressLine1?: string
-  addressLine2?: string
-  city?: string
-  state?: string
-  postcode?: string
-}
-
 export async function POST(request: Request) {
-  let body: CompleteRegistrationBody
-  try {
-    body = await request.json()
-  } catch {
-    return fail('invalid_json', 'Invalid JSON', 400)
-  }
-
+  const parsed = await parseBody(request, CompleteRegistrationBody)
+  if (!parsed.ok) return parsed.response
   const {
-    email: rawEmail,
+    email,
     fullName: rawFullName,
     password,
-    addressLine1: rawLine1,
+    addressLine1,
     addressLine2: rawLine2,
-    city: rawCity,
-    state: rawState,
-    postcode: rawPostcode,
-  } = body
+    city,
+    state,
+    postcode,
+  } = parsed.data
 
-  if (!rawEmail || typeof rawEmail !== 'string' || !rawEmail.includes('@')) {
-    return fail('missing_email', 'Email is required', 400)
-  }
-  if (!rawFullName || typeof rawFullName !== 'string' || rawFullName.trim().length < 2) {
-    return fail('missing_name', 'Full name is required', 400)
-  }
+  // Password complexity (character-class mix) isn't length-only and
+  // isn't captured by the Zod schema — keep the existing helper.
   const pwCheck = validatePasswordComplexity(password)
   if (!pwCheck.ok) {
     return fail('weak_password', pwCheck.error, 400)
-  }
-  if (!rawLine1 || typeof rawLine1 !== 'string' || rawLine1.trim().length < 3) {
-    return fail('missing_address_line1', 'Address line 1 is required', 400)
-  }
-  if (rawLine2 !== undefined && typeof rawLine2 !== 'string') {
-    return fail('invalid_address_line2', 'Address line 2 is invalid', 400)
-  }
-  if (!rawCity || typeof rawCity !== 'string' || rawCity.trim().length === 0) {
-    return fail('missing_city', 'City is required', 400)
-  }
-  if (!rawState || typeof rawState !== 'string' || !AU_STATE_SET.has(rawState.trim().toUpperCase())) {
-    return fail(
-      'invalid_state',
-      'State must be one of NSW, VIC, QLD, WA, SA, TAS, ACT, NT',
-      400,
-    )
-  }
-  const trimmedPostcode = rawPostcode?.toString().trim() ?? ''
-  if (!AU_POSTCODE_RE.test(trimmedPostcode)) {
-    return fail('invalid_postcode', 'Postcode must be 4 digits', 400)
-  }
-
-  if (
-    rawFullName.length > MAX_LENGTHS.fullName ||
-    rawLine1.length > MAX_LENGTHS.addressLine1 ||
-    (rawLine2?.length ?? 0) > MAX_LENGTHS.addressLine2 ||
-    rawCity.length > MAX_LENGTHS.city ||
-    pwCheck.password.length > MAX_LENGTHS.password
-  ) {
-    return fail('field_too_long', 'One or more fields exceed the allowed length', 400)
   }
 
   // Unicode NFKC + letter-required guard. Rejects zero-width-only
@@ -128,13 +71,8 @@ export async function POST(request: Request) {
     return fail('name_letters_required', 'Full name must contain at least one letter', 400)
   }
 
-  const email = rawEmail.trim().toLowerCase()
   const fullName = fullNameNormalized
-  const addressLine1 = rawLine1.trim()
-  const addressLine2 = rawLine2 && rawLine2.trim().length > 0 ? rawLine2.trim() : null
-  const city = rawCity.trim()
-  const state = rawState.trim().toUpperCase()
-  const postcode = trimmedPostcode
+  const addressLine2 = rawLine2 && rawLine2.length > 0 ? rawLine2 : null
   const ip = getClientIp(request)
   const userAgent = request.headers.get('user-agent') ?? undefined
 

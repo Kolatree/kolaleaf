@@ -33,21 +33,41 @@ describe('POST /api/v1/auth/send-code', () => {
     mockIssue.mockResolvedValue({ ok: true, delivered: true })
   })
 
-  it('returns 400 for invalid JSON', async () => {
+  it('returns 400 malformed_json for invalid JSON', async () => {
     const req = new Request('http://localhost/api/v1/auth/send-code', {
       method: 'POST',
       body: 'not json',
     })
     const res = await POST(req)
     expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json.reason).toBe('malformed_json')
   })
 
-  it('returns 400 when email is missing or malformed', async () => {
-    const a = await POST(postRequest({}))
-    expect(a.status).toBe(400)
-    const b = await POST(postRequest({ email: 'notanemail' }))
-    expect(b.status).toBe(400)
+  it('returns 422 validation_failed when email is missing (Zod)', async () => {
+    const res = await POST(postRequest({}))
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.reason).toBe('validation_failed')
+    expect(json.fields?.email).toBeInstanceOf(Array)
     expect(mockIssue).not.toHaveBeenCalled()
+  })
+
+  it('returns 422 when email is present but malformed (Zod)', async () => {
+    const res = await POST(postRequest({ email: 'notanemail' }))
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.reason).toBe('validation_failed')
+    expect(json.fields?.email).toBeInstanceOf(Array)
+    expect(mockIssue).not.toHaveBeenCalled()
+  })
+
+  it('returns 422 when email is the wrong type (non-string)', async () => {
+    const res = await POST(postRequest({ email: 12345 }))
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.reason).toBe('validation_failed')
+    expect(json.fields?.email).toBeInstanceOf(Array)
   })
 
   it('returns 200 and does NOT issue a code when email is owned by a verified user (enumeration-proof)', async () => {

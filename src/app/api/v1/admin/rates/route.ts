@@ -5,6 +5,8 @@ import { AuthError } from '@/lib/auth/middleware'
 import { prisma } from '@/lib/db/client'
 import { RateService, DefaultFxRateProvider } from '@/lib/rates'
 import { logAuthEvent } from '@/lib/auth/audit'
+import { parseBody } from '@/lib/http/validate'
+import { SetAdminRateBody } from './_schemas'
 
 const rateService = new RateService(new DefaultFxRateProvider())
 
@@ -43,37 +45,27 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    // Auth MUST run before Zod — returning a 422 on a schema failure
+    // for an unauthenticated request would leak that the endpoint
+    // exists to unauth callers (trivial, but 401-first is the norm
+    // across the codebase, so matching it).
     const { userId } = await requireAdmin(request)
 
-    let body: { corridorId?: string; customerRate?: string | number; wholesaleRate?: string | number }
-    try {
-      body = await request.json()
-    } catch {
-      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-    }
-
-    const { corridorId, customerRate, wholesaleRate } = body
-    if (!corridorId || typeof corridorId !== 'string') {
-      return NextResponse.json({ error: 'corridorId is required' }, { status: 400 })
-    }
-    if (customerRate === undefined || customerRate === null) {
-      return NextResponse.json({ error: 'customerRate is required' }, { status: 400 })
-    }
-    if (wholesaleRate === undefined || wholesaleRate === null) {
-      return NextResponse.json({ error: 'wholesaleRate is required' }, { status: 400 })
-    }
+    const parsed = await parseBody(request, SetAdminRateBody)
+    if (!parsed.ok) return parsed.response
+    const { corridorId, customerRate, wholesaleRate } = parsed.data
 
     const rate = await rateService.setAdminRate({
       corridorId,
-      customerRate: new Decimal(String(customerRate)),
-      wholesaleRate: new Decimal(String(wholesaleRate)),
+      customerRate: new Decimal(customerRate),
+      wholesaleRate: new Decimal(wholesaleRate),
       adminId: userId,
     })
 
     await logAuthEvent({
       userId,
       event: 'ADMIN_RATE_OVERRIDE',
-      metadata: { corridorId, customerRate: String(customerRate), wholesaleRate: String(wholesaleRate) },
+      metadata: { corridorId, customerRate, wholesaleRate },
     })
 
     return NextResponse.json({ rate }, { status: 201 })

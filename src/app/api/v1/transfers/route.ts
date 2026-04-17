@@ -2,35 +2,13 @@ import { NextResponse } from 'next/server'
 import Decimal from 'decimal.js'
 import { createTransfer, listTransfers } from '@/lib/transfers'
 import { requireKyc, requireAuth, requireEmailVerified, AuthError } from '@/lib/auth/middleware'
+import { parseBody } from '@/lib/http/validate'
+import { CreateTransferBody } from './_schemas'
 
 export async function POST(request: Request) {
-  let body: {
-    recipientId?: string
-    corridorId?: string
-    sendAmount?: string | number
-    exchangeRate?: string | number
-    fee?: string | number
-  }
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
-
-  const { recipientId, corridorId, sendAmount, exchangeRate, fee } = body
-
-  if (!recipientId || typeof recipientId !== 'string') {
-    return NextResponse.json({ error: 'recipientId is required' }, { status: 400 })
-  }
-  if (!corridorId || typeof corridorId !== 'string') {
-    return NextResponse.json({ error: 'corridorId is required' }, { status: 400 })
-  }
-  if (sendAmount === undefined || sendAmount === null) {
-    return NextResponse.json({ error: 'sendAmount is required' }, { status: 400 })
-  }
-  if (exchangeRate === undefined || exchangeRate === null) {
-    return NextResponse.json({ error: 'exchangeRate is required' }, { status: 400 })
-  }
+  const parsed = await parseBody(request, CreateTransferBody)
+  if (!parsed.ok) return parsed.response
+  const { recipientId, corridorId, sendAmount, exchangeRate, fee } = parsed.data
 
   try {
     // Email verification must land before KYC — an unverified email means we
@@ -44,9 +22,9 @@ export async function POST(request: Request) {
       userId,
       recipientId,
       corridorId,
-      sendAmount: new Decimal(String(sendAmount)),
-      exchangeRate: new Decimal(String(exchangeRate)),
-      fee: new Decimal(String(fee ?? 0)),
+      sendAmount: new Decimal(sendAmount),
+      exchangeRate: new Decimal(exchangeRate),
+      fee: new Decimal(fee ?? '0'),
     })
 
     return NextResponse.json({ transfer }, { status: 201 })

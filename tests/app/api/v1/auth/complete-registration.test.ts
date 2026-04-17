@@ -170,46 +170,74 @@ describe('POST /api/v1/auth/complete-registration', () => {
     expect(tx.user.create).not.toHaveBeenCalled()
   })
 
-  it('returns 400 when full name is missing or too short', async () => {
+  it('returns 422 when full name is missing or too short (schema)', async () => {
     mockVerifiedClaim()
     const res = await POST(postRequest({ ...VALID_BODY, fullName: 'a' }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
     const json = await res.json()
-    expect(json.error).toMatch(/name/i)
+    expect(json.reason).toBe('validation_failed')
+    expect(json.fields?.fullName).toBeInstanceOf(Array)
   })
 
-  it('returns 400 when password is weak', async () => {
+  it('returns 422 when password is shorter than 12 chars (schema)', async () => {
     mockVerifiedClaim()
     const res = await POST(postRequest({ ...VALID_BODY, password: 'short' }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.reason).toBe('validation_failed')
+    expect(json.fields?.password).toBeInstanceOf(Array)
   })
 
-  it('returns 400 when addressLine1 is missing or too short', async () => {
+  it('returns 422 when addressLine1 is missing or too short (schema)', async () => {
     mockVerifiedClaim()
     const res = await POST(postRequest({ ...VALID_BODY, addressLine1: 'ab' }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
     const json = await res.json()
-    expect(json.error).toMatch(/address/i)
+    expect(json.fields?.addressLine1).toBeInstanceOf(Array)
   })
 
-  it('returns 400 when city is missing', async () => {
+  it('returns 422 when city is missing (schema)', async () => {
     mockVerifiedClaim()
     const res = await POST(postRequest({ ...VALID_BODY, city: '' }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.fields?.city).toBeInstanceOf(Array)
   })
 
-  it('returns 400 when state is not an AU state', async () => {
+  it('returns 422 when state is not an AU state (schema)', async () => {
     mockVerifiedClaim()
     const res = await POST(postRequest({ ...VALID_BODY, state: 'CA' }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
     const json = await res.json()
-    expect(json.error).toMatch(/state/i)
+    expect(json.fields?.state).toBeInstanceOf(Array)
   })
 
-  it('returns 400 when postcode is not 4 digits', async () => {
+  it('returns 422 when postcode is not 4 digits (schema)', async () => {
     mockVerifiedClaim()
     const res = await POST(postRequest({ ...VALID_BODY, postcode: '200' }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.fields?.postcode).toBeInstanceOf(Array)
+  })
+
+  it('returns 422 with multiple field errors at once (batches via Zod)', async () => {
+    // Legacy ad-hoc pattern returned at the FIRST failed guard. Zod
+    // reports every failure in one 422 response — confirms the new
+    // contract.
+    mockVerifiedClaim()
+    const res = await POST(
+      postRequest({
+        ...VALID_BODY,
+        email: 'bad',
+        postcode: 'xxx',
+        state: 'XYZ',
+      }),
+    )
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.fields?.email).toBeInstanceOf(Array)
+    expect(json.fields?.postcode).toBeInstanceOf(Array)
+    expect(json.fields?.state).toBeInstanceOf(Array)
   })
 
   it('returns 409 when the email is already owned by a verified user (race)', async () => {

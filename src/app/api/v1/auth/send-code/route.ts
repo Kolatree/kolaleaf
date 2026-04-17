@@ -1,33 +1,24 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { issuePendingEmailCode } from '@/lib/auth/pending-email-verification'
-import { jsonError } from '@/lib/http/json-error'
+import { parseBody } from '@/lib/http/validate'
+import { SendCodeBody } from './_schemas'
 
-// POST /api/auth/send-code
+// POST /api/v1/auth/send-code
 //
 // Step 1 of the verify-first wizard: issue a 6-digit code to the target
 // email. Enumeration-proof: ALWAYS 200 regardless of whether the email
-// is known/free/rate-limited. The only 400 is a malformed email shape
-// (that's a client-side bug, not an enumeration signal).
+// is known/free/rate-limited. The only non-2xx paths are schema failure
+// (422 via Zod) and malformed JSON (400).
 //
 // Resend runs fire-and-forget after the route has returned — on Railway
 // (Node, not serverless) the promise completes even after the response
 // flushes. This removes the 300–800ms Resend round-trip from the request
 // path while preserving the "always 200" contract.
 export async function POST(request: Request) {
-  let body: { email?: string }
-  try {
-    body = await request.json()
-  } catch {
-    return jsonError('invalid_json', 'Invalid JSON', 400)
-  }
-
-  const rawEmail = body.email
-  if (!rawEmail || typeof rawEmail !== 'string' || !rawEmail.includes('@')) {
-    return jsonError('missing_email', 'Email is required', 400)
-  }
-
-  const email = rawEmail.trim().toLowerCase()
+  const parsed = await parseBody(request, SendCodeBody)
+  if (!parsed.ok) return parsed.response
+  const { email } = parsed.data
 
   // Short-circuit for already-verified-and-owned emails. Prevents a
   // duplicate-email fraud attempt from stealing a verification slot

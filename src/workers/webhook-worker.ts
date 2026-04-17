@@ -45,24 +45,7 @@ import {
   EMAIL_JOB_OPTS,
   type EmailJob,
 } from '@/lib/queue/email-dispatcher'
-
-function log(
-  level: 'info' | 'error',
-  event: string,
-  data: Record<string, unknown>,
-) {
-  const line = {
-    level,
-    event,
-    ts: new Date().toISOString(),
-    ...data,
-  }
-  if (level === 'error') {
-    console.error(JSON.stringify(line))
-  } else {
-    console.log(JSON.stringify(line))
-  }
-}
+import { log } from '@/lib/obs/logger'
 
 // Verify the signature and return the resolved secret so the caller can pass
 // it into handlers that expect one (Flutterwave, Paystack) without a second

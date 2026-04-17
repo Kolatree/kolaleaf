@@ -1,5 +1,6 @@
 import { prisma } from '../db/client'
 import { StalenessMonitor } from '../rates/staleness-monitor'
+import { log } from '@/lib/obs/logger'
 
 export interface StaleAlert {
   corridorId: string
@@ -27,12 +28,15 @@ export async function checkAndAlertStaleness(): Promise<StalenessAlertResult> {
         hoursStale: result.hoursStale,
       })
 
-      // Log the alert (placeholder for email/push notification)
-      console.log(
-        `[STALENESS ALERT] ${result.corridor}: rate is ${
-          result.hoursStale === Infinity ? 'missing' : `${Math.floor(result.hoursStale)}h stale`
-        }${result.blocked ? ' — BLOCKED' : ''}`,
-      )
+      // Structured alert — clients switch on the event name.
+      // Delivery channel (email/Slack) is a separate ops concern;
+      // this emit is the durable signal.
+      log('warn', 'alert.rate.stale', {
+        corridorId: result.corridorId,
+        corridor: result.corridor,
+        hoursStale: result.hoursStale === Infinity ? null : Math.floor(result.hoursStale),
+        blocked: result.blocked,
+      })
     }
 
     if (result.blocked) {

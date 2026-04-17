@@ -71,14 +71,16 @@ describe('POST /api/v1/account/phone/add', () => {
     expect(mockSend).not.toHaveBeenCalled()
   })
 
-  it('returns 400 when phone is missing', async () => {
+  it('returns 422 when phone is missing (Zod)', async () => {
     mockRequireAuth.mockResolvedValueOnce({
       userId: 'u1',
       session: { id: 's1', userId: 'u1' } as never,
     })
 
     const res = await POST(makeRequest({}))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.fields?.phone).toBeInstanceOf(Array)
   })
 
   it('returns 409 when another verified user already owns this phone', async () => {

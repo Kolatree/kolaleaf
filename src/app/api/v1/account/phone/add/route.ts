@@ -3,6 +3,8 @@ import { prisma } from '@/lib/db/client'
 import { requireAuth, AuthError } from '@/lib/auth/middleware'
 import { normalizePhone, generateSmsCode, InvalidPhoneError } from '@/lib/auth/phone'
 import { sendSms } from '@/lib/sms'
+import { parseBody } from '@/lib/http/validate'
+import { AddPhoneBody } from './_schemas'
 
 const CODE_TTL_MS = 10 * 60 * 1000 // 10 minutes
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000 // 1 hour
@@ -29,8 +31,9 @@ const RATE_LIMIT_MAX = 3
 export async function POST(request: Request) {
   try {
     const { userId } = await requireAuth(request)
-    const body = (await request.json().catch(() => null)) as { phone?: unknown } | null
-    const rawPhone = typeof body?.phone === 'string' ? body.phone : ''
+    const parsed = await parseBody(request, AddPhoneBody)
+    if (!parsed.ok) return parsed.response
+    const { phone: rawPhone } = parsed.data
 
     let phone: string
     try {

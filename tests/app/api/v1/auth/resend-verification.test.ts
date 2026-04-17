@@ -32,13 +32,27 @@ describe('POST /api/v1/auth/resend-verification (public, email-only)', () => {
     vi.clearAllMocks()
   })
 
-  it('returns 400 when email missing', async () => {
+  it('returns 422 when email missing (Zod)', async () => {
     const res = await POST(makeRequest({}))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.reason).toBe('validation_failed')
+    expect(json.fields?.email).toBeInstanceOf(Array)
   })
 
-  it('returns 400 when email is malformed', async () => {
+  it('returns 422 when email is malformed (Zod)', async () => {
     const res = await POST(makeRequest({ email: 'notanemail' }))
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.fields?.email).toBeInstanceOf(Array)
+  })
+
+  it('returns 400 malformed_json on invalid JSON', async () => {
+    const req = new Request('http://localhost/api/v1/auth/resend-verification', {
+      method: 'POST',
+      body: 'not-json',
+    })
+    const res = await POST(req)
     expect(res.status).toBe(400)
   })
 

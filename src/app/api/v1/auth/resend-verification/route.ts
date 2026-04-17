@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { issueVerificationCode } from '@/lib/auth/email-verification'
+import { parseBody } from '@/lib/http/validate'
+import { ResendVerificationBody } from './_schemas'
 
-// POST /api/auth/resend-verification
+// POST /api/v1/auth/resend-verification
 //
 // Body: { email: string }
 //
@@ -18,18 +20,9 @@ import { issueVerificationCode } from '@/lib/auth/email-verification'
 // Rate limiting per-user (5/hr) lives in `issueVerificationCode`.
 // Network-level abuse should be rate-limited at the edge / WAF.
 export async function POST(request: Request) {
-  let body: { email?: string }
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
-
-  const rawEmail = body.email
-  if (!rawEmail || typeof rawEmail !== 'string' || !rawEmail.includes('@')) {
-    return NextResponse.json({ error: 'Email is required' }, { status: 400 })
-  }
-  const email = rawEmail.trim().toLowerCase()
+  const parsed = await parseBody(request, ResendVerificationBody)
+  if (!parsed.ok) return parsed.response
+  const { email } = parsed.data
 
   const ident = await prisma.userIdentifier.findUnique({
     where: { identifier: email },

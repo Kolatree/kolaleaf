@@ -3,23 +3,13 @@ import { loginUser, EmailNotVerifiedError } from '@/lib/auth/login'
 import { setSessionCookie } from '@/lib/auth/middleware'
 import { issueVerificationCode } from '@/lib/auth/email-verification'
 import { getClientIp } from '@/lib/http/ip'
+import { parseBody } from '@/lib/http/validate'
+import { LoginBody } from './_schemas'
 
 export async function POST(request: Request) {
-  let body: { identifier?: string; password?: string }
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
-
-  const { identifier, password } = body
-
-  if (!identifier || typeof identifier !== 'string') {
-    return NextResponse.json({ error: 'Email is required' }, { status: 400 })
-  }
-  if (!password || typeof password !== 'string') {
-    return NextResponse.json({ error: 'Password is required' }, { status: 400 })
-  }
+  const parsed = await parseBody(request, LoginBody)
+  if (!parsed.ok) return parsed.response
+  const { identifier, password } = parsed.data
 
   const ip = getClientIp(request)
   const userAgent = request.headers.get('user-agent') ?? undefined

@@ -38,4 +38,13 @@ describe('GET /api/v1/openapi', () => {
       expect(keys).toContain(p)
     }
   })
+
+  it('lists every /api/v1 route (41 paths) under paths', async () => {
+    const res = await GET()
+    const doc = (await res.json()) as { paths: Record<string, unknown> }
+    const keys = Object.keys(doc.paths)
+    // `/api/v1/openapi` itself is the meta endpoint and is NOT part of
+    // the 41 data routes it describes — brief counts 41 excluding it.
+    expect(keys.length).toBeGreaterThanOrEqual(41)
+  })
 })

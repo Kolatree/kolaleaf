@@ -3,6 +3,8 @@ import { prisma } from '@/lib/db/client'
 import { generateVerificationToken } from '@/lib/auth/tokens'
 import { sendEmail, renderPasswordResetEmail } from '@/lib/email'
 import { getClientIp } from '@/lib/http/ip'
+import { parseBody } from '@/lib/http/validate'
+import { RequestPasswordResetBody } from './_schemas'
 
 const RESET_TTL_MINUTES = 60
 const RATE_LIMIT_PER_HOUR = 3
@@ -11,28 +13,16 @@ const GENERIC_MESSAGE =
   "If an account exists with that email, we've sent a reset link."
 
 /**
- * POST /api/auth/request-password-reset { email }
+ * POST /api/v1/auth/request-password-reset { email }
  *
  * Always returns the same generic 200 response regardless of whether the email
  * exists — prevents email enumeration. The rate-limit is silent for the same
  * reason: the attacker never learns anything from the response body.
  */
 export async function POST(request: Request) {
-  let body: { email?: unknown }
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
-
-  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
-
-  if (!email) {
-    return NextResponse.json({ error: 'Email is required' }, { status: 400 })
-  }
-  if (!email.includes('@')) {
-    return NextResponse.json({ error: 'Valid email is required' }, { status: 400 })
-  }
+  const parsed = await parseBody(request, RequestPasswordResetBody)
+  if (!parsed.ok) return parsed.response
+  const { email } = parsed.data
 
   const ip = getClientIp(request)
   const userAgent = request.headers.get('user-agent') ?? undefined

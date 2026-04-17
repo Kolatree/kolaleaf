@@ -5,9 +5,10 @@
 
 ## Current Status
 
-**Active step:** 19 -- /api/v1 versioning (APPROVED, deploy pending)
-**Last cleared:** Step 18
-**Pending deploy:** YES -- Step 19 (commit + Railway push)
+**Active step:** 20 -- Zod + OpenAPI contracts (Bob building)
+**Last cleared:** Step 19 -- shipped as 6d3db06 (Railway auto-deployed; prod curl verification deferred, left as-shipped per Arch)
+**Pending deploy:** local commits only going forward; Arch pushes manually after each Pile B step
+**Pile B briefs queued:** Step 22 (enum), Step 23 (BullMQ email), Step 25 (soft-delete, Option B locked)
 
 ---
 

@@ -76,6 +76,26 @@ describe('POST /api/v1/account/2fa/regenerate-backup-codes', () => {
     expect(res.status).toBe(401)
   })
 
+  it('returns 422 when code missing (Zod)', async () => {
+    mockAuthed()
+    const res = await POST(makeRequest({}))
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.fields?.code).toBeInstanceOf(Array)
+  })
+
+  it('returns 400 malformed_json on invalid JSON', async () => {
+    mockAuthed()
+    const req = new Request('http://localhost/api/v1/account/2fa/regenerate-backup-codes', {
+      method: 'POST',
+      body: 'not-json',
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json.reason).toBe('malformed_json')
+  })
+
   it('returns 400 not_enabled when 2FA is off', async () => {
     mockAuthed()
     ;(prisma.user.findUniqueOrThrow as ReturnType<typeof vi.fn>).mockResolvedValueOnce({

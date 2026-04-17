@@ -2,30 +2,27 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { hashPassword, validatePasswordComplexity } from '@/lib/auth/password'
 import { hashToken } from '@/lib/auth/tokens'
+import { parseBody } from '@/lib/http/validate'
+import { ResetPasswordBody } from './_schemas'
 
 const GENERIC_INVALID = 'Invalid or expired reset link.'
 
 /**
- * POST /api/auth/reset-password { token, newPassword }
+ * POST /api/v1/auth/reset-password { token, newPassword }
  *
  * Validates the reset token, updates the password, marks the token used, and
  * force-logs-out every active session for the user. Security baseline — a
  * password reset must invalidate all in-flight sessions.
  */
 export async function POST(request: Request) {
-  let body: { token?: unknown; newPassword?: unknown }
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
+  const parsed = await parseBody(request, ResetPasswordBody)
+  if (!parsed.ok) return parsed.response
+  const { token: rawToken, newPassword: rawNewPassword } = parsed.data
 
-  const rawToken = typeof body.token === 'string' ? body.token : ''
-  if (!rawToken) {
-    return NextResponse.json({ error: 'Token is required' }, { status: 400 })
-  }
-
-  const pwCheck = validatePasswordComplexity(body.newPassword)
+  // Password-complexity check (char-class mix) isn't covered by the
+  // length-only Zod Password primitive. Keep the existing helper for
+  // defense-in-depth — returning 400 on complexity failure.
+  const pwCheck = validatePasswordComplexity(rawNewPassword)
   if (!pwCheck.ok) {
     return NextResponse.json({ error: pwCheck.error }, { status: 400 })
   }

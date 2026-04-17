@@ -45,7 +45,7 @@ describe('POST /api/v1/recipients/resolve', () => {
     vi.clearAllMocks()
   })
 
-  it('returns 400 on invalid JSON', async () => {
+  it('returns 400 malformed_json on invalid JSON', async () => {
     const res = await POST(
       new Request('http://localhost/api/v1/recipients/resolve', {
         method: 'POST',
@@ -54,24 +54,26 @@ describe('POST /api/v1/recipients/resolve', () => {
       }),
     )
     expect(res.status).toBe(400)
-  })
-
-  it('returns 400 when bankCode is missing', async () => {
-    const res = await POST(makeRequest({ accountNumber: '0690000031' }))
-    expect(res.status).toBe(400)
     const json = await res.json()
-    expect(json.error).toContain('bankCode')
+    expect(json.reason).toBe('malformed_json')
   })
 
-  it('returns 400 when accountNumber is not 10 digits', async () => {
+  it('returns 422 when bankCode is missing (Zod)', async () => {
+    const res = await POST(makeRequest({ accountNumber: '0690000031' }))
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.fields?.bankCode).toBeInstanceOf(Array)
+  })
+
+  it('returns 422 when accountNumber is not 10 digits (Zod)', async () => {
     const r9 = await POST(makeRequest({ bankCode: '058', accountNumber: '123456789' }))
-    expect(r9.status).toBe(400)
+    expect(r9.status).toBe(422)
 
     const r11 = await POST(makeRequest({ bankCode: '058', accountNumber: '12345678901' }))
-    expect(r11.status).toBe(400)
+    expect(r11.status).toBe(422)
 
     const rNon = await POST(makeRequest({ bankCode: '058', accountNumber: 'abcdefghij' }))
-    expect(rNon.status).toBe(400)
+    expect(rNon.status).toBe(422)
   })
 
   it('returns 401 when not authenticated', async () => {

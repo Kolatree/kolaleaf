@@ -31,20 +31,27 @@ describe('POST /api/v1/auth/verify-code', () => {
     expect(res.status).toBe(400)
   })
 
-  it('returns 400 when email is missing or malformed', async () => {
+  it('returns 422 when email is missing or malformed (Zod)', async () => {
     const a = await POST(postRequest({ code: '123456' }))
-    expect(a.status).toBe(400)
+    expect(a.status).toBe(422)
     const b = await POST(postRequest({ email: 'not-an-email', code: '123456' }))
-    expect(b.status).toBe(400)
+    expect(b.status).toBe(422)
     expect(mockVerify).not.toHaveBeenCalled()
   })
 
-  it('returns 400 when code is not exactly 6 digits', async () => {
+  it('returns 422 when code is not exactly 6 digits (Zod)', async () => {
     const a = await POST(postRequest({ email: 'a@b.com', code: '12345' }))
-    expect(a.status).toBe(400)
+    expect(a.status).toBe(422)
     const b = await POST(postRequest({ email: 'a@b.com', code: 'abcdef' }))
-    expect(b.status).toBe(400)
+    expect(b.status).toBe(422)
     expect(mockVerify).not.toHaveBeenCalled()
+  })
+
+  it('returns 422 with fields.email when email is a non-string', async () => {
+    const res = await POST(postRequest({ email: 42, code: '123456' }))
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.fields?.email).toBeInstanceOf(Array)
   })
 
   it('returns 400 with no_token reason', async () => {

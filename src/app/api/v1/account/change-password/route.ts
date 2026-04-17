@@ -6,6 +6,8 @@ import {
   validatePasswordComplexity,
 } from '@/lib/auth/password'
 import { requireAuth, AuthError } from '@/lib/auth/middleware'
+import { parseBody } from '@/lib/http/validate'
+import { ChangePasswordBody } from './_schemas'
 
 // POST /api/account/change-password { currentPassword, newPassword }
 //
@@ -14,23 +16,14 @@ import { requireAuth, AuthError } from '@/lib/auth/middleware'
 // existing one. On success every OTHER session for this user is deleted
 // (force-logout other devices) and an AuthEvent is recorded.
 export async function POST(request: Request) {
-  let body: { currentPassword?: unknown; newPassword?: unknown }
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
+  const parsed = await parseBody(request, ChangePasswordBody)
+  if (!parsed.ok) return parsed.response
+  const { currentPassword, newPassword: rawNewPassword } = parsed.data
 
-  const currentPassword =
-    typeof body.currentPassword === 'string' ? body.currentPassword : ''
-  if (!currentPassword) {
-    return NextResponse.json(
-      { error: 'Current password is required' },
-      { status: 400 },
-    )
-  }
-
-  const pwCheck = validatePasswordComplexity(body.newPassword)
+  // Password-complexity check (char-class mix) isn't covered by the
+  // length-only Zod Password primitive. Keep the helper for defense-
+  // in-depth.
+  const pwCheck = validatePasswordComplexity(rawNewPassword)
   if (!pwCheck.ok) {
     return NextResponse.json({ error: pwCheck.error }, { status: 400 })
   }

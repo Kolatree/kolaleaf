@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { requireAuth, AuthError } from '@/lib/auth/middleware'
 import { normalizePhone, InvalidPhoneError } from '@/lib/auth/phone'
+import { parseBody } from '@/lib/http/validate'
+import { RemovePhoneBody } from './_schemas'
 
 /**
  * POST /api/account/phone/remove
@@ -18,11 +20,9 @@ import { normalizePhone, InvalidPhoneError } from '@/lib/auth/phone'
 export async function POST(request: Request) {
   try {
     const { userId } = await requireAuth(request)
-    const body = (await request.json().catch(() => null)) as { phone?: unknown } | null
-    const rawPhone = typeof body?.phone === 'string' ? body.phone : ''
-    if (!rawPhone) {
-      return NextResponse.json({ error: 'missing_phone' }, { status: 400 })
-    }
+    const parsed = await parseBody(request, RemovePhoneBody)
+    if (!parsed.ok) return parsed.response
+    const { phone: rawPhone } = parsed.data
 
     let phone: string
     try {

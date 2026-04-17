@@ -8,6 +8,8 @@ import {
   generateQrCodeDataUrl,
 } from '@/lib/auth/totp'
 import { issueSmsChallenge } from '@/lib/auth/two-factor-challenge'
+import { parseBody } from '@/lib/http/validate'
+import { Setup2faBody } from './_schemas'
 
 // POST /api/account/2fa/setup
 //
@@ -23,14 +25,9 @@ export async function POST(request: Request) {
   try {
     const { userId } = await requireAuth(request)
 
-    const body = (await request.json().catch(() => null)) as {
-      method?: unknown
-    } | null
-
-    const method = typeof body?.method === 'string' ? body.method : ''
-    if (method !== 'TOTP' && method !== 'SMS') {
-      return NextResponse.json({ error: 'invalid_method' }, { status: 400 })
-    }
+    const parsed = await parseBody(request, Setup2faBody)
+    if (!parsed.ok) return parsed.response
+    const { method } = parsed.data
 
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } })
     if (user.twoFactorMethod !== 'NONE') {

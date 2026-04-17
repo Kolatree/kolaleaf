@@ -4,6 +4,8 @@ import { prisma } from '@/lib/db/client'
 import { requireAuth, AuthError } from '@/lib/auth/middleware'
 import { verifyTotpCode, generateBackupCodes } from '@/lib/auth/totp'
 import { verifyChallenge } from '@/lib/auth/two-factor-challenge'
+import { parseBody } from '@/lib/http/validate'
+import { Enable2faBody } from './_schemas'
 
 // POST /api/account/2fa/enable
 //
@@ -16,20 +18,10 @@ export async function POST(request: Request) {
   try {
     const { userId } = await requireAuth(request)
 
-    const body = (await request.json().catch(() => null)) as
-      | {
-          method?: unknown
-          secret?: unknown
-          code?: unknown
-          challengeId?: unknown
-        }
-      | null
-
-    const method = typeof body?.method === 'string' ? body.method : ''
-    const code = typeof body?.code === 'string' ? body.code : ''
-    if ((method !== 'TOTP' && method !== 'SMS') || !code) {
-      return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
-    }
+    const parsed = await parseBody(request, Enable2faBody)
+    if (!parsed.ok) return parsed.response
+    const body = parsed.data
+    const { method, code } = body
 
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } })
     if (user.twoFactorMethod !== 'NONE') {
@@ -37,10 +29,7 @@ export async function POST(request: Request) {
     }
 
     if (method === 'TOTP') {
-      const secret = typeof body?.secret === 'string' ? body.secret : ''
-      if (!secret) {
-        return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
-      }
+      const { secret } = body
       if (!verifyTotpCode(secret, code)) {
         return NextResponse.json({ error: 'invalid_code' }, { status: 400 })
       }
@@ -70,11 +59,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ enabled: true, backupCodes: codes })
     }
 
-    // SMS branch
-    const challengeId = typeof body?.challengeId === 'string' ? body.challengeId : ''
-    if (!challengeId) {
-      return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
-    }
+    // SMS branch — `method: 'SMS'` means Zod already narrowed body to
+    // include `challengeId`; the discriminated union guarantees it.
+    const { challengeId } = body
     const ok = await verifyChallenge(userId, challengeId, code)
     if (!ok) {
       return NextResponse.json({ error: 'invalid_code' }, { status: 400 })

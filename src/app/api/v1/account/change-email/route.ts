@@ -3,6 +3,8 @@ import { prisma } from '@/lib/db/client'
 import { verifyPassword } from '@/lib/auth/password'
 import { issueVerificationCode } from '@/lib/auth/email-verification'
 import { requireAuth, AuthError } from '@/lib/auth/middleware'
+import { parseBody } from '@/lib/http/validate'
+import { ChangeEmailBody } from './_schemas'
 
 // POST /api/account/change-email { currentPassword, newEmail }
 //
@@ -16,30 +18,9 @@ import { requireAuth, AuthError } from '@/lib/auth/middleware'
 // DELETE /api/account/email/[id], so the user cannot lock themselves out
 // by fat-fingering the new address.
 export async function POST(request: Request) {
-  let body: { currentPassword?: unknown; newEmail?: unknown }
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
-
-  const currentPassword =
-    typeof body.currentPassword === 'string' ? body.currentPassword : ''
-  const newEmail =
-    typeof body.newEmail === 'string' ? body.newEmail.trim().toLowerCase() : ''
-
-  if (!currentPassword) {
-    return NextResponse.json(
-      { error: 'Current password is required' },
-      { status: 400 },
-    )
-  }
-  if (!newEmail || !newEmail.includes('@')) {
-    return NextResponse.json(
-      { error: 'Valid new email is required' },
-      { status: 400 },
-    )
-  }
+  const parsed = await parseBody(request, ChangeEmailBody)
+  if (!parsed.ok) return parsed.response
+  const { currentPassword, newEmail } = parsed.data
 
   try {
     const { userId } = await requireAuth(request)

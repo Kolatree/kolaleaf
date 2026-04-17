@@ -77,16 +77,20 @@ describe('POST /api/v1/account/change-password', () => {
     expect(res.status).toBe(401)
   })
 
-  it('returns 400 when current password missing', async () => {
+  it('returns 422 when current password missing (Zod)', async () => {
     mockSession()
     const res = await POST(makeRequest({ newPassword: STRONG }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.fields?.currentPassword).toBeInstanceOf(Array)
   })
 
-  it('returns 400 when new password too weak', async () => {
+  it('returns 422 when new password too short (Zod)', async () => {
     mockSession()
     const res = await POST(makeRequest({ currentPassword: 'x', newPassword: 'short' }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.fields?.newPassword).toBeInstanceOf(Array)
   })
 
   it('returns 401 when current password is wrong + logs PASSWORD_CHANGE_FAILED', async () => {

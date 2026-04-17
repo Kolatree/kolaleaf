@@ -1,34 +1,13 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { requireAuth, AuthError } from '@/lib/auth/middleware'
+import { parseBody } from '@/lib/http/validate'
+import { CreateRecipientBody } from './_schemas'
 
 export async function POST(request: Request) {
-  let body: {
-    fullName?: string
-    bankName?: string
-    bankCode?: string
-    accountNumber?: string
-  }
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
-
-  const { fullName, bankName, bankCode, accountNumber } = body
-
-  if (!fullName || typeof fullName !== 'string') {
-    return NextResponse.json({ error: 'fullName is required' }, { status: 400 })
-  }
-  if (!bankName || typeof bankName !== 'string') {
-    return NextResponse.json({ error: 'bankName is required' }, { status: 400 })
-  }
-  if (!bankCode || typeof bankCode !== 'string') {
-    return NextResponse.json({ error: 'bankCode is required' }, { status: 400 })
-  }
-  if (!accountNumber || typeof accountNumber !== 'string') {
-    return NextResponse.json({ error: 'accountNumber is required' }, { status: 400 })
-  }
+  const parsed = await parseBody(request, CreateRecipientBody)
+  if (!parsed.ok) return parsed.response
+  const { fullName, bankName, bankCode, accountNumber } = parsed.data
 
   try {
     const { userId } = await requireAuth(request)
@@ -36,10 +15,10 @@ export async function POST(request: Request) {
     const recipient = await prisma.recipient.create({
       data: {
         userId,
-        fullName: fullName.trim(),
-        bankName: bankName.trim(),
-        bankCode: bankCode.trim(),
-        accountNumber: accountNumber.trim(),
+        fullName,
+        bankName,
+        bankCode,
+        accountNumber,
       },
     })
 

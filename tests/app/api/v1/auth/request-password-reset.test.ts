@@ -37,13 +37,27 @@ describe('POST /api/v1/auth/request-password-reset', () => {
     vi.clearAllMocks()
   })
 
-  it('returns 400 for missing email', async () => {
+  it('returns 422 for missing email (Zod)', async () => {
     const res = await POST(makeRequest({}))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.reason).toBe('validation_failed')
+    expect(json.fields?.email).toBeInstanceOf(Array)
   })
 
-  it('returns 400 for invalid email format', async () => {
+  it('returns 422 for invalid email format (Zod)', async () => {
     const res = await POST(makeRequest({ email: 'notanemail' }))
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.fields?.email).toBeInstanceOf(Array)
+  })
+
+  it('returns 400 malformed_json on invalid JSON', async () => {
+    const req = new Request('http://localhost/api/v1/auth/request-password-reset', {
+      method: 'POST',
+      body: 'not-json',
+    })
+    const res = await POST(req)
     expect(res.status).toBe(400)
   })
 

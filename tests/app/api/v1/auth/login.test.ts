@@ -38,13 +38,32 @@ describe('POST /api/v1/auth/login', () => {
     mockIssue.mockResolvedValue({ ok: true })
   })
 
-  it('returns 400 for missing identifier', async () => {
+  it('returns 422 for missing identifier (Zod)', async () => {
     const res = await POST(makeRequest({ password: '12345678' }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.reason).toBe('validation_failed')
+    expect(json.fields?.identifier).toBeInstanceOf(Array)
   })
 
-  it('returns 400 for missing password', async () => {
+  it('returns 422 for missing password (Zod)', async () => {
     const res = await POST(makeRequest({ identifier: 'a@b.com' }))
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.fields?.password).toBeInstanceOf(Array)
+  })
+
+  it('returns 422 when identifier is wrong type', async () => {
+    const res = await POST(makeRequest({ identifier: 123, password: '12345678' }))
+    expect(res.status).toBe(422)
+  })
+
+  it('returns 400 malformed_json on invalid JSON', async () => {
+    const req = new Request('http://localhost/api/v1/auth/login', {
+      method: 'POST',
+      body: 'not-json',
+    })
+    const res = await POST(req)
     expect(res.status).toBe(400)
   })
 

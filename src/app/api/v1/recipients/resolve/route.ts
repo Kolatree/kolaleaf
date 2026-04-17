@@ -9,6 +9,8 @@ import {
   ProviderTemporaryError,
   ProviderTimeoutError,
 } from '@/lib/http/retry'
+import { parseBody } from '@/lib/http/validate'
+import { ResolveRecipientBody } from './_schemas'
 
 /**
  * POST /api/recipients/resolve
@@ -47,27 +49,9 @@ function checkRateLimit(userId: string): boolean {
 }
 
 export async function POST(request: Request) {
-  let body: { bankCode?: unknown; accountNumber?: unknown }
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
-
-  const { bankCode, accountNumber } = body
-
-  if (typeof bankCode !== 'string' || !bankCode.trim()) {
-    return NextResponse.json(
-      { error: 'bankCode is required' },
-      { status: 400 },
-    )
-  }
-  if (typeof accountNumber !== 'string' || !/^\d{10}$/.test(accountNumber)) {
-    return NextResponse.json(
-      { error: 'accountNumber must be 10 digits' },
-      { status: 400 },
-    )
-  }
+  const parsed = await parseBody(request, ResolveRecipientBody)
+  if (!parsed.ok) return parsed.response
+  const { bankCode, accountNumber } = parsed.data
 
   try {
     const { userId } = await requireAuth(request)
@@ -81,7 +65,7 @@ export async function POST(request: Request) {
 
     const provider = createFlutterwaveProvider()
     const { accountName } = await provider.resolveAccount({
-      bankCode: bankCode.trim(),
+      bankCode,
       accountNumber,
     })
 

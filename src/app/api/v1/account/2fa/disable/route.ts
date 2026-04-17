@@ -4,6 +4,8 @@ import { prisma } from '@/lib/db/client'
 import { requireAuth, AuthError } from '@/lib/auth/middleware'
 import { verifyTotpCode, verifyBackupCode } from '@/lib/auth/totp'
 import { verifyChallenge } from '@/lib/auth/two-factor-challenge'
+import { parseBody } from '@/lib/http/validate'
+import { Disable2faBody } from './_schemas'
 
 // POST /api/account/2fa/disable
 //
@@ -27,15 +29,10 @@ export async function POST(request: Request) {
   try {
     const { userId, session } = await requireAuth(request)
 
-    const body = (await request.json().catch(() => null)) as
-      | { code?: unknown; challengeId?: unknown }
-      | null
-
-    const code = typeof body?.code === 'string' ? body.code : ''
-    const challengeId = typeof body?.challengeId === 'string' ? body.challengeId : null
-    if (!code) {
-      return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
-    }
+    const parsed = await parseBody(request, Disable2faBody)
+    if (!parsed.ok) return parsed.response
+    const { code, challengeId: rawChallengeId } = parsed.data
+    const challengeId = rawChallengeId ?? null
 
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } })
     if (user.twoFactorMethod === 'NONE') {

@@ -54,15 +54,15 @@ describe('POST /api/v1/account/phone/verify', () => {
     expect(res.status).toBe(401)
   })
 
-  it('returns 400 when phone or code missing', async () => {
+  it('returns 422 when phone or code missing (Zod)', async () => {
     mockRequireAuth.mockResolvedValue({
       userId: 'u1',
       session: { id: 's1', userId: 'u1' } as never,
     })
     let res = await POST(makeRequest({ phone: '+61400000000' }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
     res = await POST(makeRequest({ code: '123456' }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
   })
 
   it('returns 400 when no outstanding code exists', async () => {

@@ -74,9 +74,29 @@ describe('POST /api/v1/account/change-email', () => {
     expect(res.status).toBe(401)
   })
 
-  it('returns 400 when new email invalid', async () => {
+  it('returns 422 when new email invalid (Zod)', async () => {
     mockSession()
     const res = await POST(makeRequest({ currentPassword: 'x', newEmail: 'notanemail' }))
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.fields?.newEmail).toBeInstanceOf(Array)
+  })
+
+  it('returns 422 when currentPassword missing (Zod)', async () => {
+    mockSession()
+    const res = await POST(makeRequest({ newEmail: 'new@b.com' }))
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.fields?.currentPassword).toBeInstanceOf(Array)
+  })
+
+  it('returns 400 malformed_json on invalid JSON', async () => {
+    mockSession()
+    const req = new Request('http://localhost/api/v1/account/change-email', {
+      method: 'POST',
+      body: 'not-json',
+    })
+    const res = await POST(req)
     expect(res.status).toBe(400)
   })
 

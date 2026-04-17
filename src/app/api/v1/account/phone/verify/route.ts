@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { requireAuth, AuthError } from '@/lib/auth/middleware'
 import { normalizePhone, verifySmsCode, InvalidPhoneError } from '@/lib/auth/phone'
+import { parseBody } from '@/lib/http/validate'
+import { VerifyPhoneBody } from './_schemas'
 
 const MAX_ATTEMPTS = 5
 
@@ -19,16 +21,9 @@ const MAX_ATTEMPTS = 5
 export async function POST(request: Request) {
   try {
     const { userId } = await requireAuth(request)
-    const body = (await request.json().catch(() => null)) as {
-      phone?: unknown
-      code?: unknown
-    } | null
-
-    const rawPhone = typeof body?.phone === 'string' ? body.phone : ''
-    const code = typeof body?.code === 'string' ? body.code : ''
-    if (!rawPhone || !code) {
-      return NextResponse.json({ error: 'missing_fields' }, { status: 400 })
-    }
+    const parsed = await parseBody(request, VerifyPhoneBody)
+    if (!parsed.ok) return parsed.response
+    const { phone: rawPhone, code } = parsed.data
 
     let phone: string
     try {

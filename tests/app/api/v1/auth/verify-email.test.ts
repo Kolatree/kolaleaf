@@ -46,19 +46,24 @@ describe('POST /api/v1/auth/verify-email', () => {
     vi.clearAllMocks()
   })
 
-  it('returns 400 when email missing', async () => {
+  it('returns 422 when email missing (Zod)', async () => {
     const res = await POST(postRequest({ code: '123456' }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.reason).toBe('validation_failed')
+    expect(json.fields?.email).toBeInstanceOf(Array)
   })
 
-  it('returns 400 when code missing', async () => {
+  it('returns 422 when code missing (Zod)', async () => {
     const res = await POST(postRequest({ email: 'a@b.com' }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.fields?.code).toBeInstanceOf(Array)
   })
 
-  it('returns 400 when code is not 6 digits', async () => {
+  it('returns 422 when code is not 6 digits (Zod)', async () => {
     const res = await POST(postRequest({ email: 'a@b.com', code: '1234' }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
   })
 
   it('returns 400 with friendly message on wrong_code', async () => {

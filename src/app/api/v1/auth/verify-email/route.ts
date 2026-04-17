@@ -5,8 +5,10 @@ import { createSession } from '@/lib/auth/sessions'
 import { verifyEmailWithCode } from '@/lib/auth/email-verification'
 import { logAuthEvent } from '@/lib/auth/audit'
 import { getClientIp } from '@/lib/http/ip'
+import { parseBody } from '@/lib/http/validate'
+import { VerifyEmailBody } from './_schemas'
 
-// POST /api/auth/verify-email
+// POST /api/v1/auth/verify-email
 //
 // Body: { email: string, code: string }
 //
@@ -14,29 +16,17 @@ import { getClientIp } from '@/lib/http/ip'
 // verified, and (only on success) issues a session cookie. This is the
 // gate that turns a dormant just-registered account into a usable one,
 // and it is also the only way an unverified account can log in (the
-// /api/auth/login route returns `requiresVerification: true` for them
+// /api/v1/auth/login route returns `requiresVerification: true` for them
 // and triggers a fresh code).
 export async function POST(request: Request) {
-  let body: { email?: string; code?: string }
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
+  const parsed = await parseBody(request, VerifyEmailBody)
+  if (!parsed.ok) return parsed.response
+  const { email, code } = parsed.data
 
-  const { email: rawEmail, code: rawCode } = body
-  if (!rawEmail || typeof rawEmail !== 'string' || !rawEmail.includes('@')) {
-    return NextResponse.json({ error: 'Email is required' }, { status: 400 })
-  }
-  if (!rawCode || typeof rawCode !== 'string' || !/^\d{6}$/.test(rawCode)) {
-    return NextResponse.json({ error: 'Code must be 6 digits' }, { status: 400 })
-  }
-
-  const email = rawEmail.trim().toLowerCase()
   const ip = getClientIp(request)
   const userAgent = request.headers.get('user-agent') ?? undefined
 
-  const result = await verifyEmailWithCode({ email, code: rawCode })
+  const result = await verifyEmailWithCode({ email, code })
 
   if (!result.ok) {
     const status = result.reason === 'too_many_attempts' ? 429 : 400

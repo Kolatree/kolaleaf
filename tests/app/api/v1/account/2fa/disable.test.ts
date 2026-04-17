@@ -91,10 +91,12 @@ describe('POST /api/v1/account/2fa/disable', () => {
     expect(json.error).toBe('not_enabled')
   })
 
-  it('returns 400 for missing code', async () => {
+  it('returns 422 for missing code (Zod)', async () => {
     mockAuthed()
     const res = await POST(makeRequest({}))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.fields?.code).toBeInstanceOf(Array)
   })
 
   it('TOTP user with valid current code disables 2FA', async () => {

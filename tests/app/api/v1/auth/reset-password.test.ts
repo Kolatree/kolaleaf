@@ -46,19 +46,24 @@ describe('POST /api/v1/auth/reset-password', () => {
     vi.clearAllMocks()
   })
 
-  it('returns 400 when token missing', async () => {
+  it('returns 422 when token missing (Zod)', async () => {
     const res = await POST(makeRequest({ newPassword: 'StrongPass123!' }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.reason).toBe('validation_failed')
+    expect(json.fields?.token).toBeInstanceOf(Array)
   })
 
-  it('returns 400 when newPassword missing', async () => {
+  it('returns 422 when newPassword missing (Zod)', async () => {
     const res = await POST(makeRequest({ token: 'a'.repeat(64) }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.fields?.newPassword).toBeInstanceOf(Array)
   })
 
-  it('returns 400 for weak password (too short)', async () => {
+  it('returns 422 for weak password (too short) (Zod)', async () => {
     const res = await POST(makeRequest({ token: 'a'.repeat(64), newPassword: 'short' }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
   })
 
   it('returns 400 for invalid/expired/used token with generic message', async () => {

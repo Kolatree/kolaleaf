@@ -73,14 +73,14 @@ describe('POST /api/v1/account/2fa/setup', () => {
     expect(res.status).toBe(401)
   })
 
-  it('returns 400 when method is missing or invalid', async () => {
+  it('returns 422 when method is missing or invalid (Zod)', async () => {
     mockAuthed()
     let res = await POST(makeRequest({}))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
 
     mockAuthed()
     res = await POST(makeRequest({ method: 'UNKNOWN' }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
   })
 
   it('returns 400 already_enabled when user has 2FA on', async () => {

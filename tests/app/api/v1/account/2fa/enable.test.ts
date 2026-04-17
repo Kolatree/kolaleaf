@@ -196,9 +196,11 @@ describe('POST /api/v1/account/2fa/enable', () => {
     )
   })
 
-  it('returns 400 for invalid body', async () => {
+  it('returns 422 for invalid body (missing secret/code) (Zod)', async () => {
     mockAuthed()
     const res = await POST(makeRequest({ method: 'TOTP' }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
+    const json = await res.json()
+    expect(json.reason).toBe('validation_failed')
   })
 })

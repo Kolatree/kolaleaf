@@ -4,6 +4,7 @@ import { setSessionCookie } from '@/lib/auth/middleware'
 import { createSession } from '@/lib/auth/sessions'
 import { verifyEmailWithCode } from '@/lib/auth/email-verification'
 import { logAuthEvent } from '@/lib/auth/audit'
+import { getClientIp } from '@/lib/http/ip'
 
 // POST /api/auth/verify-email
 //
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
   }
 
   const email = rawEmail.trim().toLowerCase()
-  const ip = request.headers.get('x-forwarded-for') ?? undefined
+  const ip = getClientIp(request)
   const userAgent = request.headers.get('user-agent') ?? undefined
 
   const result = await verifyEmailWithCode({ email, code: rawCode })

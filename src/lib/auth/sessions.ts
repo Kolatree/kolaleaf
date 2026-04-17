@@ -7,17 +7,32 @@ import { prisma } from '@/lib/db/client'
 // can reference the same value without drifting.
 export const SESSION_EXPIRY_MINUTES = 15
 
+// Build the `data` payload for `session.create`. Exposed separately so
+// routes that must issue a session inside a $transaction (and therefore
+// call `tx.session.create` rather than going through createSession) get
+// the same token length, TTL, and null-normalisation without copying
+// the body. Both consumers — createSession here and the inline path in
+// /api/auth/complete-registration — call this.
+export function buildSessionData(
+  userId: string,
+  ip?: string,
+  userAgent?: string,
+) {
+  return {
+    userId,
+    token: crypto.randomBytes(32).toString('hex'),
+    expiresAt: new Date(Date.now() + SESSION_EXPIRY_MINUTES * 60 * 1000),
+    ip: ip ?? null,
+    userAgent: userAgent ?? null,
+  }
+}
+
 export async function createSession(
   userId: string,
   ip?: string,
   userAgent?: string,
 ) {
-  const token = crypto.randomBytes(32).toString('hex')
-  const expiresAt = new Date(Date.now() + SESSION_EXPIRY_MINUTES * 60 * 1000)
-
-  return prisma.session.create({
-    data: { userId, token, expiresAt, ip: ip ?? null, userAgent: userAgent ?? null },
-  })
+  return prisma.session.create({ data: buildSessionData(userId, ip, userAgent) })
 }
 
 export async function validateSession(token: string) {

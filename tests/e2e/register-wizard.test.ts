@@ -66,9 +66,12 @@ describe('Register wizard E2E', () => {
     const email = `wiz-${Date.now()}-${crypto.randomUUID().slice(0, 8)}@test.com`
 
     // Step 1: send-code
+    // /send-code now dispatches the code fire-and-forget (moved off
+    // the request path for latency). Wait for the background handler
+    // to land the row + push the captured code before asserting.
     const r1 = await sendCode(req('/api/auth/send-code', { email }))
     expect(r1.status).toBe(200)
-    expect(capturedCodes).toHaveLength(1)
+    await vi.waitFor(() => expect(capturedCodes).toHaveLength(1))
     const code = capturedCodes[0]
 
     // A PendingEmailVerification row exists, unverified.
@@ -182,7 +185,7 @@ describe('Register wizard E2E', () => {
     const email = `unv-${Date.now()}-${crypto.randomUUID().slice(0, 8)}@test.com`
 
     await sendCode(req('/api/auth/send-code', { email }))
-    expect(capturedCodes).toHaveLength(1)
+    await vi.waitFor(() => expect(capturedCodes).toHaveLength(1))
     // Do NOT call verify-code.
 
     const r = await completeRegistration(

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { generateVerificationToken } from '@/lib/auth/tokens'
 import { sendEmail, renderPasswordResetEmail } from '@/lib/email'
+import { getClientIp } from '@/lib/http/ip'
 
 const RESET_TTL_MINUTES = 60
 const RATE_LIMIT_PER_HOUR = 3
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Valid email is required' }, { status: 400 })
   }
 
-  const ip = request.headers.get('x-forwarded-for') ?? undefined
+  const ip = getClientIp(request)
   const userAgent = request.headers.get('user-agent') ?? undefined
 
   try {

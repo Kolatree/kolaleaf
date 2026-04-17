@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { loginUser, EmailNotVerifiedError } from '@/lib/auth/login'
 import { setSessionCookie } from '@/lib/auth/middleware'
 import { issueVerificationCode } from '@/lib/auth/email-verification'
+import { getClientIp } from '@/lib/http/ip'
 
 export async function POST(request: Request) {
   let body: { identifier?: string; password?: string }
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Password is required' }, { status: 400 })
   }
 
-  const ip = request.headers.get('x-forwarded-for') ?? undefined
+  const ip = getClientIp(request)
   const userAgent = request.headers.get('user-agent') ?? undefined
 
   try {

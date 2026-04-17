@@ -24,6 +24,7 @@ const tx = vi.hoisted(() => ({
   },
   authEvent: {
     create: vi.fn(),
+    createMany: vi.fn(),
   },
 }))
 
@@ -43,6 +44,7 @@ const topPrisma = vi.hoisted(() => ({
   },
   authEvent: {
     create: vi.fn(),
+    createMany: vi.fn(),
   },
 }))
 
@@ -114,6 +116,7 @@ function setUpSuccessPath() {
   tx.userIdentifier.create.mockResolvedValueOnce({} as never)
   tx.session.create.mockResolvedValueOnce({ token: 'sess-tok' } as never)
   tx.authEvent.create.mockResolvedValue({} as never)
+  tx.authEvent.createMany.mockResolvedValueOnce({ count: 2 } as never)
   tx.pendingEmailVerification.delete.mockResolvedValueOnce({} as never)
 }
 
@@ -264,12 +267,13 @@ describe('POST /api/auth/complete-registration', () => {
       where: { email: 'a@b.com' },
     })
 
-    // Both audit events must be written.
-    const eventCalls = tx.authEvent.create.mock.calls.map(
-      (c) => ((c[0] as { data: { event: string } }).data.event),
-    )
-    expect(eventCalls).toContain('REGISTER')
-    expect(eventCalls).toContain('LOGIN')
+    // Both audit events must be written — now via createMany so it's a
+    // single DB round-trip inside the tx.
+    expect(tx.authEvent.createMany).toHaveBeenCalledTimes(1)
+    const batch = (tx.authEvent.createMany.mock.calls[0][0] as { data: { event: string }[] }).data
+    const eventNames = batch.map((e) => e.event)
+    expect(eventNames).toContain('REGISTER')
+    expect(eventNames).toContain('LOGIN')
     expect(mockCookie).toHaveBeenCalledWith('sess-tok')
   })
 

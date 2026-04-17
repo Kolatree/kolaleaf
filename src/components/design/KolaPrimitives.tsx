@@ -65,6 +65,29 @@ export function CurrencyBadge({ code }: { code: 'AUD' | 'NGN' }) {
   );
 }
 
+// Standard input styles used across the auth and onboarding wizard
+// pages. Exposed as const objects (not factories) because there's
+// nothing to parameterise — the :focus styling is handled inline at
+// each call site via onFocus / onBlur to flip borderColor to purple.
+export const textInputStyle = {
+  border: `1px solid ${colors.border}`,
+  borderRadius: '8px',
+  padding: '10px 12px',
+  fontSize: '14px',
+  outline: 'none',
+} as const
+
+export const codeInputStyle = {
+  border: `1px solid ${colors.border}`,
+  borderRadius: '8px',
+  padding: '12px 16px',
+  fontSize: '24px',
+  letterSpacing: '0.5em',
+  fontFamily: 'SF Mono, Menlo, Consolas, monospace',
+  textAlign: 'center',
+  outline: 'none',
+} as const
+
 export function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
     <div

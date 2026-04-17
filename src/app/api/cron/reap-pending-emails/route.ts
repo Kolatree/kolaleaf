@@ -22,11 +22,9 @@ import { authorizeCron } from '@/lib/auth/cron-auth'
 //       the same week to finish, without pretending the verified email
 //       is a permanent credential.
 //
-// The schedule is hourly at :15 (staggered off the :00 / :15 / :30
-// crons already in railway.toml to avoid pool contention). Protect
-// with CRON_SECRET like every other cron endpoint.
-//
-// Returns a small counter payload so ops can alert on abnormal volume.
+// Schedule is defined in railway.toml. Protect with CRON_SECRET like
+// every other cron endpoint. Returns a small counter payload so ops
+// can alert on abnormal volume.
 export async function POST(request: Request) {
   if (!authorizeCron(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

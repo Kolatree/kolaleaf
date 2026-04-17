@@ -63,11 +63,20 @@ export class AuthError extends Error {
   }
 }
 
+// Always emit Secure on the session cookie so the token never traverses
+// a non-HTTPS hop regardless of NODE_ENV. Browsers exempt localhost
+// from the Secure requirement automatically, so local dev still works
+// over http://localhost. Any non-localhost non-HTTPS environment (a
+// staging host over plain http, a preview deploy behind a misconfigured
+// proxy) correctly refuses the cookie — fail-closed rather than leak.
+//
+// The earlier `NODE_ENV === 'production' ? '; Secure' : ''` gate was
+// fail-open: a deploy with NODE_ENV unset would ship the token over
+// plain HTTP.
 export function setSessionCookie(token: string): string {
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : ''
-  return `${SESSION_COOKIE_NAME}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=900${secure}`
+  return `${SESSION_COOKIE_NAME}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=900; Secure`
 }
 
 export function clearSessionCookie(): string {
-  return `${SESSION_COOKIE_NAME}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`
+  return `${SESSION_COOKIE_NAME}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0; Secure`
 }

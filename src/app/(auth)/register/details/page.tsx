@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useRef, useState, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { fetchWithTimeout, isAbortError } from '@/lib/http/fetch-with-timeout'
 import {
   KolaLogo,
   Tagline,
@@ -45,14 +46,22 @@ function RegisterDetailsInner() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  // Ref-based submit guard closes the small window between setLoading(true)
+  // and React committing the disabled-button state. Protects against
+  // double-submit from fast Enter presses, React 19 strict-mode double
+  // invoke, or IME commit races — the server is idempotent-on-retry
+  // but a double POST still wastes one tx round-trip.
+  const submittingRef = useRef(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (submittingRef.current) return
+    submittingRef.current = true
     setError('')
     setLoading(true)
 
     try {
-      const res = await fetch('/api/auth/complete-registration', {
+      const res = await fetchWithTimeout('/api/auth/complete-registration', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -65,19 +74,38 @@ function RegisterDetailsInner() {
           state: stateCode,
           postcode,
         }),
+        // Complete-registration runs a 7-write transaction. 30s keeps
+        // the UI responsive under Railway Postgres p99 latency while
+        // still failing visibly if the server genuinely wedges.
+        timeoutMs: 30_000,
       })
 
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
+        // Branch on reason so recovery paths route correctly instead of
+        // leaving the user stranded on a form that can't succeed.
+        if (data.reason === 'no_pending_verification' || data.reason === 'pending_not_verified') {
+          router.push(`/register/verify?email=${encodeURIComponent(email)}`)
+          return
+        }
+        if (data.reason === 'claim_expired') {
+          router.push('/register')
+          return
+        }
         setError(data.error || 'Registration failed')
         return
       }
 
       router.push('/kyc')
-    } catch {
-      setError('Something went wrong. Please try again.')
+    } catch (err) {
+      setError(
+        isAbortError(err)
+          ? 'The server is slow to respond. Please try again.'
+          : 'Something went wrong. Please try again.',
+      )
     } finally {
       setLoading(false)
+      submittingRef.current = false
     }
   }
 

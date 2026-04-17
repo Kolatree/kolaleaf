@@ -18,15 +18,24 @@ export async function POST(request: Request) {
   try {
     body = await request.json()
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    return NextResponse.json(
+      { error: 'Invalid JSON', reason: 'invalid_json' },
+      { status: 400 },
+    )
   }
 
   const { email: rawEmail, code: rawCode } = body
   if (!rawEmail || typeof rawEmail !== 'string' || !rawEmail.includes('@')) {
-    return NextResponse.json({ error: 'Email is required' }, { status: 400 })
+    return NextResponse.json(
+      { error: 'Email is required', reason: 'missing_email' },
+      { status: 400 },
+    )
   }
   if (!rawCode || typeof rawCode !== 'string' || !/^\d{6}$/.test(rawCode)) {
-    return NextResponse.json({ error: 'Code must be 6 digits' }, { status: 400 })
+    return NextResponse.json(
+      { error: 'Code must be 6 digits', reason: 'invalid_code_format' },
+      { status: 400 },
+    )
   }
 
   const email = rawEmail.trim().toLowerCase()
@@ -48,7 +57,17 @@ export async function POST(request: Request) {
           return 'No verification in progress for this email. Please request a new code.'
       }
     })()
-    return NextResponse.json({ error: message, reason: result.reason }, { status })
+    // RFC 6585: 429 responses SHOULD include Retry-After. Our
+    // `too_many_attempts` is a token-lifetime cap (the token is burned
+    // and the user must call /send-code to get a fresh one), so "retry
+    // after 0" tells conforming HTTP clients they can immediately
+    // request a new code without a back-off timer — which is correct.
+    const headers: Record<string, string> =
+      status === 429 ? { 'Retry-After': '0' } : {}
+    return NextResponse.json({ error: message, reason: result.reason }, {
+      status,
+      headers,
+    })
   }
 
   return NextResponse.json({ verified: true }, { status: 200 })

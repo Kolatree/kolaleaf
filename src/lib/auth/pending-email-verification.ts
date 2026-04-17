@@ -21,8 +21,10 @@ export interface IssuePendingOptions {
 }
 
 export type IssuePendingResult =
-  | { ok: true }
+  | { ok: true; delivered: boolean }
   | { ok: false; reason: 'rate_limited'; retryAfterMs: number }
+  | { ok: false; reason: 'claim_in_flight' }
+  | { ok: false; reason: 'send_failed'; providerError: string }
 
 /**
  * Issue a 6-digit code for the `PendingEmailVerification` row keyed by
@@ -79,6 +81,22 @@ export async function issuePendingEmailCode(
     nextWindowStart = now
   }
 
+  // Claim preservation. If a legitimate user has already completed step 2
+  // and is sitting at step 3 with a live claim (verifiedAt set AND
+  // claimExpiresAt in the future), a resend MUST NOT wipe that claim —
+  // otherwise anyone who knows the email can DoS the user mid-wizard by
+  // hitting /send-code. Report `claim_in_flight` up to the route, which
+  // still responds 200 to the client for enumeration safety, but skips
+  // the DB write and email send entirely.
+  if (
+    existing &&
+    existing.verifiedAt !== null &&
+    existing.claimExpiresAt !== null &&
+    existing.claimExpiresAt > now
+  ) {
+    return { ok: false, reason: 'claim_in_flight' }
+  }
+
   const { raw, hash } = generateVerificationCode()
   const expiresAt = new Date(now.getTime() + PENDING_CODE_TTL_MINUTES * 60 * 1000)
 
@@ -114,9 +132,20 @@ export async function issuePendingEmailCode(
     expiresInMinutes: PENDING_CODE_TTL_MINUTES,
   })
 
-  await sendEmail({ to: email, subject, html, text })
+  // Propagate delivery state so callers (route handlers, ops logs) can
+  // tell "DB wrote, Resend rejected" apart from "all green". The route
+  // still returns 200 per the enumeration-proof contract, but the
+  // failure is observable.
+  const result = await sendEmail({ to: email, subject, html, text })
+  if (!result.ok) {
+    return {
+      ok: false,
+      reason: 'send_failed',
+      providerError: result.error ?? 'Unknown Resend error',
+    }
+  }
 
-  return { ok: true }
+  return { ok: true, delivered: true }
 }
 
 export type VerifyPendingOutcome =

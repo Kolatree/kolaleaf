@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { fetchWithTimeout, isAbortError } from '@/lib/http/fetch-with-timeout'
 import {
   KolaLogo,
   Tagline,
@@ -40,10 +41,11 @@ export default function RegisterPage() {
     setLoading(true)
 
     try {
-      const res = await fetch('/api/auth/send-code', {
+      const res = await fetchWithTimeout('/api/auth/send-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
+        timeoutMs: 20_000,
       })
 
       if (!res.ok) {
@@ -55,8 +57,12 @@ export default function RegisterPage() {
       // /send-code is enumeration-proof: always 200. We unconditionally
       // move the user to step 2 with the email in the URL.
       router.push(`/register/verify?email=${encodeURIComponent(email.trim().toLowerCase())}`)
-    } catch {
-      setError('Something went wrong. Please try again.')
+    } catch (err) {
+      setError(
+        isAbortError(err)
+          ? 'The server is slow to respond. Please try again.'
+          : 'Something went wrong. Please try again.',
+      )
     } finally {
       setLoading(false)
     }

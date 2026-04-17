@@ -63,11 +63,12 @@ describe('issuePendingEmailCode', () => {
     )
     const result = await issuePendingEmailCode({ email: 'a@b.com' })
     expect(result.ok).toBe(false)
-    if (!result.ok) {
-      expect(result.reason).toBe('rate_limited')
+    if (!result.ok && result.reason === 'rate_limited') {
       // retryAfterMs should be a positive value ≤ 1 hour.
       expect(result.retryAfterMs).toBeGreaterThan(0)
       expect(result.retryAfterMs).toBeLessThanOrEqual(60 * 60 * 1000)
+    } else {
+      throw new Error(`Expected rate_limited, got ${JSON.stringify(result)}`)
     }
     expect(mockUpsert).not.toHaveBeenCalled()
     expect(mockSend).not.toHaveBeenCalled()

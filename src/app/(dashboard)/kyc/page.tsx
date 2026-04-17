@@ -3,6 +3,30 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { fetchWithTimeout, isAbortError } from '@/lib/http/fetch-with-timeout'
+
+// Hosts we are willing to redirect to after /api/kyc/initiate. Sumsub's
+// production WebSDK hosts live under *.sumsub.com; their sandbox uses
+// api.sumsub.com as well. We refuse any other origin so a header-injection
+// or provider-misconfiguration can't turn this page into an open redirect.
+const KYC_ALLOWED_HOSTS = new Set([
+  'api.sumsub.com',
+  'in-mobile-sdk.sumsub.com',
+  'websdk.sumsub.com',
+  'test-api.sumsub.com',
+])
+
+function isAllowedSumsubUrl(raw: unknown): raw is string {
+  if (typeof raw !== 'string') return false
+  let url: URL
+  try {
+    url = new URL(raw)
+  } catch {
+    return false
+  }
+  if (url.protocol !== 'https:') return false
+  return KYC_ALLOWED_HOSTS.has(url.host) || url.host.endsWith('.sumsub.com')
+}
 import {
   KolaLogo,
   Tagline,
@@ -28,21 +52,33 @@ export default function KycPage() {
     setError('')
     setLoading(true)
     try {
-      const res = await fetch('/api/kyc/initiate', { method: 'POST' })
+      const res = await fetchWithTimeout('/api/kyc/initiate', {
+        method: 'POST',
+        timeoutMs: 20_000,
+      })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         setError(data.error || 'Could not start identity verification')
         return
       }
-      if (data.verificationUrl) {
+      // Only follow the redirect if the URL is demonstrably a Sumsub
+      // host over HTTPS. An attacker-controlled response body (or a
+      // future provider misconfiguration) cannot turn this page into
+      // an open redirect.
+      if (isAllowedSumsubUrl(data.verificationUrl)) {
         window.location.href = data.verificationUrl
         return
       }
-      // No URL returned — fall through to the dashboard; the backend will
-      // have recorded what it could, and the user can retry from /account.
+      // No URL returned or unknown origin — fall through to the
+      // dashboard. The backend will have recorded what it could, and
+      // the user can retry from /account.
       router.push('/send')
-    } catch {
-      setError('Something went wrong. Please try again.')
+    } catch (err) {
+      setError(
+        isAbortError(err)
+          ? 'The server is slow to respond. Please try again.'
+          : 'Something went wrong. Please try again.',
+      )
     } finally {
       setLoading(false)
     }

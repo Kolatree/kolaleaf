@@ -25,12 +25,18 @@ export async function POST(request: Request) {
   try {
     body = await request.json()
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    return NextResponse.json(
+      { error: 'Invalid JSON', reason: 'invalid_json' },
+      { status: 400 },
+    )
   }
 
   const rawEmail = body.email
   if (!rawEmail || typeof rawEmail !== 'string' || !rawEmail.includes('@')) {
-    return NextResponse.json({ error: 'Email is required' }, { status: 400 })
+    return NextResponse.json(
+      { error: 'Email is required', reason: 'missing_email' },
+      { status: 400 },
+    )
   }
 
   const email = rawEmail.trim().toLowerCase()
@@ -46,19 +52,55 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true }, { status: 200 })
   }
 
+  // Result branches:
+  //   ok: true                     → code dispatched
+  //   reason: 'rate_limited'       → cap hit, silently no-op
+  //   reason: 'claim_in_flight'    → legit user mid-wizard, no-op to
+  //                                   preserve their verified claim
+  //   reason: 'send_failed'        → Resend rejected / errored
+  //   (throws)                     → unexpected failure
+  // All branches map to the same 200 response for enumeration safety;
+  // we log structurally so ops can alert on rate_limited / send_failed
+  // without surfacing state to the client.
   try {
-    // Result is intentionally discarded. `issuePendingEmailCode` may
-    // return `{ ok: false, reason: 'rate_limited' }` — we do NOT
-    // surface that to the client because a 429 would leak enumeration
-    // signal (attacker probes many emails, sees which ones return 429
-    // = "that email is being registered right now"). All outcomes map
-    // to the same 200 response; rate-limit failures are captured in
-    // the DB counter + logs.
-    await issuePendingEmailCode({ email })
+    const result = await issuePendingEmailCode({ email })
+    if (!result.ok) {
+      console.error(
+        JSON.stringify({
+          level: 'warn',
+          route: 'auth/send-code',
+          reason: result.reason,
+          emailHash: await sha256Hex(email),
+          ts: new Date().toISOString(),
+          ...('providerError' in result ? { providerError: result.providerError } : {}),
+          ...('retryAfterMs' in result ? { retryAfterMs: result.retryAfterMs } : {}),
+        }),
+      )
+    }
   } catch (err) {
-    console.error('[auth/send-code] issue failed', err)
-    // Intentional: still return 200. Failure is captured in logs.
+    console.error(
+      JSON.stringify({
+        level: 'error',
+        route: 'auth/send-code',
+        reason: 'unexpected',
+        emailHash: await sha256Hex(email),
+        error: err instanceof Error ? err.message : String(err),
+        ts: new Date().toISOString(),
+      }),
+    )
   }
 
   return NextResponse.json({ ok: true }, { status: 200 })
+}
+
+// Hash the email so ops logs don't become a PII reservoir. sha256 is
+// reversible via rainbow tables against a known corpus of target emails,
+// so this is obfuscation for log-retention purposes, not a secrecy
+// guarantee. Full email stays in the DB where it belongs.
+async function sha256Hex(s: string): Promise<string> {
+  const buf = new TextEncoder().encode(s)
+  const hash = await crypto.subtle.digest('SHA-256', buf)
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
 }

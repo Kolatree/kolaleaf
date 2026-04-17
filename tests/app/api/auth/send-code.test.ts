@@ -30,7 +30,7 @@ function postRequest(body: unknown): Request {
 describe('POST /api/auth/send-code', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockIssue.mockResolvedValue({ ok: true })
+    mockIssue.mockResolvedValue({ ok: true, delivered: true })
   })
 
   it('returns 400 for invalid JSON', async () => {

@@ -4,7 +4,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // callback, build a `tx` proxy with the same method shape as the
 // top-level prisma mock, and run the callback so each tx.X call lands on
 // the same vi.fn() the test can assert against.
-const tx = {
+// Hoisted so `vi.mock` can reference it; vi.mock calls are elevated
+// above all other top-level code at transform time.
+const tx = vi.hoisted(() => ({
   pendingEmailVerification: {
     findUnique: vi.fn(),
     delete: vi.fn(),
@@ -12,6 +14,7 @@ const tx = {
   userIdentifier: {
     findUnique: vi.fn(),
     create: vi.fn(),
+    deleteMany: vi.fn(),
   },
   user: {
     create: vi.fn(),
@@ -22,17 +25,45 @@ const tx = {
   authEvent: {
     create: vi.fn(),
   },
-}
+}))
+
+// Top-level prisma (outside the tx) — the route calls
+// userIdentifier.findUnique / session.create / authEvent.create outside
+// the tx for the idempotent-retry short-circuit (check existing
+// verified UserIdentifier → re-issue session without re-entering the tx).
+// Hoisted so `vi.mock` can see it (vi.mock calls are elevated above
+// all other top-level code at transform time).
+const topPrisma = vi.hoisted(() => ({
+  $transaction: vi.fn() as ReturnType<typeof vi.fn>,
+  userIdentifier: {
+    findUnique: vi.fn(),
+  },
+  session: {
+    create: vi.fn(),
+  },
+  authEvent: {
+    create: vi.fn(),
+  },
+}))
 
 vi.mock('@/lib/db/client', () => ({
-  prisma: {
-    $transaction: vi.fn(async (cb: (ctx: typeof tx) => unknown) => cb(tx)),
-  },
+  prisma: topPrisma,
 }))
 
 vi.mock('@/lib/auth/middleware', () => ({
   setSessionCookie: vi.fn(() => 'kolaleaf_session=sess-tok; HttpOnly'),
 }))
+
+vi.mock('@/lib/auth/password', async (orig) => {
+  const actual = await orig<typeof import('@/lib/auth/password')>()
+  return {
+    ...actual,
+    // verifyPassword is only called on the idempotent-retry path; default
+    // to false so tests that don't set up that path don't accidentally
+    // hit the retry short-circuit.
+    verifyPassword: vi.fn(async () => false),
+  }
+})
 
 import { POST } from '@/app/api/auth/complete-registration/route'
 import { setSessionCookie } from '@/lib/auth/middleware'
@@ -90,6 +121,15 @@ describe('POST /api/auth/complete-registration', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockCookie.mockReturnValue('kolaleaf_session=sess-tok; HttpOnly')
+    // Default: no existing verified identifier, so the idempotent-retry
+    // short-circuit never fires and tests proceed through the tx.
+    topPrisma.userIdentifier.findUnique.mockResolvedValue(null)
+    // Wire the $transaction to invoke the route's callback against our
+    // shared `tx` proxy. The second argument (options) is ignored —
+    // we only care about capturing the callback behaviour.
+    topPrisma.$transaction.mockImplementation(
+      async (cb: (ctx: typeof tx) => unknown) => cb(tx),
+    )
   })
 
   it('returns 400 for invalid JSON', async () => {

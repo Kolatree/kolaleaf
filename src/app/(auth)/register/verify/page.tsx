@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useRef, useState, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { fetchWithTimeout, isAbortError } from '@/lib/http/fetch-with-timeout'
 import {
   KolaLogo,
   Tagline,
@@ -43,31 +44,57 @@ function RegisterVerifyInner() {
   const [info, setInfo] = useState('')
   const [loading, setLoading] = useState(false)
   const [resending, setResending] = useState(false)
+  // Ref-based submit guard — closes the ~20ms gap between the first
+  // setLoading(true) and React committing the disabled-button state.
+  // Prevents double-submit from fast Enter presses or IME commit races.
+  const submittingRef = useRef(false)
 
   async function handleVerify(e: React.FormEvent) {
     e.preventDefault()
+    if (submittingRef.current) return
+    submittingRef.current = true
     setError('')
     setInfo('')
     setLoading(true)
 
     try {
-      const res = await fetch('/api/auth/verify-code', {
+      const res = await fetchWithTimeout('/api/auth/verify-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, code }),
+        timeoutMs: 20_000,
       })
 
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
+        // Branch on machine-readable reason so recovery paths route
+        // correctly. `wrong_code` / `too_many_attempts` keep the user
+        // on this page; `no_token` / `used` bounce back to /register.
+        if (data.reason === 'no_token' || data.reason === 'used') {
+          router.push('/register')
+          return
+        }
+        if (data.reason === 'expired' || data.reason === 'too_many_attempts') {
+          setError(
+            (data.error || 'Verification failed') +
+              ' Tap "Send a new one" below to continue.',
+          )
+          return
+        }
         setError(data.error || 'Verification failed')
         return
       }
 
       router.push(`/register/details?email=${encodeURIComponent(email)}`)
-    } catch {
-      setError('Something went wrong. Please try again.')
+    } catch (err) {
+      setError(
+        isAbortError(err)
+          ? 'The server is slow to respond. Please try again.'
+          : 'Something went wrong. Please try again.',
+      )
     } finally {
       setLoading(false)
+      submittingRef.current = false
     }
   }
 
@@ -78,14 +105,19 @@ function RegisterVerifyInner() {
     try {
       // /send-code is always 200, even for already-verified emails. We show
       // the same friendly "sent" message unconditionally.
-      await fetch('/api/auth/send-code', {
+      await fetchWithTimeout('/api/auth/send-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
+        timeoutMs: 20_000,
       })
       setInfo('If this email is on file, a new code is on its way.')
-    } catch {
-      setError('Could not request a new code.')
+    } catch (err) {
+      setError(
+        isAbortError(err)
+          ? 'The server is slow to respond. Please try again.'
+          : 'Could not request a new code.',
+      )
     } finally {
       setResending(false)
     }

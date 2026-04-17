@@ -6,6 +6,18 @@ export type AuState = (typeof AU_STATES)[number]
 export const AU_STATE_SET: ReadonlySet<string> = new Set(AU_STATES)
 export const AU_POSTCODE_RE = /^\d{4}$/
 
+// Type-level drift guard: if Prisma's generated AuState enum ever
+// diverges from AU_STATES above (add/remove/rename a value),
+// `tsc --noEmit` breaks loudly. Runtime cost: zero.
+import type { $Enums } from '@/generated/prisma/client'
+type _AuStateSyncCheck = $Enums.AuState extends AuState
+  ? AuState extends $Enums.AuState
+    ? true
+    : never
+  : never
+const _auStateSyncCheck: _AuStateSyncCheck = true
+void _auStateSyncCheck
+
 // Shared rate limits for the email-verification flows. Both the
 // pre-account wizard (PendingEmailVerification) and the post-account
 // change-email path (EmailVerificationToken) cap code sends at 5 per

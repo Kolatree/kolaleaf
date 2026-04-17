@@ -69,6 +69,17 @@ enum TwoFactorMethod {
   SMS
 }
 
+enum AuState {
+  NSW
+  VIC
+  QLD
+  WA
+  SA
+  TAS
+  ACT
+  NT
+}
+
 // ─── MODELS ─────────────────────────────────────────────
 
 model User {
@@ -89,7 +100,7 @@ model User {
   addressLine1 String?
   addressLine2 String?
   city         String?
-  state        String?
+  state        AuState?
   postcode     String?
   country      String?
   referralCode  String           @unique @default(cuid())

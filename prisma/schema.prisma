@@ -83,6 +83,15 @@ model User {
   kycProviderId        String?
   kycRejectionReasons  String[]         @default([])
   dailyLimit           Decimal          @default(10000) @db.Decimal(12, 2)
+  // AU-only address for v1. Nullable so the pre-wizard test users stay
+  // migration-safe; /api/auth/complete-registration writes them in one
+  // transaction so all production rows going forward have them set.
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  postcode     String?
+  country      String?
   referralCode  String           @unique @default(cuid())
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
@@ -248,6 +257,38 @@ model WebhookEvent {
   createdAt   DateTime @default(now())
 
   @@unique([provider, eventId])
+}
+
+// Code-gated email claim used by the /register wizard. Unlike
+// EmailVerificationToken (which requires a User and is used post-account
+// creation and for the logged-in change-email flow) this row exists BEFORE
+// any User exists — it proves control of the email so no "ghost" User row
+// is persisted for unverified addresses. A row's lifetime:
+//   step 1 /send-code        → upsert (codeHash, expiresAt, attempts=0, verifiedAt=null)
+//   step 2 /verify-code      → set verifiedAt + claimExpiresAt
+//   step 3 /complete-registration → delete on success
+// If step 3 doesn't happen within claimExpiresAt the user must re-verify.
+model PendingEmailVerification {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  codeHash       String
+  expiresAt      DateTime
+  attempts       Int       @default(0)
+  verifiedAt     DateTime?
+  claimExpiresAt DateTime?
+  // Rate-limit counter. Because the row is upsert-keyed by email,
+  // `createdAt` never moves after first insert and cannot be used for
+  // a send-count window. We track sends explicitly: `sendCount` is the
+  // number of codes issued inside the current window, and
+  // `sendWindowStart` is when that window began. When a new send arrives
+  // more than an hour after `sendWindowStart`, we reset the window and
+  // count=1; otherwise we increment. At 5-in-window, /send-code returns
+  // rate_limited (enumeration-proofed to a silent 200 by the route).
+  sendCount       Int      @default(0)
+  sendWindowStart DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([expiresAt])
 }
 
 model EmailVerificationToken {

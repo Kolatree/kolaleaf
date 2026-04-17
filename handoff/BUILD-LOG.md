@@ -5,13 +5,67 @@
 
 ## Current Status
 
-**Active step:** 16 -- Flutterwave bank resolution for recipients (review pending)
+**Active step:** 18 -- Verify-first registration 3-step wizard (review pending)
 **Last cleared:** Step 15b
 **Pending deploy:** NO
 
 ---
 
 ## Step History
+
+### Step 18 -- Verify-first registration (3-step wizard) -- REVIEW PENDING
+*Date: 2026-04-17*
+
+Replaces the one-shot /register with a three-step wizard that creates NO User
+row until the email has been verified AND the claim is completed. Eliminates
+the "ghost unverified user" class of rows from the DB and tightens the
+AUSTRAC posture: every persisted customer provably controlled their email at
+the moment of account creation. Per Product Owner: "so we don't fill the
+database with unverified emails."
+
+Files added:
+- `prisma/migrations/20260417035232_pending_email_verification_and_address/migration.sql` -- new `PendingEmailVerification` table + nullable AU address columns on `User`
+- `src/lib/auth/pending-email-verification.ts` -- `issuePendingEmailCode` + `verifyPendingEmailCode` helpers (modelled on `email-verification.ts`, adapted for rows keyed by email instead of userId since no User exists yet)
+- `src/app/api/auth/send-code/route.ts` -- step 1 endpoint, always 200 (enumeration-proof)
+- `src/app/api/auth/verify-code/route.ts` -- step 2 endpoint, opens 30-min claim window, NEVER sets a session
+- `src/app/api/auth/complete-registration/route.ts` -- step 3 endpoint, transactional create of User + verified UserIdentifier + Session + REGISTRATION + LOGIN AuthEvents, deletes PendingEmailVerification
+- `src/app/(auth)/register/verify/page.tsx` -- step 2 page (6-digit input, resend)
+- `src/app/(auth)/register/details/page.tsx` -- step 3 page (name + AU address + password)
+- `src/app/(dashboard)/kyc/page.tsx` -- post-registration KYC prompt (Verify / Skip)
+- `tests/lib/auth/pending-email-verification.test.ts` -- 12 unit tests for the new helper (rate limit, hash-at-rest, idempotent-verify, all error reasons)
+- `tests/app/api/auth/send-code.test.ts` -- 8 route tests
+- `tests/app/api/auth/verify-code.test.ts` -- 10 route tests
+- `tests/app/api/auth/complete-registration.test.ts` -- 14 route tests (validation, 409 race, full tx success path)
+- `tests/e2e/register-wizard.test.ts` -- 3 e2e tests against the real DB
+
+Files modified:
+- `prisma/schema.prisma` -- new `PendingEmailVerification` model; new nullable fields on `User` (addressLine1, addressLine2, city, state, postcode, country)
+- `src/app/(auth)/register/page.tsx` -- rewritten: email-only form that calls `/api/auth/send-code` and bounces to `/register/verify`
+
+Files deleted:
+- `src/app/api/auth/register/route.ts` -- legacy monolithic register handler (404 in prod, confirmed via curl)
+- `tests/app/api/auth/register.test.ts` -- paired tests (7 cases)
+
+Decisions made (that weren't explicitly called out in the brief):
+- Pending row keyed by email (unique). Upsert on re-send wipes attempts + verifiedAt + claimExpiresAt — resend always restarts the clock cleanly. Alternative was to keep each issue as a separate row with "most recent wins"; the upsert model matches the brief's natural "one pending row per email" mental model and avoids needing cleanup jobs for stale-but-unused rows.
+- `PendingEmailVerification` has no `usedAt` column. Burning a token after the Nth wrong attempt is done by setting `expiresAt = now - 1ms`. A cleaner-looking alternative would be adding a `usedAt` column, but the row is deleted by /complete-registration within minutes anyway — the expiry-based burn keeps the schema smaller and still blocks further guesses.
+- Re-verify within the claim window returns `ok: true` rather than `used`. This makes the UX robust to back-button reloads on step 3 that re-fire step 2 — a common React wizard trap — without needing a "verified but not claimed" branch in the route.
+- The verification email for the wizard uses `recipientName: "there"` because no User row exists yet and we cannot leak user-supplied strings into the subject without an injection guard. "there" keeps the copy warm without that risk.
+- `/kyc` placed in the `(dashboard)` group so the existing server-side auth gate redirects unauthenticated users to `/login`. Matches the brief: the user has a session after step 3 and the page is authenticated. The page renders its own full-screen gradient (no bottom nav) because KYC is a one-off intercept, not a nav-bar destination.
+- `complete-registration` does a soft cleanup: if a stale UNverified UserIdentifier exists for the same email (edge case from pre-wizard legacy test data), delete it before re-creating as verified. Verified duplicates still throw 409.
+- Session cookie is set by `setSessionCookie(session.token)` -- reused from the existing middleware so the cookie lifetime policy stays in one place.
+
+Verification:
+- `npm test -- --run` -- 695 passed / 0 failed (baseline 655 + 44 new + 3 e2e -- 7 deleted legacy = 695)
+- `npx tsc --noEmit` -- 0 errors
+- `rm -rf .next && npm run build` -- success, all new routes present (`/register`, `/register/verify`, `/register/details`, `/kyc`, `/api/auth/send-code`, `/api/auth/verify-code`, `/api/auth/complete-registration`)
+- Local curl smoke path: send-code (200) -> verify-code (200 verified, no cookie) -> complete-registration (201 + Set-Cookie) -> GET /api/account/me (200 user w/ address verified) -> /api/auth/register (404)
+- DB inspection after smoke: User row with address + country=AU, UserIdentifier verified=true, PendingEmailVerification row deleted, AuthEvents = [REGISTRATION, LOGIN]
+
+Reviewer findings: [pending Richard]
+Deploy: pending Arch -- migration is backfill-safe (all new User columns nullable, new table with no FK to User)
+
+---
 
 ### Step 16 -- Flutterwave bank resolution for recipients UX -- REVIEW PENDING
 *Date: 2026-04-16*

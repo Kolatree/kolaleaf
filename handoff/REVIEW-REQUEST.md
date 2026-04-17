@@ -1,118 +1,99 @@
-# Review Request -- Step 16
+# Review Request -- Step 18: Verify-First Registration (3-step wizard)
 
-**Step:** 16 -- Flutterwave bank resolution for recipients UX
-**Date:** 2026-04-16
-**Builder:** Bob
 **Ready for Review:** YES
+**Builder:** Bob
+**Date:** 2026-04-17
+**Brief:** `handoff/ARCHITECT-BRIEF.md`
 
 ---
 
-## What Changed
+## Summary
 
-Replaces the free-text recipient form with a provider-verified flow.
+Step 18 replaces the monolithic `/api/auth/register` with a three-step wizard that verifies the email BEFORE creating any `User` row. The flow is `/register` (email only -> send 6-digit code) -> `/register/verify` (enter code, open 30-min claim window, no session yet) -> `/register/details` (name + AU address + password, transactional create of User + verified UserIdentifier + Session + REGISTRATION/LOGIN AuthEvents, consume the pending row) -> `/kyc` (skippable Sumsub prompt; hard KYC block stays at transfer creation per CLAUDE.md). The legacy `/api/auth/register` route and its tests are deleted and the endpoint now 404s. A new `PendingEmailVerification` model and nullable AU address columns on `User` are added via migration `20260417035232_pending_email_verification_and_address` (backfill-safe). `/api/auth/send-code` is enumeration-proof (always 200), `/api/auth/verify-code` never issues a session, and `/api/auth/complete-registration` is the only new surface that mutates `User`. All reliability guarantees from the logged-in email-verification path (5 sends/hour, 5 attempts/token, 30-min TTL, sha256(code) at rest) carry over. 655 -> 695 passing tests (+44 new + 3 e2e -- 7 deleted legacy). `npx tsc --noEmit` clean. `npm run build` clean.
 
-**Before:** user typed full name + bank name + bank code + account number.
-Four free-text fields, four places for typos, no guarantee the name matches
-the bank's record. Typo in account name => payout rejected or (worse) lands
-with a misspelled name and Richard has to clean it up manually.
+---
 
-**After:** user picks a bank from a provider-populated dropdown, types a
-10-digit account number, and the account holder's canonical name resolves
-live from Flutterwave. Submit stays disabled until the name resolves. This
-is the standard Nigerian remittance UX (GTBank, Kuda, Chipper, etc. all
-work this way) and removes an entire class of failure.
+## Files
 
-## Files With Line Ranges
+### Added
 
-### Core logic
+| Path | Purpose |
+|---|---|
+| `prisma/migrations/20260417035232_pending_email_verification_and_address/migration.sql` | Creates `PendingEmailVerification` table + adds 6 nullable AU address columns to `User` |
+| `src/lib/auth/pending-email-verification.ts` | `issuePendingEmailCode` + `verifyPendingEmailCode`; rate-limited (5/hr), attempt-capped (5), 30-min TTL, 30-min claim window, sha256 hash-at-rest, idempotent-verify-within-window |
+| `src/app/api/auth/send-code/route.ts` | Step 1: always 200, enumeration-proof; 400 only on malformed email |
+| `src/app/api/auth/verify-code/route.ts` | Step 2: validates code, opens claim window; 400/429 error shape identical to the logged-in verify path; never issues a session |
+| `src/app/api/auth/complete-registration/route.ts` | Step 3: `prisma.$transaction` callback-form; creates User + verified UserIdentifier + Session, writes REGISTRATION + LOGIN AuthEvents, deletes PendingEmailVerification; AU state/postcode validation; 409 on verified-email race; sets session cookie via `setSessionCookie` |
+| `src/app/(auth)/register/verify/page.tsx` | Step 2 UI: 6-digit input, Resend wired to `/api/auth/send-code`; Suspense-wrapped `useSearchParams` per Next 16 |
+| `src/app/(auth)/register/details/page.tsx` | Step 3 UI: full name + address line 1/2 + city + AU state `<select>` + 4-digit postcode + disabled "Australia" country + password; "Edit" link back to /register |
+| `src/app/(dashboard)/kyc/page.tsx` | Post-registration KYC prompt; `Verify identity now` posts `/api/kyc/initiate` then navigates to Sumsub URL; `Skip for now` -> /send |
+| `tests/lib/auth/pending-email-verification.test.ts` | 12 unit tests |
+| `tests/app/api/auth/send-code.test.ts` | 8 route tests |
+| `tests/app/api/auth/verify-code.test.ts` | 10 route tests |
+| `tests/app/api/auth/complete-registration.test.ts` | 14 route tests (every validation branch + 409 race + full success path) |
+| `tests/e2e/register-wizard.test.ts` | 3 e2e tests against the real DB (happy path, duplicate-email silent no-op, skip-verify rejection) |
 
-| File | Lines | Change |
-|------|-------|--------|
-| `src/lib/payments/payout/types.ts` | 61-71 | New `AccountNotFoundError` (non-retryable `PayoutError` subclass). |
-| `src/lib/payments/payout/flutterwave.ts` | 1-21 | Added `node:crypto` + `AccountNotFoundError` imports. |
-| `src/lib/payments/payout/flutterwave.ts` | 23-60 | Added `NG_BANKS_FALLBACK` (21 banks -- tier-1 retail + Kuda / Moniepoint / OPay / PalmPay) and `BankListEntry` interface. |
-| `src/lib/payments/payout/flutterwave.ts` | 98-104 | Added `BANKS_CACHE_TTL_MS` + `devListBanksLogged` flag + `BanksCacheEntry` type. |
-| `src/lib/payments/payout/flutterwave.ts` | 109-113 | Added `banksCache` instance field. |
-| `src/lib/payments/payout/flutterwave.ts` | 121-157 | New `listBanks(country: 'NG')`. Dev (no key): returns fallback once-logged. Prod: GET `/v3/banks/NG` via `withRetry`, normalises response, caches 24h. |
-| `src/lib/payments/payout/flutterwave.ts` | 159-217 | New `resolveAccount({bankCode, accountNumber})`. Dev: deterministic `DEMO ACCOUNT <last4>`. Prod: POST `/v3/accounts/resolve` with body `{account_number, account_bank}` and `Idempotency-Key = sha256(bankCode:accountNumber)`. `ProviderPermanentError` / non-retryable errors / `status: "error"` / missing `account_name` -> `AccountNotFoundError`. Name returned **verbatim** (no trim, no case change). |
-| `src/lib/payments/payout/flutterwave.ts` | 374-382 | New `createFlutterwaveProvider()` lazy factory. Reads env on call; never throws at import. Matches 15l pattern. |
-| `src/lib/payments/payout/index.ts` | 1-22 | Exports `AccountNotFoundError`, `createFlutterwaveProvider`, `NG_BANKS_FALLBACK`, `BankListEntry`. |
+### Modified
 
-### New API routes
+| Path | Change |
+|---|---|
+| `prisma/schema.prisma` | Added `PendingEmailVerification` model; added 6 nullable fields on `User` (addressLine1, addressLine2, city, state, postcode, country) |
+| `src/app/(auth)/register/page.tsx` | Rewritten: single email input, calls `/api/auth/send-code`, routes to `/register/verify?email=...` |
+| `handoff/BUILD-LOG.md` | Step 18 done-block prepended |
 
-| File | Lines | Change |
-|------|-------|--------|
-| `src/app/api/banks/route.ts` | 1-56 | `GET /api/banks?country=NG`. `requireAuth`; rejects missing / unsupported country with 400 `unsupported_country`; 200 `{banks}` + `Cache-Control: private, max-age=3600`; 503 `banks_unavailable` on provider failure. |
-| `src/app/api/recipients/resolve/route.ts` | 1-118 | `POST /api/recipients/resolve`. Validates `bankCode` non-empty and `accountNumber` exactly 10 digits. `requireAuth`. In-memory per-user rate-limit (20 / 60s rolling window, `Map<userId, {count, windowStart}>`). 200 `{accountName}`, 404 `account_not_found`, 429 `rate_limited`, 503 `resolve_unavailable`. |
+### Deleted
 
-### UI
+| Path | Reason |
+|---|---|
+| `src/app/api/auth/register/route.ts` | Superseded by the 3-step wizard; Next now serves 404 (confirmed via curl) |
+| `tests/app/api/auth/register.test.ts` | Paired tests (7 cases) for the deleted handler |
 
-| File | Lines | Change |
-|------|-------|--------|
-| `src/app/(dashboard)/recipients/page.tsx` | 1-44 | New `Bank` interface, `ResolveState` discriminated union, `RESOLVE_DEBOUNCE_MS = 400`. |
-| `src/app/(dashboard)/recipients/page.tsx` | 46-69 | State refactor: dropped `fullName` + `bankName` (both now derived from resolve + selected bank). Added `banks`, `banksError`, `resolveState`, `resolveTimerRef`, `resolveSeqRef`. |
-| `src/app/(dashboard)/recipients/page.tsx` | 71-114 | Debounced resolve effect. Resets on input change, uses `resolveSeqRef` sequence guard against out-of-order responses. Maps API status codes to UI state (200 -> resolved, 404 -> not_found, other -> unavailable). |
-| `src/app/(dashboard)/recipients/page.tsx` | 115-127 | `loadBanks()` -- `GET /api/banks?country=NG`. |
-| `src/app/(dashboard)/recipients/page.tsx` | 129-164 | `handleAdd` refactored. Blocks submit unless `resolveState.kind === 'resolved'`. POSTs unchanged contract using resolved name + selected bank. |
-| `src/app/(dashboard)/recipients/page.tsx` | 191-253 | Form JSX rewritten. Bank `<select>` populated from `banks`, account-number input with `\D`-strip + `maxLength=10`, live `aria-live="polite"` resolve status block, submit disabled until resolved. List rendering below untouched. |
+---
 
-## Tests Added
+## Deliberate Design Calls
 
-| File | Tests |
-|------|-------|
-| `tests/lib/payments/payout/flutterwave-resolve.test.ts` | 10 tests. `listBanks`: dev fallback skips network, prod fetch shape + Bearer auth, normalisation filters empty entries, 24h cache hits. `resolveAccount`: dev determinism, prod URL + body + SHA-256 Idempotency-Key derivation, literal preservation of whitespace-padded name, `AccountNotFoundError` on provider 400 error, `AccountNotFoundError` on 200-with-missing-`account_name`. |
-| `tests/app/api/banks/route.test.ts` | 5 tests. 401 when unauth, 400 on missing country, 400 on `country=KE` (multi-corridor boundary), 200 with `banks` array + exact `private, max-age=3600` header, 503 on provider error. |
-| `tests/app/api/recipients/resolve.test.ts` | 6 tests. 400 invalid JSON, 400 missing bankCode, 400 on 9/11/non-digit accountNumber, 401 unauth, 200 with accountName + correct args passed to provider, 404 on `AccountNotFoundError`, 503 on `ProviderTemporaryError`, 429 at 21st call from same userId. |
+Not strictly spec'd by the brief -- flagged for your attention:
 
-## Phase D Results
+1. **Pending row is UPSERTED, not appended.** A re-send (step 1 called again for the same email) wipes `attempts`, `verifiedAt`, `claimExpiresAt` and writes a fresh `codeHash` + `expiresAt`. Matches the brief's natural "one pending row per email" shape and avoids a cleanup job for stale rows.
 
-| Check | Result |
-|-------|--------|
-| `npx tsc --noEmit` | 0 errors |
-| `npx vitest run` | **628 passed / 244 suites / 0 failed** (baseline was 607; +21) |
-| `npm run build` | `Compiled successfully`, 0 warnings. `/api/banks` and `/api/recipients/resolve` appear in the route table. |
-| Manual dev smoke | **DEFERRED** -- see Open Questions below. |
+2. **Burning a token uses `expiresAt = now - 1ms`.** `PendingEmailVerification` has no `usedAt` column (it's deleted by step 3 within minutes anyway). The Nth wrong attempt sets expiresAt in the past so the next call hits the `expired` branch, and a user clicking "Resend" just upserts a fresh row over it.
 
-## Open Questions / Flags for Richard
+3. **Re-verify within the claim window is idempotent success.** Calling `/api/auth/verify-code` again after it already succeeded (inside the claim window) returns `ok: true` instead of `used`. This makes the UX resilient to back-button reloads on step 3 that re-fire step 2. After the claim window closes the same input returns `used`.
 
-1. **Manual dev smoke deferred.** This workspace has no `.env.local`, so the
-   dev server can't boot against Postgres. Every branch of the new logic is
-   covered by the 21 new unit/integration tests (auth gate, validation,
-   success, not-found, temp-failure, rate-limit, cache, idempotency-key
-   shape). If you'd like, run the smoke yourself after pulling: start
-   `npm run dev`, log in as `demo@kolaleaf.com`, hit `/recipients`, type
-   `0690000031`, pick a bank, expect to see `DEMO ACCOUNT 0031`.
+4. **Verification email uses `recipientName: "there"`.** No User row exists yet. "there" keeps the copy warm without piping user-supplied strings into the email subject.
 
-2. **`POST /api/recipients` server route was deliberately NOT modified.**
-   The brief says "server contract unchanged". The existing validation still
-   requires `fullName`, `bankName`, `bankCode`, `accountNumber` -- the client
-   now fills all four from verified sources. If you'd prefer the server
-   also re-verify the account on submit (defence in depth), that's a 16b
-   follow-up -- flag in feedback if you want it.
+5. **`/kyc` lives in `(dashboard)` group.** The user has a session after step 3, so the existing server-side auth gate applies. Page renders its own gradient shell (no bottom nav) because KYC is a one-off intercept, not a nav destination.
 
-3. **In-memory rate-limit.** 20 req / 60s / userId in a `Map`. Single-process
-   only. Fine for the current single-Railway-worker topology; needs Redis
-   when we scale horizontally. Documented in the route file header.
+6. **`complete-registration` performs a soft cleanup of stale UNverified identifiers.** If a legacy (pre-wizard) unverified `UserIdentifier` exists for the same email, it's deleted inside the transaction before the new verified row is created. Verified duplicates still throw 409.
 
-4. **Search-free `<select>`.** 21 banks fit in a native dropdown. For AU/GH/KE
-   corridors with 40+ banks, a searchable combobox makes sense -- logged as
-   a known-gap in BUILD-LOG, not in 16's scope.
+7. **Country is always written server-side as `"AU"`** and never read from the request body. The UI displays a disabled "Australia" field.
 
-5. **Observability.** The posttool validator flagged no logging on the new
-   route handlers. Consistent with the rest of the codebase -- waiting on
-   project-wide Sentry / structured-logger wiring.
+---
 
-## Notes for Review Focus
+## Verification
 
-Please pay attention to:
-- Is the submit-disabled-until-resolved gate actually unbypassable? (Try
-  rapid-click, try changing bank after resolve, try editing account number
-  after resolve, try empty resolveState.)
-- `resolveSeqRef` race guard -- correct semantics when a slow 404 response
-  arrives after a later 200?
-- Idempotency-Key derivation -- stable across retries, not leaking account
-  numbers into logs.
-- `AccountNotFoundError` mapping from `ProviderPermanentError` -- am I too
-  aggressive here? A 500 wrapped as PermanentError would look like "account
-  not found" to the user. Trade-off: UX clarity vs telling the user the
-  truth. I chose UX clarity for the common case but want your read.
+- `DATABASE_URL=... npm test -- --run` -- **90 files, 695 tests passed, 0 failed** (baseline 655 + 44 new route/helper + 3 e2e -- 7 deleted legacy)
+- `npx tsc --noEmit` -- **0 errors**
+- `rm -rf .next && npm run build` -- **succeeded**, all new routes listed in the build output
+- Local curl smoke (against `npm run dev`):
+  - `POST /api/auth/send-code` -> 200 `{ok:true}`
+  - `POST /api/auth/verify-code` -> 200 `{verified:true}`, no Set-Cookie
+  - `POST /api/auth/complete-registration` -> 201 + `Set-Cookie: kolaleaf_session=...`
+  - `GET /api/account/me` -> 200 `{fullName, email:{verified:true}, ...}`
+  - `POST /api/auth/register` (legacy) -> 404
+- DB after smoke: User has addressLine1/city/state/postcode/country=AU populated, UserIdentifier.verified=true, PendingEmailVerification row gone, AuthEvents = [REGISTRATION, LOGIN]
+
+---
+
+## Open Questions
+
+None. The brief was unambiguous.
+
+---
+
+## Known Gaps (not part of Step 18)
+
+- No changes to the logged-in change-email flow (`EmailVerificationToken` model kept side-by-side).
+- No changes to the existing `/verify-email` page (still used by the login -> unverified path for legacy users).
+- International address support remains out of scope.
+- Migrating / deleting the 2 existing unverified test users is Arch's post-deploy cleanup.

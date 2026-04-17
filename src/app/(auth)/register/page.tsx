@@ -3,8 +3,21 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { KolaLogo, Tagline, FieldLabel, colors, radius, shadow, spacing, type as typeT, GRADIENT } from '@/components/design/KolaPrimitives'
+import {
+  KolaLogo,
+  Tagline,
+  FieldLabel,
+  colors,
+  radius,
+  shadow,
+  spacing,
+  type as typeT,
+  GRADIENT,
+} from '@/components/design/KolaPrimitives'
 
+// Step 1 of the verify-first wizard: capture only the email, request a
+// 6-digit code, and bounce to /register/verify. The account does NOT
+// exist yet; a PendingEmailVerification row is the only side effect.
 function textInputStyle() {
   return {
     border: `1px solid ${colors.border}`,
@@ -17,44 +30,31 @@ function textInputStyle() {
 
 export default function RegisterPage() {
   const router = useRouter()
-  const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [referralCode, setReferralCode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  async function handleRegister(e: React.FormEvent) {
+  async function handleSendCode(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     setLoading(true)
 
     try {
-      const res = await fetch('/api/auth/register', {
+      const res = await fetch('/api/auth/send-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fullName,
-          email,
-          password,
-          referralCode: referralCode || undefined,
-        }),
+        body: JSON.stringify({ email }),
       })
 
-      const data = await res.json()
       if (!res.ok) {
-        setError(data.error || 'Registration failed')
+        const data = await res.json().catch(() => ({}))
+        setError(data.error || 'Could not send verification code')
         return
       }
 
-      // 202 with requiresVerification means the account exists but is
-      // dormant pending email verification. Bounce to the code-entry page.
-      if (data.requiresVerification && data.email) {
-        router.push(`/verify-email?email=${encodeURIComponent(data.email)}`)
-        return
-      }
-
-      router.push('/send')
+      // /send-code is enumeration-proof: always 200. We unconditionally
+      // move the user to step 2 with the email in the URL.
+      router.push(`/register/verify?email=${encodeURIComponent(email.trim().toLowerCase())}`)
     } catch {
       setError('Something went wrong. Please try again.')
     } finally {
@@ -78,29 +78,17 @@ export default function RegisterPage() {
           color: colors.ink,
         }}
       >
-        <form onSubmit={handleRegister} className="flex flex-col gap-4">
+        <form onSubmit={handleSendCode} className="flex flex-col gap-4">
           <h2 style={{ fontSize: '18px', fontWeight: 600, textAlign: 'center' }}>Create account</h2>
+          <p style={{ fontSize: '13px', color: colors.muted, textAlign: 'center', margin: 0 }}>
+            We&apos;ll email you a 6-digit code to verify your address. No account is created until you finish the next two steps.
+          </p>
 
           {error && (
             <div role="alert" style={{ background: '#fef1f2', color: '#b00020', fontSize: '13px', padding: '10px 12px', borderRadius: '8px' }}>
               {error}
             </div>
           )}
-
-          <label className="flex flex-col gap-2">
-            <FieldLabel>Full name</FieldLabel>
-            <input
-              type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              required
-              autoComplete="name"
-              placeholder="Chinwe Obimma"
-              style={textInputStyle()}
-              onFocus={(e) => (e.currentTarget.style.borderColor = colors.purple)}
-              onBlur={(e) => (e.currentTarget.style.borderColor = colors.border)}
-            />
-          </label>
 
           <label className="flex flex-col gap-2">
             <FieldLabel>Email</FieldLabel>
@@ -117,38 +105,9 @@ export default function RegisterPage() {
             />
           </label>
 
-          <label className="flex flex-col gap-2">
-            <FieldLabel>Password</FieldLabel>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
-              autoComplete="new-password"
-              placeholder="At least 8 characters"
-              style={textInputStyle()}
-              onFocus={(e) => (e.currentTarget.style.borderColor = colors.purple)}
-              onBlur={(e) => (e.currentTarget.style.borderColor = colors.border)}
-            />
-          </label>
-
-          <label className="flex flex-col gap-2">
-            <FieldLabel>Referral code (optional)</FieldLabel>
-            <input
-              type="text"
-              value={referralCode}
-              onChange={(e) => setReferralCode(e.target.value)}
-              placeholder="Enter referral code"
-              style={textInputStyle()}
-              onFocus={(e) => (e.currentTarget.style.borderColor = colors.purple)}
-              onBlur={(e) => (e.currentTarget.style.borderColor = colors.border)}
-            />
-          </label>
-
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || email.trim().length === 0}
             aria-busy={loading}
             className="w-full text-white transition hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
             style={{
@@ -161,7 +120,7 @@ export default function RegisterPage() {
               marginTop: '4px',
             }}
           >
-            {loading ? 'Creating account…' : 'Create account'}
+            {loading ? 'Sending code…' : 'Send code'}
           </button>
         </form>
 

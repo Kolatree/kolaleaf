@@ -1,7 +1,11 @@
 import crypto from 'crypto'
 import { prisma } from '@/lib/db/client'
 
-const SESSION_EXPIRY_MINUTES = 15
+// Canonical session TTL. Exported so routes that must inline session
+// creation inside a transaction (e.g. /api/auth/complete-registration,
+// where `tx.session.create` is required instead of `prisma.session.create`)
+// can reference the same value without drifting.
+export const SESSION_EXPIRY_MINUTES = 15
 
 export async function createSession(
   userId: string,

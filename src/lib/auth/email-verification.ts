@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/db/client'
 import { generateVerificationCode } from './tokens'
-import { sendEmail, renderVerificationEmail } from '@/lib/email'
+import { enqueueEmail } from '@/lib/queue/email-dispatcher'
 import {
   EMAIL_CODE_TTL_MINUTES,
   EMAIL_CODE_MAX_ATTEMPTS,
@@ -54,13 +54,16 @@ export async function issueVerificationCode(
     data: { userId, email, tokenHash: hash, expiresAt, attempts: 0 },
   })
 
-  const { subject, html, text } = renderVerificationEmail({
+  // Delivery is async via the email queue. Template rendering runs in
+  // the worker (email-dispatcher.handleEmailJob), and transient Resend
+  // failures retry on exponential backoff with a FailedEmail sink.
+  await enqueueEmail({
+    template: 'verification_code',
+    toEmail: email,
     recipientName,
     code: raw,
     expiresInMinutes: EMAIL_CODE_TTL_MINUTES,
   })
-
-  await sendEmail({ to: email, subject, html, text })
 
   return { ok: true }
 }

@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/db/client'
 import { generateVerificationCode } from './tokens'
-import { sendEmail, renderVerificationEmail } from '@/lib/email'
+import { enqueueEmail } from '@/lib/queue/email-dispatcher'
 import {
   EMAIL_CODE_TTL_MINUTES,
   EMAIL_CODE_MAX_ATTEMPTS,
@@ -104,19 +104,26 @@ export async function issuePendingEmailCode(
   })
 
   // No User row yet → "there" as the greeting keeps the subject and
-  // body neutral without leaking user-supplied input.
-  const { subject, html, text } = renderVerificationEmail({
-    recipientName: 'there',
-    code: raw,
-    expiresInMinutes: EMAIL_CODE_TTL_MINUTES,
-  })
-
-  const result = await sendEmail({ to: email, subject, html, text })
-  if (!result.ok) {
+  // body neutral without leaking user-supplied input. Rendering now
+  // happens inside the worker (see email-dispatcher handleEmailJob)
+  // so any template change is picked up without re-enqueuing.
+  //
+  // Delivery is async; the queue owns retries + the FailedEmail sink.
+  // Only a failure to ENQUEUE (Redis unreachable, crash mid-add)
+  // surfaces as send_failed here.
+  try {
+    await enqueueEmail({
+      template: 'verification_code',
+      toEmail: email,
+      recipientName: 'there',
+      code: raw,
+      expiresInMinutes: EMAIL_CODE_TTL_MINUTES,
+    })
+  } catch (err) {
     return {
       ok: false,
       reason: 'send_failed',
-      providerError: result.error ?? 'Unknown Resend error',
+      providerError: err instanceof Error ? err.message : 'Enqueue failed',
     }
   }
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { generateVerificationToken } from '@/lib/auth/tokens'
-import { sendEmail, renderPasswordResetEmail } from '@/lib/email'
+import { enqueueEmail } from '@/lib/queue/email-dispatcher'
 import { getClientIp } from '@/lib/http/ip'
 import { parseBody } from '@/lib/http/validate'
 import { RequestPasswordResetBody } from './_schemas'
@@ -71,15 +71,17 @@ export async function POST(request: Request) {
     const appUrl = process.env.APP_URL ?? 'http://localhost:3000'
     const resetUrl = `${appUrl}/reset-password?token=${raw}`
 
-    const { subject, html, text } = renderPasswordResetEmail({
+    // Delivery is async via the email queue. Rendering lives in the
+    // worker so template tweaks don't require a re-enqueue.
+    await enqueueEmail({
+      template: 'password_reset',
+      toEmail: email,
       recipientName: ident.user.fullName,
       resetUrl,
       expiresInMinutes: RESET_TTL_MINUTES,
       ip,
       userAgent,
     })
-
-    await sendEmail({ to: email, subject, html, text })
 
     return NextResponse.json({ message: GENERIC_MESSAGE }, { status: 200 })
   } catch (error) {

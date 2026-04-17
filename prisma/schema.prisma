@@ -247,6 +247,27 @@ model ComplianceReport {
   createdAt  DateTime   @default(now())
 }
 
+// Permanent-failure sink for the email queue (Step 23). BullMQ's own
+// failed-set is kept for 5000 entries but is opaque to ops tooling;
+// a DB row is query-able from the admin dashboard. The worker writes
+// one row on the final retry's failure; all intermediate retries are
+// retried silently by BullMQ.
+model FailedEmail {
+  id          String    @id @default(cuid())
+  toEmail     String
+  template    String
+  payloadHash String
+  attempts    Int
+  lastError   String
+  failedAt    DateTime  @default(now())
+  resolvedAt  DateTime?
+  resolvedBy  String?
+
+  @@index([toEmail])
+  @@index([failedAt])
+  @@index([resolvedAt])
+}
+
 model AuthEvent {
   id        String   @id @default(cuid())
   userId    String

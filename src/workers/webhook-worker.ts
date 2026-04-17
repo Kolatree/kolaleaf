@@ -39,6 +39,12 @@ import {
   handlePaystackWebhook,
 } from '@/lib/payments/payout/webhooks'
 import { handleSumsubWebhook } from '@/lib/kyc/sumsub/webhook'
+import {
+  EMAIL_QUEUE_NAME,
+  handleEmailJob,
+  EMAIL_JOB_OPTS,
+  type EmailJob,
+} from '@/lib/queue/email-dispatcher'
 
 function log(
   level: 'info' | 'error',
@@ -135,10 +141,23 @@ async function processJob(job: Job<WebhookJob>): Promise<void> {
   log('info', 'webhook.job.success', { jobId: job.id, provider })
 }
 
-// Module-scoped guard so booting in-process (via Next.js instrumentation)
-// is idempotent — the worker is constructed at most once per Node process,
-// even if `bootInProcess()` is called more than once during dev hot-reload.
+async function processEmailJob(job: Job<EmailJob>): Promise<void> {
+  const maxAttempts = EMAIL_JOB_OPTS.attempts
+  log('info', 'email.job.start', {
+    jobId: job.id,
+    template: job.data.template,
+    attempt: job.attemptsMade + 1,
+    maxAttempts,
+  })
+  await handleEmailJob(job.data, job.attemptsMade, maxAttempts)
+  log('info', 'email.job.success', { jobId: job.id, template: job.data.template })
+}
+
+// Module-scoped guards so booting in-process (via Next.js instrumentation)
+// is idempotent — each worker is constructed at most once per Node process,
+// even if `bootInProcessWorker()` is called more than once during dev hot-reload.
 let inProcessWorker: Worker<WebhookJob> | undefined
+let inProcessEmailWorker: Worker<EmailJob> | undefined
 
 interface CreatedWorker {
   worker: Worker<WebhookJob>
@@ -179,45 +198,74 @@ function createWebhookWorker(redisUrl: string): CreatedWorker {
   return { worker, connection }
 }
 
-// Boot the worker in the same Node process as the Next.js server. Called
-// from `src/instrumentation.ts` so a single Railway service handles HTTP +
-// queue consumption. Idempotent — repeated calls are no-ops.
+function createEmailWorker(redisUrl: string): {
+  worker: Worker<EmailJob>
+  connection: ReturnType<typeof createRedisConnection>
+} {
+  const connection = createRedisConnection(redisUrl)
+  const worker = new Worker<EmailJob>(EMAIL_QUEUE_NAME, processEmailJob, {
+    connection,
+    concurrency: Number(process.env.EMAIL_WORKER_CONCURRENCY ?? 8),
+  })
+  worker.on('failed', (job, err) => {
+    log('error', 'email.job.failed', {
+      jobId: job?.id,
+      template: job?.data.template,
+      attempt: (job?.attemptsMade ?? 0) + 1,
+      error: err.message,
+    })
+  })
+  worker.on('ready', () => {
+    log('info', 'email.worker.ready', { queue: EMAIL_QUEUE_NAME })
+  })
+  worker.on('error', (err) => {
+    log('error', 'email.worker.error', { error: err.message })
+  })
+  return { worker, connection }
+}
+
+// Boot both workers in the same Node process as the Next.js server.
+// Called from `src/instrumentation.ts` so a single Railway service
+// handles HTTP + webhook consumption + email delivery. Idempotent —
+// repeated calls are no-ops.
 //
-// Returns null when REDIS_URL is absent (dev/test). The dispatcher in
-// `src/lib/queue/index.ts` runs in-process under the same condition, so
-// the system stays consistent: with Redis, real queue + real worker;
-// without Redis, no queue at all.
+// Returns null when REDIS_URL is absent (dev/test). The dispatchers
+// in src/lib/queue/index.ts and email-dispatcher.ts run in-process
+// under the same condition, so the system stays consistent: with
+// Redis, real queues + real workers; without Redis, no queues at all.
 export function bootInProcessWorker(): Worker<WebhookJob> | null {
   if (inProcessWorker) return inProcessWorker
 
   const redisUrl = process.env.REDIS_URL
   if (!redisUrl) {
     log('info', 'webhook.worker.skip', {
-      reason: 'REDIS_URL not set; in-process dispatcher will handle webhooks',
+      reason: 'REDIS_URL not set; in-process dispatcher will handle webhooks + email',
     })
     return null
   }
 
-  const { worker, connection } = createWebhookWorker(redisUrl)
-  inProcessWorker = worker
+  const webhook = createWebhookWorker(redisUrl)
+  const email = createEmailWorker(redisUrl)
+  inProcessWorker = webhook.worker
+  inProcessEmailWorker = email.worker
 
   // Graceful shutdown when the host process receives a termination signal
-  // (Railway sends SIGTERM on deploy). We close the worker so in-flight
-  // jobs drain, then quit the Redis connection. We do NOT call
-  // process.exit — let the host runtime decide when to exit.
+  // (Railway sends SIGTERM on deploy). Drain both workers in parallel,
+  // then quit both Redis connections. We do NOT call process.exit —
+  // let the host runtime decide when to exit.
   const shutdown = async (signal: string) => {
-    log('info', 'webhook.worker.shutdown', { signal })
+    log('info', 'workers.shutdown', { signal })
     try {
-      await worker.close()
-      await connection.quit()
+      await Promise.all([webhook.worker.close(), email.worker.close()])
+      await Promise.all([webhook.connection.quit(), email.connection.quit()])
     } catch (err) {
-      log('error', 'webhook.worker.shutdown.error', { error: String(err) })
+      log('error', 'workers.shutdown.error', { error: String(err) })
     }
   }
   process.once('SIGINT', () => void shutdown('SIGINT'))
   process.once('SIGTERM', () => void shutdown('SIGTERM'))
 
-  return worker
+  return webhook.worker
 }
 
 function main(): Worker<WebhookJob> {

@@ -1,0 +1,29 @@
+# Railway service config for the `kolaleaf` web service.
+#
+# Why this file exists: without it Railway's default start command
+# is whatever `npm start` does (`next start`). That skips Prisma
+# migrations entirely — every deploy past Step 19 left production
+# at a stale schema until a human ran `prisma migrate deploy`
+# manually. The Wave 1 push surfaced this when the container booted
+# expecting `User.addressLine1` (added by an April 17 migration) and
+# crashed every login with P2022.
+#
+# The fix: chain `prisma migrate deploy` in front of `next start` so
+# every release applies any pending migrations before serving traffic.
+# If a migration fails, the process exits non-zero and Railway holds
+# the previous deploy up — safer than a half-migrated prod.
+
+[deploy]
+# `migrate deploy` is idempotent: a no-op when everything is already
+# applied, safe to run on every restart. `&&` short-circuits so a
+# failed migration prevents the app from taking traffic.
+startCommand = "npx prisma migrate deploy && npm start"
+# Health gate: Railway will hold the release until /api/health
+# returns 2xx, so a container that boots against a half-migrated
+# schema is spotted immediately.
+healthcheckPath = "/api/health"
+healthcheckTimeout = 60
+# Restart on crash with bounded retries — matches the existing
+# default; declared explicitly so it's not accidentally changed later.
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

@@ -5,9 +5,27 @@ import {
   ConcurrentModificationError,
   TransferNotFoundError,
   NotTransferOwnerError,
+  CancelTooLateError,
 } from './errors'
 import type { Transfer } from '../../generated/prisma/client'
 import type { TransferStatus } from '../../generated/prisma/enums'
+
+// Past these states the AUD has already been received from the
+// customer and we owe them value back via refund — cancellation is
+// no longer the correct remedy. Keeping this set here (rather than
+// inferring from VALID_TRANSITIONS) makes the cancel-window
+// boundary explicit.
+const NON_CANCELLABLE_AFTER: ReadonlySet<TransferStatus> = new Set<TransferStatus>([
+  'AUD_RECEIVED',
+  'PROCESSING_NGN',
+  'FLOAT_INSUFFICIENT',
+  'NGN_SENT',
+  'NGN_FAILED',
+  'NGN_RETRY',
+  'NEEDS_MANUAL',
+  'COMPLETED',
+  'REFUNDED',
+])
 
 interface CancelParams {
   transferId: string
@@ -27,6 +45,13 @@ export async function cancelTransfer(params: CancelParams): Promise<Transfer> {
 
     const fromStatus = transfer.status as TransferStatus
     if (!isValidTransition(fromStatus, 'CANCELLED')) {
+      // Step 31 / audit gap #19: give a user-friendly error when
+      // cancel is attempted too late (post-AUD). Terminal states
+      // (CANCELLED, EXPIRED) and the pre-AUD legal path fall
+      // through to the generic invalid-transition error.
+      if (NON_CANCELLABLE_AFTER.has(fromStatus)) {
+        throw new CancelTooLateError(transferId, fromStatus)
+      }
       throw new InvalidTransitionError(fromStatus, 'CANCELLED')
     }
 

@@ -102,11 +102,14 @@ export async function createTransfer(params: CreateTransferParams): Promise<Tran
       },
     })
 
-    // 8. Create initial TransferEvent (null -> CREATED)
+    // 8. Create initial TransferEvent (NULL_STATE -> CREATED). Using
+    //    the NULL_STATE sentinel instead of a CREATED -> CREATED self-
+    //    transition so AUSTRAC reconciliation tooling sees a monotone
+    //    state progression (Step 31 / audit gap #5).
     await tx.transferEvent.create({
       data: {
         transferId: transfer.id,
-        fromStatus: 'CREATED',
+        fromStatus: 'NULL_STATE',
         toStatus: 'CREATED',
         actor: 'USER',
       },

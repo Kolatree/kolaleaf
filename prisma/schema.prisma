@@ -24,6 +24,13 @@ enum IdentifierType {
 }
 
 enum TransferStatus {
+  // Sentinel used ONLY as the fromStatus on the initial TransferEvent
+  // (transfer creation). Never a real Transfer.status — a transfer
+  // never occupies this state, so VALID_TRANSITIONS does not include
+  // it as a source. Exists so the audit log preserves monotone state
+  // progression rather than writing a misleading CREATED -> CREATED
+  // self-transition on insert.
+  NULL_STATE
   CREATED
   AWAITING_AUD
   AUD_RECEIVED

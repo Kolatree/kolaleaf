@@ -155,7 +155,7 @@ describe('Transfer Lifecycle E2E — Golden Path', () => {
 
     const statusFlow = events.map((e) => `${e.fromStatus} → ${e.toStatus}`)
     expect(statusFlow).toEqual([
-      'CREATED → CREATED',           // initial
+      'NULL_STATE → CREATED',        // initial (Step 31 sentinel)
       'CREATED → AWAITING_AUD',
       'AWAITING_AUD → AUD_RECEIVED',
       'AUD_RECEIVED → PROCESSING_NGN',

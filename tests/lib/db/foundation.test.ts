@@ -66,8 +66,12 @@ describe('Database foundation', () => {
     expect(Number(rate!.customerRate)).toBeGreaterThan(0)
   })
 
-  it('TransferStatus enum has all expected values', () => {
+  it('TransferStatus enum has all expected values (incl. NULL_STATE sentinel)', () => {
+    // Step 31 added NULL_STATE as a sentinel used exclusively as the
+    // fromStatus on the initial TransferEvent — never as a live
+    // Transfer.status value.
     const expected = [
+      'NULL_STATE',
       'CREATED', 'AWAITING_AUD', 'AUD_RECEIVED', 'PROCESSING_NGN',
       'NGN_SENT', 'COMPLETED', 'EXPIRED', 'NGN_FAILED', 'NGN_RETRY',
       'NEEDS_MANUAL', 'REFUNDED', 'CANCELLED', 'FLOAT_INSUFFICIENT',

@@ -1,10 +1,18 @@
 import { TransferStatus } from '../../generated/prisma/enums'
 
 export const VALID_TRANSITIONS: Record<TransferStatus, TransferStatus[]> = {
+  // NULL_STATE is a sentinel for the initial TransferEvent.fromStatus
+  // only — a Transfer row never occupies it, so it has no legal
+  // outbound transitions at the state-machine level.
+  NULL_STATE:         [],
   CREATED:            ['AWAITING_AUD', 'CANCELLED'],
   AWAITING_AUD:       ['AUD_RECEIVED', 'EXPIRED', 'CANCELLED'],
   AUD_RECEIVED:       ['PROCESSING_NGN', 'FLOAT_INSUFFICIENT'],
-  FLOAT_INSUFFICIENT: ['AUD_RECEIVED', 'PROCESSING_NGN'],
+  // Step 31 / audit gap #10: resume only targets AUD_RECEIVED — the
+  // float monitor puts the transfer back where it was paused from.
+  // The old FLOAT_INSUFFICIENT -> PROCESSING_NGN edge was dead; no
+  // code triggered it, so removing it preserves the legal surface.
+  FLOAT_INSUFFICIENT: ['AUD_RECEIVED'],
   PROCESSING_NGN:     ['NGN_SENT', 'NGN_FAILED'],
   NGN_SENT:           ['COMPLETED'],
   NGN_FAILED:         ['NGN_RETRY', 'NEEDS_MANUAL'],

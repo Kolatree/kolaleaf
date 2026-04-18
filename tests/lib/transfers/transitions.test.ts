@@ -7,12 +7,16 @@ import {
 } from '../../../src/lib/transfers/transitions'
 
 describe('VALID_TRANSITIONS', () => {
-  it('defines transitions for all 13 TransferStatus values', () => {
+  it('defines transitions for all 14 TransferStatus values (incl. NULL_STATE sentinel)', () => {
     const allStatuses = Object.values(TransferStatus)
-    expect(allStatuses.length).toBe(13)
+    expect(allStatuses.length).toBe(14)
     for (const status of allStatuses) {
       expect(VALID_TRANSITIONS).toHaveProperty(status)
     }
+  })
+
+  it('NULL_STATE has no outbound transitions (sentinel for initial TransferEvent)', () => {
+    expect(VALID_TRANSITIONS.NULL_STATE).toEqual([])
   })
 
   it('CREATED can transition to AWAITING_AUD and CANCELLED only', () => {
@@ -27,8 +31,8 @@ describe('VALID_TRANSITIONS', () => {
     expect(VALID_TRANSITIONS.AUD_RECEIVED).toEqual(['PROCESSING_NGN', 'FLOAT_INSUFFICIENT'])
   })
 
-  it('FLOAT_INSUFFICIENT can transition to AUD_RECEIVED or PROCESSING_NGN', () => {
-    expect(VALID_TRANSITIONS.FLOAT_INSUFFICIENT).toEqual(['AUD_RECEIVED', 'PROCESSING_NGN'])
+  it('FLOAT_INSUFFICIENT can transition to AUD_RECEIVED only (Step 31 removed dead PROCESSING_NGN edge)', () => {
+    expect(VALID_TRANSITIONS.FLOAT_INSUFFICIENT).toEqual(['AUD_RECEIVED'])
   })
 
   it('PROCESSING_NGN can transition to NGN_SENT, NGN_FAILED', () => {
@@ -53,11 +57,13 @@ describe('VALID_TRANSITIONS', () => {
 })
 
 describe('TERMINAL_STATES', () => {
-  it('contains COMPLETED, EXPIRED, REFUNDED, CANCELLED', () => {
+  it('contains COMPLETED, EXPIRED, REFUNDED, CANCELLED + NULL_STATE sentinel', () => {
+    // NULL_STATE also has an empty transition array (sentinel only),
+    // so TERMINAL_STATES derives from emptiness — count is 5.
     expect(TERMINAL_STATES).toEqual(
-      expect.arrayContaining(['COMPLETED', 'EXPIRED', 'REFUNDED', 'CANCELLED'])
+      expect.arrayContaining(['COMPLETED', 'EXPIRED', 'REFUNDED', 'CANCELLED', 'NULL_STATE'])
     )
-    expect(TERMINAL_STATES.length).toBe(4)
+    expect(TERMINAL_STATES.length).toBe(5)
   })
 
   it('terminal states have empty transition arrays', () => {

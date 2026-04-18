@@ -4,6 +4,7 @@ import {
   InvalidTransitionError,
   NotTransferOwnerError,
   TransferNotFoundError,
+  CancelTooLateError,
 } from '../../../src/lib/transfers/errors'
 import {
   prisma,
@@ -59,22 +60,34 @@ describe('cancelTransfer', () => {
     expect(events[0].actor).toBe('USER')
   })
 
-  it('throws InvalidTransitionError when cancelling from AUD_RECEIVED', async () => {
+  // Step 31 / audit gap #19: post-AUD cancellations now throw
+  // CancelTooLateError (user-friendly) rather than the generic
+  // InvalidTransitionError. Route handlers can surface a specific
+  // 409 message about the cancel window having closed.
+
+  it('throws CancelTooLateError when cancelling from AUD_RECEIVED', async () => {
     const transfer = await createTestTransfer(userId, recipientId, { status: 'AUD_RECEIVED' })
     await expect(
       cancelTransfer({ transferId: transfer.id, userId })
-    ).rejects.toThrow(InvalidTransitionError)
+    ).rejects.toThrow(CancelTooLateError)
   })
 
-  it('throws InvalidTransitionError when cancelling from PROCESSING_NGN', async () => {
+  it('throws CancelTooLateError when cancelling from PROCESSING_NGN', async () => {
     const transfer = await createTestTransfer(userId, recipientId, { status: 'PROCESSING_NGN' })
     await expect(
       cancelTransfer({ transferId: transfer.id, userId })
-    ).rejects.toThrow(InvalidTransitionError)
+    ).rejects.toThrow(CancelTooLateError)
   })
 
-  it('throws InvalidTransitionError when cancelling from COMPLETED', async () => {
+  it('throws CancelTooLateError when cancelling from COMPLETED', async () => {
     const transfer = await createTestTransfer(userId, recipientId, { status: 'COMPLETED' })
+    await expect(
+      cancelTransfer({ transferId: transfer.id, userId })
+    ).rejects.toThrow(CancelTooLateError)
+  })
+
+  it('still throws InvalidTransitionError for cancel from terminal CANCELLED (no legal path)', async () => {
+    const transfer = await createTestTransfer(userId, recipientId, { status: 'CANCELLED' })
     await expect(
       cancelTransfer({ transferId: transfer.id, userId })
     ).rejects.toThrow(InvalidTransitionError)

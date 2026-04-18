@@ -27,12 +27,18 @@ export async function runDailyReconciliation(): Promise<ReconciliationReport> {
   }
 
   try {
-    // 1. Expire AWAITING_AUD transfers older than 24h
+    // 1. Expire AWAITING_AUD transfers older than 24h.
+    //    Step 31 / audit gap #11: use createdAt, not updatedAt. An
+    //    idempotent side-effect touching the row (e.g. a repeat
+    //    PayID write bumping updatedAt via Prisma's @updatedAt)
+    //    previously reset the 24h window silently. A dedicated cron
+    //    at /api/cron/expire-transfers runs independently of this
+    //    worker so a reconciliation failure no longer blocks expiry.
     const expireCutoff = new Date(Date.now() - AWAITING_AUD_EXPIRE_HOURS * 60 * 60 * 1000)
     const staleAwaiting = await prisma.transfer.findMany({
       where: {
         status: TransferStatus.AWAITING_AUD,
-        updatedAt: { lt: expireCutoff },
+        createdAt: { lt: expireCutoff },
       },
     })
 

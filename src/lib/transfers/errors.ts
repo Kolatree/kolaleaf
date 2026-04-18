@@ -60,3 +60,19 @@ export class NotTransferOwnerError extends Error {
     this.name = 'NotTransferOwnerError'
   }
 }
+
+// User-friendly error raised when a cancel is attempted against a
+// transfer that has already progressed past AWAITING_AUD. Distinct
+// from InvalidTransitionError so route handlers can surface a
+// specific 409 message ("transfer can't be cancelled, already paid")
+// rather than a generic invalid-transition.
+export class CancelTooLateError extends Error {
+  readonly currentStatus: string
+  constructor(transferId: string, currentStatus: string) {
+    super(
+      `Transfer ${transferId} can no longer be cancelled — already at ${currentStatus}`,
+    )
+    this.name = 'CancelTooLateError'
+    this.currentStatus = currentStatus
+  }
+}

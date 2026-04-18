@@ -59,7 +59,7 @@ describe('createTransfer', () => {
     expect(transfer.corridorId).toBe(corridorId)
   })
 
-  it('creates initial TransferEvent (null -> CREATED, actor: USER)', async () => {
+  it('creates initial TransferEvent (NULL_STATE -> CREATED, actor: USER)', async () => {
     const transfer = await createTransfer({
       userId: verifiedUserId,
       recipientId,
@@ -73,7 +73,10 @@ describe('createTransfer', () => {
       where: { transferId: transfer.id },
     })
     expect(events.length).toBe(1)
-    expect(events[0].fromStatus).toBe('CREATED')
+    // Step 31 / audit gap #5: initial event is NULL_STATE -> CREATED
+    // so AUSTRAC reconciliation sees monotone state progression,
+    // not a misleading self-transition.
+    expect(events[0].fromStatus).toBe('NULL_STATE')
     expect(events[0].toStatus).toBe('CREATED')
     expect(events[0].actor).toBe('USER')
   })

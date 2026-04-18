@@ -39,14 +39,15 @@ describe('GET /api/v1/openapi', () => {
     }
   })
 
-  it('lists every /api/v1 route (41 paths) under paths', async () => {
+  it('lists every /api/v1 route under paths', async () => {
     const res = await GET()
     const doc = (await res.json()) as { paths: Record<string, unknown> }
     const keys = Object.keys(doc.paths)
     // `/api/v1/openapi` itself is the meta endpoint and is NOT part of
-    // the 41 data routes it describes — brief counts 41 excluding it.
-    // Exact match gates the contract: an accidental double-registration
-    // or an unexpected new path will break this test loudly.
-    expect(keys.length).toBe(41)
+    // the data routes it describes. Step 20 baseline: 41. Step 26 adds
+    // admin/failed-emails (GET list) + admin/failed-emails/{id}/resolve
+    // (POST) -> 43. Exact match gates the contract: accidental
+    // double-registration or unexpected new paths break this loudly.
+    expect(keys.length).toBe(43)
   })
 })

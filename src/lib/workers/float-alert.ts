@@ -1,7 +1,7 @@
 import Decimal from 'decimal.js'
 import { FloatMonitor } from '../payments/payout/float-monitor'
 import { FlutterwaveProvider } from '../payments/payout/flutterwave'
-import { log } from '@/lib/obs/logger'
+import { alertOps } from '@/lib/obs/alert'
 
 const DEFAULT_THRESHOLD = new Decimal(process.env.MIN_FLOAT_BALANCE_NGN ?? '500000')
 
@@ -32,7 +32,7 @@ export async function checkAndAlertFloat(): Promise<FloatAlertResult> {
     // Float is low — pause eligible transfers
     pausedCount = await monitor.pauseTransfersIfLowFloat()
 
-    log('warn', 'alert.float.low', {
+    void alertOps('alert.float.low', {
       balance: balance.toString(),
       threshold: DEFAULT_THRESHOLD.toString(),
       currency: 'NGN',

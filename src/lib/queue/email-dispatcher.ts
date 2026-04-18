@@ -16,7 +16,12 @@ import crypto from 'crypto'
 import { Queue, type QueueOptions } from 'bullmq'
 import { createRedisConnection } from './bullmq-dispatcher'
 import { prisma } from '@/lib/db/client'
-import { sendEmail, renderVerificationEmail, renderPasswordResetEmail } from '@/lib/email'
+import {
+  sendEmail,
+  renderVerificationEmail,
+  renderPasswordResetEmail,
+  renderOpsAlertEmail,
+} from '@/lib/email'
 import { EMAIL_CODE_TTL_MINUTES } from '@/lib/auth/constants'
 
 export const EMAIL_QUEUE_NAME = 'email'
@@ -48,6 +53,14 @@ export type EmailJob =
       ip?: string
       userAgent?: string
     }
+  | {
+      template: 'ops_alert'
+      toEmail: string
+      event: string
+      data: Record<string, unknown>
+      env: string
+      occurredAt: string
+    }
 
 export interface EmailDispatcher {
   dispatch(job: EmailJob): Promise<void>
@@ -56,10 +69,15 @@ export interface EmailDispatcher {
 // Deterministic jobId for dedupe: same email + template + payload -> same id.
 // Protects against accidental double-enqueue on route retries.
 function jobIdFor(job: EmailJob): string {
+  // Material composition per template — two different inputs of the
+  // same template must produce different ids; ops_alert uses the
+  // (event, data) shape rather than a synthetic url or code.
   const material =
     job.template === 'verification_code'
       ? `${job.template}|${job.toEmail}|${job.code}`
-      : `${job.template}|${job.toEmail}|${job.resetUrl}`
+      : job.template === 'password_reset'
+        ? `${job.template}|${job.toEmail}|${job.resetUrl}`
+        : `${job.template}|${job.toEmail}|${job.event}|${job.occurredAt}`
   return crypto.createHash('sha256').update(material).digest('hex')
 }
 
@@ -78,13 +96,20 @@ export async function handleEmailJob(
           code: job.code,
           expiresInMinutes: job.expiresInMinutes ?? EMAIL_CODE_TTL_MINUTES,
         })
-      : renderPasswordResetEmail({
-          recipientName: job.recipientName,
-          resetUrl: job.resetUrl,
-          expiresInMinutes: job.expiresInMinutes,
-          ip: job.ip,
-          userAgent: job.userAgent,
-        })
+      : job.template === 'password_reset'
+        ? renderPasswordResetEmail({
+            recipientName: job.recipientName,
+            resetUrl: job.resetUrl,
+            expiresInMinutes: job.expiresInMinutes,
+            ip: job.ip,
+            userAgent: job.userAgent,
+          })
+        : renderOpsAlertEmail({
+            event: job.event,
+            data: job.data,
+            env: job.env,
+            occurredAt: job.occurredAt,
+          })
 
   const result = await sendEmail({
     to: job.toEmail,

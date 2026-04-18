@@ -42,6 +42,8 @@ import '@/app/api/v1/admin/transfers/_schemas'
 import '@/app/api/v1/admin/transfers/[id]/_schemas'
 import '@/app/api/v1/admin/transfers/[id]/refund/_schemas'
 import '@/app/api/v1/admin/transfers/[id]/retry/_schemas'
+import '@/app/api/v1/admin/failed-emails/_schemas'
+import '@/app/api/v1/admin/failed-emails/[id]/resolve/_schemas'
 
 // transfers / recipients / rates / banks / kyc
 import '@/app/api/v1/transfers/_schemas'

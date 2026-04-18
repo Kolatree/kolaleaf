@@ -1,6 +1,6 @@
 import { prisma } from '../db/client'
 import { StalenessMonitor } from '../rates/staleness-monitor'
-import { log } from '@/lib/obs/logger'
+import { alertOps } from '@/lib/obs/alert'
 
 export interface StaleAlert {
   corridorId: string
@@ -28,10 +28,9 @@ export async function checkAndAlertStaleness(): Promise<StalenessAlertResult> {
         hoursStale: result.hoursStale,
       })
 
-      // Structured alert — clients switch on the event name.
-      // Delivery channel (email/Slack) is a separate ops concern;
-      // this emit is the durable signal.
-      log('warn', 'alert.rate.stale', {
+      // Structured alert — logs AND enqueues an ops email. Fire-and-
+      // forget; BullMQ owns delivery durability.
+      void alertOps('alert.rate.stale', {
         corridorId: result.corridorId,
         corridor: result.corridor,
         hoursStale: result.hoursStale === Infinity ? null : Math.floor(result.hoursStale),

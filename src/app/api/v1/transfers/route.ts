@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import Decimal from 'decimal.js'
 import { createTransfer, listTransfers } from '@/lib/transfers'
-import { requireKyc, requireAuth, requireEmailVerified, AuthError } from '@/lib/auth/middleware'
+import { requireAuth, requireEmailVerified, AuthError } from '@/lib/auth/middleware'
 import { parseBody } from '@/lib/http/validate'
 import { extractRequestContext } from '@/lib/security/request-context'
 import { CreateTransferBody } from './_schemas'
@@ -10,11 +10,14 @@ export async function POST(request: Request) {
   try {
     // Auth MUST run before Zod — a 422 on a schema failure from an
     // unauthenticated caller leaks endpoint existence and body shape.
-    // Email verification lands before KYC because we can't safely
-    // contact the user about a transfer (failure, refund, compliance
-    // holds) without a verified email. Matches admin/rates ordering.
+    // Email verification is required (we need a reliable contact for
+    // transfer failures / refunds / compliance holds). KYC is NOT
+    // required here — users can create a CREATED transfer without
+    // verification and progress to the verification wizard afterwards.
+    // The KYC gate lives downstream at generatePayIdForTransfer, which
+    // is the point where we start collecting AUD.
     await requireEmailVerified(request)
-    const { userId } = await requireKyc(request)
+    const { userId } = await requireAuth(request)
 
     const parsed = await parseBody(request, CreateTransferBody)
     if (!parsed.ok) return parsed.response

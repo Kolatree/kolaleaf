@@ -1,7 +1,6 @@
 import Decimal from 'decimal.js'
 import { prisma } from '../db/client'
 import {
-  KycNotVerifiedError,
   InvalidCorridorError,
   AmountOutOfRangeError,
   DailyLimitExceededError,
@@ -31,11 +30,13 @@ export async function createTransfer(params: CreateTransferParams): Promise<Tran
   const { userId, recipientId, corridorId, sendAmount, exchangeRate, fee, securityContext } = params
 
   return prisma.$transaction(async (tx) => {
-    // 1. Validate user exists and KYC is VERIFIED
+    // 1. Validate user exists. KYC is NOT required to create a
+    //    transfer — users can draft a CREATED transfer and progress
+    //    to the verification wizard afterwards. KYC is enforced at
+    //    generatePayIdForTransfer, which is the boundary where we
+    //    start collecting AUD. Until that point the Transfer row is
+    //    inert: no PayID issued, no AUD held, no AUSTRAC exposure.
     const user = await tx.user.findUniqueOrThrow({ where: { id: userId } })
-    if (user.kycStatus !== 'VERIFIED') {
-      throw new KycNotVerifiedError(userId)
-    }
 
     // 2. Validate recipient exists and belongs to user
     const recipient = await tx.recipient.findUnique({ where: { id: recipientId } })

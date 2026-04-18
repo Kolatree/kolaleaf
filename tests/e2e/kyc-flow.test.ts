@@ -10,7 +10,6 @@ import {
 import { handleKycApproved, handleKycRejected, retryKyc, getKycStatus } from '../../src/lib/kyc/sumsub/kyc-service'
 import { handleSumsubWebhook } from '../../src/lib/kyc/sumsub/webhook'
 import { createTransfer } from '../../src/lib/transfers/create'
-import { KycNotVerifiedError } from '../../src/lib/transfers/errors'
 import Decimal from 'decimal.js'
 
 let corridorId: string
@@ -146,20 +145,24 @@ describe('KYC Flow E2E', () => {
     expect(finalUser.kycStatus).toBe('VERIFIED')
   })
 
-  it('KYC gates transfer creation — unverified user cannot create transfer', async () => {
+  it('allows unverified users to create a CREATED transfer (KYC gates PayID issuance, not creation)', async () => {
+    // Product change: transfer creation is open for any verified-
+    // email user, but PayID issuance (the point where we start
+    // collecting AUD) requires VERIFIED KYC. The gate moved from
+    // createTransfer into generatePayIdForTransfer.
     const { user } = await registerTestUser({ kycStatus: 'PENDING' })
     const recipient = await createTestRecipient(user.id)
 
-    await expect(
-      createTransfer({
-        userId: user.id,
-        recipientId: recipient.id,
-        corridorId,
-        sendAmount: new Decimal(100),
-        exchangeRate: new Decimal(1042.65),
-        fee: new Decimal(5),
-      })
-    ).rejects.toThrow(KycNotVerifiedError)
+    const transfer = await createTransfer({
+      userId: user.id,
+      recipientId: recipient.id,
+      corridorId,
+      sendAmount: new Decimal(100),
+      exchangeRate: new Decimal(1042.65),
+      fee: new Decimal(5),
+    })
+    expect(transfer.status).toBe('CREATED')
+    expect(transfer.userId).toBe(user.id)
   })
 
   it('KYC status can be queried', async () => {

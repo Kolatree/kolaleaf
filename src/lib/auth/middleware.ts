@@ -26,15 +26,6 @@ export async function requireAuth(request: Request): Promise<{ userId: string; s
   return { userId: session.userId, session }
 }
 
-export async function requireKyc(request: Request): Promise<{ userId: string }> {
-  const { userId } = await requireAuth(request)
-  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } })
-  if (user.kycStatus !== 'VERIFIED') {
-    throw new AuthError(403, 'KYC verification required')
-  }
-  return { userId }
-}
-
 /**
  * Blocks the request if the user's primary EMAIL identifier is unverified.
  *

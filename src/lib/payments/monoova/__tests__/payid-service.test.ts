@@ -76,7 +76,9 @@ describe('PayID Service', () => {
       const transfer = makeTransfer()
       const mockClient = makeMockClient()
 
-      // Mock $transaction to execute the callback with a mock tx
+      // Mock $transaction to execute the callback with a mock tx.
+      // user.findUniqueOrThrow is required because Step 32 moved the
+      // KYC gate from createTransfer into generatePayIdForTransfer.
       const mockTx = {
         transfer: {
           findUnique: vi.fn().mockResolvedValue(transfer),
@@ -85,6 +87,9 @@ describe('PayID Service', () => {
             payidReference: expect.any(String),
             payidProviderRef: 'kolaleaf@payid.monoova.com',
           }),
+        },
+        user: {
+          findUniqueOrThrow: vi.fn().mockResolvedValue({ kycStatus: 'VERIFIED' }),
         },
       }
       vi.mocked(prisma.$transaction).mockImplementation(async (cb: Function) => cb(mockTx))
@@ -135,6 +140,7 @@ describe('PayID Service', () => {
 
       const mockTx = {
         transfer: { findUnique: vi.fn().mockResolvedValue(transfer) },
+        user: { findUniqueOrThrow: vi.fn().mockResolvedValue({ kycStatus: 'VERIFIED' }) },
       }
       vi.mocked(prisma.$transaction).mockImplementation(async (cb: Function) => cb(mockTx))
 
@@ -148,12 +154,34 @@ describe('PayID Service', () => {
 
       const mockTx = {
         transfer: { findUnique: vi.fn().mockResolvedValue(null) },
+        user: { findUniqueOrThrow: vi.fn() },
       }
       vi.mocked(prisma.$transaction).mockImplementation(async (cb: Function) => cb(mockTx))
 
       await expect(
         generatePayIdForTransfer('txn-missing', mockClient)
       ).rejects.toThrow('Transfer txn-missing not found')
+    })
+
+    it('rejects with KycNotVerifiedError if the owning user is not VERIFIED', async () => {
+      // Step 32 product change: transfer creation is open to
+      // unverified users, but PayID issuance (= AUD collection) is
+      // the AUSTRAC boundary and requires VERIFIED KYC.
+      const transfer = makeTransfer()
+      const mockClient = makeMockClient()
+
+      const mockTx = {
+        transfer: { findUnique: vi.fn().mockResolvedValue(transfer) },
+        user: { findUniqueOrThrow: vi.fn().mockResolvedValue({ kycStatus: 'PENDING' }) },
+      }
+      vi.mocked(prisma.$transaction).mockImplementation(async (cb: Function) => cb(mockTx))
+
+      await expect(
+        generatePayIdForTransfer('txn-001', mockClient)
+      ).rejects.toThrow(/KYC is not verified/)
+      // Monoova must NOT have been called — we fail before any
+      // external side effect.
+      expect(mockClient.createPayId).not.toHaveBeenCalled()
     })
 
     it('propagates Monoova client errors', async () => {
@@ -164,6 +192,7 @@ describe('PayID Service', () => {
 
       const mockTx = {
         transfer: { findUnique: vi.fn().mockResolvedValue(transfer) },
+        user: { findUniqueOrThrow: vi.fn().mockResolvedValue({ kycStatus: 'VERIFIED' }) },
       }
       vi.mocked(prisma.$transaction).mockImplementation(async (cb: Function) => cb(mockTx))
 

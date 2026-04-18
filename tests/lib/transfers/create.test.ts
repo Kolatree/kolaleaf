@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import Decimal from 'decimal.js'
 import { createTransfer } from '../../../src/lib/transfers/create'
 import {
-  KycNotVerifiedError,
   InvalidCorridorError,
   AmountOutOfRangeError,
   DailyLimitExceededError,
@@ -81,20 +80,24 @@ describe('createTransfer', () => {
     expect(events[0].actor).toBe('USER')
   })
 
-  it('throws KycNotVerifiedError for unverified user', async () => {
+  it('allows an unverified user to create a transfer (KYC gates processing, not creation)', async () => {
+    // Product change: unverified users can draft a CREATED transfer
+    // and then progress to the verification wizard. KYC is enforced
+    // downstream at generatePayIdForTransfer (the point where we
+    // start collecting AUD), not at creation.
     const pendingUser = await createTestUser({ kycStatus: 'PENDING' })
     const pendingRecipient = await createTestRecipient(pendingUser.id)
 
-    await expect(
-      createTransfer({
-        userId: pendingUser.id,
-        recipientId: pendingRecipient.id,
-        corridorId,
-        sendAmount: new Decimal(100),
-        exchangeRate: new Decimal('1042.65'),
-        fee: new Decimal(5),
-      })
-    ).rejects.toThrow(KycNotVerifiedError)
+    const transfer = await createTransfer({
+      userId: pendingUser.id,
+      recipientId: pendingRecipient.id,
+      corridorId,
+      sendAmount: new Decimal(100),
+      exchangeRate: new Decimal('1042.65'),
+      fee: new Decimal(5),
+    })
+    expect(transfer.status).toBe('CREATED')
+    expect(transfer.userId).toBe(pendingUser.id)
   })
 
   it('throws InvalidCorridorError for non-existent corridor', async () => {

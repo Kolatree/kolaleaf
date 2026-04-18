@@ -116,7 +116,15 @@ export default function SendPage() {
         setError(data.error || 'Transfer failed')
         return
       }
-      setSuccess('Transfer created — check Activity for status.')
+      // Unverified users now land here too. The transfer is saved in
+      // CREATED state; PayID issuance (the AUD-collection step) will
+      // block until KYC is VERIFIED. Steer them to the verification
+      // wizard so they can unblock processing.
+      setSuccess(
+        kycVerified
+          ? 'Transfer created — check Activity for status.'
+          : 'Transfer saved. Verify your identity to begin processing.',
+      )
     } catch {
       setError('Something went wrong. Please try again.')
     } finally {
@@ -124,7 +132,8 @@ export default function SendPage() {
     }
   }
 
-  const kycBlocked = kycVerified === false
+  // KYC no longer gates the Send action itself — it gates processing.
+  // The button is live for anyone with a recipient + rate + amount.
   const canSend = !sending && rateNum > 0 && selectedRecipientId && amountNum > 0
 
   return (
@@ -208,41 +217,40 @@ export default function SendPage() {
                 </div>
               )}
 
-              {kycBlocked ? (
-                <Link
-                  href="/account"
-                  className="mt-4 inline-block w-full text-center text-white transition hover:brightness-110"
-                  style={{
-                    background: GRADIENT,
-                    padding: spacing.ctaPad,
-                    borderRadius: radius.cta,
-                    fontSize: typeT.cta.size,
-                    fontWeight: typeT.cta.weight,
-                    letterSpacing: typeT.cta.letterSpacing,
-                    marginTop: '12px',
-                  }}
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={!canSend}
+                aria-busy={sending}
+                className="w-full text-white transition hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
+                style={{
+                  background: GRADIENT,
+                  padding: spacing.ctaPad,
+                  borderRadius: radius.cta,
+                  fontSize: typeT.cta.size,
+                  fontWeight: typeT.cta.weight,
+                  letterSpacing: typeT.cta.letterSpacing,
+                  marginTop: '12px',
+                }}
+              >
+                {sending ? 'Sending…' : `Send A$${new Decimal(amountNum || 0).toFixed(2)}`}
+              </button>
+
+              {kycVerified === false && (
+                <div
+                  className="mt-3 flex items-center justify-between gap-2"
+                  style={{ fontSize: '12px', color: colors.muted }}
                 >
-                  Verify identity to send →
-                </Link>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleSend}
-                  disabled={!canSend}
-                  aria-busy={sending}
-                  className="w-full text-white transition hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
-                  style={{
-                    background: GRADIENT,
-                    padding: spacing.ctaPad,
-                    borderRadius: radius.cta,
-                    fontSize: typeT.cta.size,
-                    fontWeight: typeT.cta.weight,
-                    letterSpacing: typeT.cta.letterSpacing,
-                    marginTop: '12px',
-                  }}
-                >
-                  {sending ? 'Sending…' : `Send A$${new Decimal(amountNum || 0).toFixed(2)}`}
-                </button>
+                  <span>
+                    Processing requires identity verification.
+                  </span>
+                  <Link
+                    href="/account"
+                    style={{ color: colors.purple, fontWeight: 600, whiteSpace: 'nowrap' }}
+                  >
+                    Verify now →
+                  </Link>
+                </div>
               )}
             </div>
           </div>
@@ -263,6 +271,8 @@ export default function SendPage() {
                   onAmountChange={(v) => setSendAmount(String(v))}
                   rateCustomer={rateNum}
                   feeAud={0}
+                  onSubmit={handleSend}
+                  submitting={sending}
                 />
               ) : (
                 <div

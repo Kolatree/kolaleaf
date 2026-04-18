@@ -7,7 +7,7 @@ import {
   cleanupTestData,
 } from '../e2e/helpers'
 import { requireAdmin } from '../../src/lib/auth/admin-middleware'
-import { requireAuth, requireKyc, AuthError } from '../../src/lib/auth/middleware'
+import { requireAuth, AuthError } from '../../src/lib/auth/middleware'
 import { logAuthEvent } from '../../src/lib/auth/audit'
 
 beforeAll(async () => {
@@ -107,28 +107,6 @@ describe('Admin Security', () => {
 
     const request = makeRequest(sessionCookie(expiredToken))
     await expect(requireAuth(request)).rejects.toThrow(AuthError)
-  })
-
-  it('requireKyc rejects non-VERIFIED user with 403', async () => {
-    const { token } = await registerTestUser({ kycStatus: 'PENDING' })
-    const request = makeRequest(sessionCookie(token))
-
-    await expect(requireKyc(request)).rejects.toThrow(AuthError)
-    try {
-      await requireKyc(request)
-    } catch (error) {
-      expect(error).toBeInstanceOf(AuthError)
-      expect((error as AuthError).statusCode).toBe(403)
-      expect((error as AuthError).message).toBe('KYC verification required')
-    }
-  })
-
-  it('requireKyc passes for VERIFIED user', async () => {
-    const { user, token } = await registerTestUser({ kycStatus: 'VERIFIED' })
-    const request = makeRequest(sessionCookie(token))
-
-    const result = await requireKyc(request)
-    expect(result.userId).toBe(user.id)
   })
 
   it('admin actions are logged with actor identity', async () => {

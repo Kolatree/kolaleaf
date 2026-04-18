@@ -1,7 +1,7 @@
 import Decimal from 'decimal.js'
 import { prisma } from '../../db/client'
 import { transitionTransfer } from '../../transfers/state-machine'
-import { TransferNotFoundError } from '../../transfers/errors'
+import { TransferNotFoundError, KycNotVerifiedError } from '../../transfers/errors'
 import type { MonoovaClient } from './client'
 import type { Transfer } from '../../../generated/prisma/client'
 
@@ -14,6 +14,16 @@ export async function generatePayIdForTransfer(
   return prisma.$transaction(async (tx) => {
     const transfer = await tx.transfer.findUnique({ where: { id: transferId } })
     if (!transfer) throw new TransferNotFoundError(transferId)
+
+    // KYC gate moved here (Wave 1 audit gap #18). Transfer creation
+    // is allowed without KYC — we let users draft a CREATED transfer
+    // and prompt verification afterwards. But PayID issuance is the
+    // point where we become a money handler, so AUSTRAC requires a
+    // VERIFIED applicant before we start collecting AUD.
+    const user = await tx.user.findUniqueOrThrow({ where: { id: transfer.userId } })
+    if (user.kycStatus !== 'VERIFIED') {
+      throw new KycNotVerifiedError(transfer.userId)
+    }
 
     if (transfer.status !== 'CREATED') {
       throw new Error(`Transfer ${transferId} is not in CREATED state`)

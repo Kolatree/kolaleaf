@@ -6,3 +6,9 @@ export {
   VELOCITY_MIN_SPIKE_COUNT,
   type VelocityFlag,
 } from './velocity'
+
+export {
+  recordAustracReports,
+  AUSTRAC_TTR_THRESHOLD_AUD,
+  AUSTRAC_IFTI_APPLIES_TO_ALL,
+} from './austrac-reports'

@@ -9,6 +9,7 @@ import {
 } from './errors'
 import type { Transfer } from '../../generated/prisma/client'
 import { recordVelocityCheck } from '../compliance/velocity'
+import { recordAustracReports } from '../compliance/austrac-reports'
 
 interface CreateTransferParams {
   userId: string
@@ -111,14 +112,23 @@ export async function createTransfer(params: CreateTransferParams): Promise<Tran
       },
     })
 
-    return transfer
-  }).then(async (transfer) => {
-    // 9. Velocity check runs AFTER the transaction commits so a
-    //    compliance-pipe failure can't roll back a legitimate
-    //    transfer. recordVelocityCheck itself swallows errors and
-    //    only logs — belt-and-braces so a customer's transfer
-    //    succeeds even if ComplianceReport writes are broken.
+    return { transfer, corridor }
+  }).then(async ({ transfer, corridor }) => {
+    // 9. Compliance side-effects run AFTER the transaction commits so
+    //    a compliance-pipe failure can't roll back a legitimate
+    //    transfer. Each helper swallows its own errors + logs —
+    //    belt-and-braces so a customer's transfer succeeds even if
+    //    ComplianceReport writes are broken.
     void recordVelocityCheck(userId, transfer.id)
+    // AUSTRAC TTR (AUD >= 9,500 buffered) + IFTI (every transfer —
+    // all Kolaleaf corridors are cross-border by construction).
+    void recordAustracReports({
+      userId,
+      transferId: transfer.id,
+      sendAmountAud: sendAmount,
+      baseCurrency: corridor.baseCurrency,
+      targetCurrency: corridor.targetCurrency,
+    })
     return transfer
   })
 }

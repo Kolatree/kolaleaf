@@ -46,8 +46,9 @@ describe('GET /api/v1/openapi', () => {
     // `/api/v1/openapi` itself is the meta endpoint and is NOT part of
     // the data routes it describes. Step 20 baseline: 41. Step 26 adds
     // admin/failed-emails (GET list) + admin/failed-emails/{id}/resolve
-    // (POST) -> 43. Exact match gates the contract: accidental
-    // double-registration or unexpected new paths break this loudly.
-    expect(keys.length).toBe(43)
+    // (POST) -> 43. Step 27 adds kyc/retry -> 44. Exact match gates
+    // the contract: accidental double-registration or unexpected new
+    // paths break this loudly.
+    expect(keys.length).toBe(44)
   })
 })

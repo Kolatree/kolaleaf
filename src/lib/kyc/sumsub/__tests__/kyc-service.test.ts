@@ -13,6 +13,13 @@ vi.mock('../../../db/client', () => ({
       findUniqueOrThrow: vi.fn(),
       update: vi.fn(),
     },
+    // Step 27: initiateKyc now rate-limits via AuthEvent count in the
+    // trailing hour. Default mock returns 0 so legacy tests exercise
+    // the non-rate-limited path.
+    authEvent: {
+      count: vi.fn().mockResolvedValue(0),
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
   },
 }))
 

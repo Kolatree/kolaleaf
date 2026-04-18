@@ -57,6 +57,7 @@ import '@/app/api/v1/rates/public/_schemas'
 import '@/app/api/v1/banks/_schemas'
 import '@/app/api/v1/kyc/initiate/_schemas'
 import '@/app/api/v1/kyc/status/_schemas'
+import '@/app/api/v1/kyc/retry/_schemas'
 
 // GET /api/v1/openapi
 //

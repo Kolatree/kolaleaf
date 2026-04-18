@@ -3,6 +3,22 @@ import { logAuthEvent } from '@/lib/auth/audit'
 import type { SumsubClient } from './client'
 import type { KycStatus } from '@/generated/prisma/client'
 
+// Rate limit: each successful initiateKyc burns a Sumsub applicant
+// (billable). Cap at 3/hour per user — well above legitimate use
+// (users re-initiate maybe once on a fresh attempt), well below an
+// enumerator's tempo.
+const KYC_INITIATE_PER_HOUR = 3
+const KYC_WINDOW_MS = 60 * 60 * 1000
+
+export class KycRateLimitError extends Error {
+  readonly retryAfterMs: number
+  constructor(retryAfterMs: number) {
+    super('kyc_initiate_rate_limited')
+    this.name = 'KycRateLimitError'
+    this.retryAfterMs = retryAfterMs
+  }
+}
+
 interface InitiateKycResult {
   applicantId: string
   accessToken: string
@@ -31,6 +47,25 @@ export async function initiateKyc(userId: string, client: SumsubClient): Promise
 
   if (user.kycStatus === 'IN_REVIEW') {
     throw new Error('KYC already in review')
+  }
+
+  // Rate-limit repeated initiations so a PENDING user can't spam
+  // new Sumsub applicants. Count completed inititations in the
+  // trailing hour via AuthEvent.
+  const windowStart = new Date(Date.now() - KYC_WINDOW_MS)
+  const recentInitiations = await prisma.authEvent.count({
+    where: { userId, event: 'kyc.initiated', createdAt: { gte: windowStart } },
+  })
+  if (recentInitiations >= KYC_INITIATE_PER_HOUR) {
+    const oldest = await prisma.authEvent.findFirst({
+      where: { userId, event: 'kyc.initiated', createdAt: { gte: windowStart } },
+      orderBy: { createdAt: 'asc' },
+      select: { createdAt: true },
+    })
+    const retryAfterMs = oldest
+      ? oldest.createdAt.getTime() + KYC_WINDOW_MS - Date.now()
+      : KYC_WINDOW_MS
+    throw new KycRateLimitError(Math.max(0, retryAfterMs))
   }
 
   const emailIdentifier = user.identifiers.find((i) => i.type === 'EMAIL')

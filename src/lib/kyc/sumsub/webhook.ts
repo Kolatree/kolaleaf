@@ -2,6 +2,7 @@ import { Prisma } from '../../../generated/prisma/client'
 import { prisma } from '../../db/client'
 import { verifySumsubSignature } from './verify-signature'
 import { handleKycApproved, handleKycRejected } from './kyc-service'
+import { log } from '@/lib/obs/logger'
 
 interface SumsubWebhookPayload {
   applicantId: string
@@ -73,15 +74,38 @@ export async function handleSumsubWebhook(
     return
   }
 
-  // 4. Route based on review result. Release the claim on failure so the
-  //    provider's retry can re-enter.
+  // 4. Route based on event type. Release the claim on failure so the
+  //    provider's retry can re-enter. Non-terminal event types (pending,
+  //    created, reviewed/YELLOW = manual checks required) produce a log
+  //    line so ops has visibility without clobbering kycStatus — status
+  //    only flips on GREEN or RED.
   try {
     if (data.type === 'applicantReviewed' && data.reviewResult) {
       if (data.reviewResult.reviewAnswer === 'GREEN') {
         await handleKycApproved(user.id)
       } else if (data.reviewResult.reviewAnswer === 'RED') {
         await handleKycRejected(user.id, data.reviewResult.rejectLabels ?? [])
+      } else {
+        // YELLOW + any other non-terminal answer: Sumsub signalling
+        // "additional checks required" or similar. Leave kycStatus alone
+        // (user stays IN_REVIEW); surface to ops via log.
+        log('warn', 'kyc.needs_additional_checks', {
+          userId: user.id,
+          applicantId: data.applicantId,
+          reviewAnswer: data.reviewResult.reviewAnswer,
+          rejectLabels: data.reviewResult.rejectLabels ?? [],
+        })
       }
+    } else if (data.type === 'applicantPending') {
+      log('info', 'kyc.pending', { userId: user.id, applicantId: data.applicantId })
+    } else if (data.type === 'applicantCreated') {
+      log('info', 'kyc.applicant_created', { userId: user.id, applicantId: data.applicantId })
+    } else {
+      log('info', 'kyc.event.unhandled', {
+        userId: user.id,
+        applicantId: data.applicantId,
+        eventType: data.type,
+      })
     }
   } catch (err) {
     await prisma.webhookEvent.delete({

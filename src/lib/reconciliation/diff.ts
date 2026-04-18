@@ -27,27 +27,43 @@ function payoutProviderToName(p: Transfer['payoutProvider']): ProviderName | nul
   return null
 }
 
+// Composite key for debit-side lookups. Providers MUST NOT be collapsed
+// to providerRef alone because Flutterwave/Paystack can independently
+// mint short alphanumeric refs that happen to collide. A collision
+// would misroute a debit onto the wrong Transfer (wrong amount → false
+// amount_mismatch, or worse, a real fraud signal silently suppressed).
+function debitKey(provider: ProviderName, ref: string): string {
+  return `${provider}:${ref}`
+}
+
 export function computeDiscrepancies(input: {
   entries: StatementEntry[]
   transfers: Transfer[]
+  // Providers whose fetch failed in this run. Pass-2 suppresses
+  // `missing_in_statement` for these providers because absence of the
+  // entry proves nothing — the statement pull itself errored.
+  failedProviders?: Set<ProviderName>
 }): Discrepancy[] {
-  const { entries, transfers } = input
+  const { entries, transfers, failedProviders } = input
+  const failed = failedProviders ?? new Set<ProviderName>()
   const discrepancies: Discrepancy[] = []
 
   // Track which entries we have matched to a Transfer so the
   // per-transfer pass can skip "missing_in_statement" on the same
-  // reference. Keyed by providerRef within direction scope.
+  // reference. Credits are Monoova-only so a single namespace is safe.
+  // Debits are keyed by `${provider}:${providerRef}` to avoid
+  // cross-provider ref collisions.
   const matchedCreditRefs = new Set<string>()
   const matchedDebitRefs = new Set<string>()
 
-  // Build lookup maps for transfers keyed by the reference the
-  // statement entry would carry. Using Maps preserves insertion order
-  // for determinism when iterating, but we only read by key.
   const transfersByPayidRef = new Map<string, Transfer>()
   const transfersByPayoutRef = new Map<string, Transfer>()
   for (const t of transfers) {
     if (t.payidProviderRef) transfersByPayidRef.set(t.payidProviderRef, t)
-    if (t.payoutProviderRef) transfersByPayoutRef.set(t.payoutProviderRef, t)
+    const payoutName = payoutProviderToName(t.payoutProvider)
+    if (payoutName && t.payoutProviderRef) {
+      transfersByPayoutRef.set(debitKey(payoutName, t.payoutProviderRef), t)
+    }
   }
 
   // Pass 1 — walk the provider statement. Every entry must either
@@ -82,8 +98,10 @@ export function computeDiscrepancies(input: {
         })
       }
     } else {
-      // debit
-      const transfer = transfersByPayoutRef.get(entry.providerRef)
+      // debit — lookup scoped to (provider, ref) so Flutterwave and
+      // Paystack cannot shadow each other on colliding refs.
+      const key = debitKey(entry.provider, entry.providerRef)
+      const transfer = transfersByPayoutRef.get(key)
       if (!transfer) {
         discrepancies.push({
           kind: 'missing_in_ledger',
@@ -96,7 +114,7 @@ export function computeDiscrepancies(input: {
         })
         continue
       }
-      matchedDebitRefs.add(entry.providerRef)
+      matchedDebitRefs.add(key)
       const expected = new Decimal(transfer.receiveAmount as unknown as Decimal.Value)
       if (!entry.amount.eq(expected)) {
         discrepancies.push({
@@ -115,9 +133,12 @@ export function computeDiscrepancies(input: {
 
   // Pass 2 — walk the ledger. Any Transfer that is in a state where
   // we expect a statement record but none appeared gets flagged.
+  // Providers whose statement fetch failed are excluded: their absence
+  // tells us nothing.
   for (const transfer of transfers) {
     // Inbound credit expectation (Monoova).
     if (
+      !failed.has('monoova') &&
       transfer.payidProviderRef &&
       INBOUND_EXPECTED_STATUSES.has(transfer.status as unknown as string) &&
       !matchedCreditRefs.has(transfer.payidProviderRef)
@@ -139,9 +160,10 @@ export function computeDiscrepancies(input: {
     const payoutName = payoutProviderToName(transfer.payoutProvider)
     if (
       payoutName &&
+      !failed.has(payoutName) &&
       transfer.payoutProviderRef &&
       OUTBOUND_EXPECTED_STATUSES.has(transfer.status as unknown as string) &&
-      !matchedDebitRefs.has(transfer.payoutProviderRef)
+      !matchedDebitRefs.has(debitKey(payoutName, transfer.payoutProviderRef))
     ) {
       discrepancies.push({
         kind: 'missing_in_statement',

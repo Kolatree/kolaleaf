@@ -206,4 +206,93 @@ describe('computeDiscrepancies', () => {
     const result = computeDiscrepancies({ entries: [entry], transfers: [transfer] })
     expect(result).toEqual([])
   })
+
+  it('does not mis-match a debit entry when Flutterwave and Paystack collide on providerRef', () => {
+    // Adversarial case: both providers happen to mint the same short
+    // alphanumeric ref. Before the composite-key fix, the second
+    // transfer inserted into the map would shadow the first, so a
+    // Paystack entry could "match" a Flutterwave-paid transfer and
+    // silently emit a bogus amount_mismatch.
+    const flwTransfer = makeTransfer({
+      id: 'tr_flw',
+      receiveAmount: new Decimal('100000.00'),
+      payoutProvider: 'FLUTTERWAVE',
+      payoutProviderRef: 'TXN-12345',
+      status: 'COMPLETED',
+      payidProviderRef: null,
+    })
+    const pskTransfer = makeTransfer({
+      id: 'tr_psk',
+      receiveAmount: new Decimal('500000.00'),
+      payoutProvider: 'PAYSTACK',
+      payoutProviderRef: 'TXN-12345',
+      status: 'COMPLETED',
+      payidProviderRef: null,
+    })
+    const flwEntry = makeEntry({
+      provider: 'flutterwave',
+      providerRef: 'TXN-12345',
+      amount: new Decimal('100000.00'),
+      currency: 'NGN',
+      direction: 'debit',
+    })
+    const pskEntry = makeEntry({
+      provider: 'paystack',
+      providerRef: 'TXN-12345',
+      amount: new Decimal('500000.00'),
+      currency: 'NGN',
+      direction: 'debit',
+    })
+    const result = computeDiscrepancies({
+      entries: [flwEntry, pskEntry],
+      transfers: [flwTransfer, pskTransfer],
+    })
+    expect(result).toEqual([])
+  })
+
+  it('suppresses missing_in_statement for a provider whose statement fetch failed', () => {
+    // If Flutterwave's fetch errored, absence of its entry proves
+    // nothing. Emitting missing_in_statement in that state floods
+    // compliance-ops with false positives during every provider
+    // outage.
+    const transfer = makeTransfer({
+      id: 'tr_awol',
+      receiveAmount: new Decimal('42000.00'),
+      payoutProvider: 'FLUTTERWAVE',
+      payoutProviderRef: 'FLW_X',
+      status: 'NGN_SENT',
+      payidProviderRef: null,
+    })
+    const result = computeDiscrepancies({
+      entries: [],
+      transfers: [transfer],
+      failedProviders: new Set(['flutterwave']),
+    })
+    expect(result).toEqual([])
+  })
+
+  it('still emits missing_in_statement when the failed provider is someone else', () => {
+    // Monoova fetch failed but a Flutterwave-paid transfer should
+    // still be flagged if Flutterwave returned nothing.
+    const transfer = makeTransfer({
+      id: 'tr_live',
+      receiveAmount: new Decimal('9000.00'),
+      payoutProvider: 'FLUTTERWAVE',
+      payoutProviderRef: 'FLW_Y',
+      status: 'COMPLETED',
+      payidProviderRef: null,
+    })
+    const result = computeDiscrepancies({
+      entries: [],
+      transfers: [transfer],
+      failedProviders: new Set(['monoova']),
+    })
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      kind: 'missing_in_statement',
+      provider: 'flutterwave',
+      providerRef: 'FLW_Y',
+      transferId: 'tr_live',
+    })
+  })
 })

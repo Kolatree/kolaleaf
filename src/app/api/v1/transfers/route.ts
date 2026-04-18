@@ -3,6 +3,7 @@ import Decimal from 'decimal.js'
 import { createTransfer, listTransfers } from '@/lib/transfers'
 import { requireKyc, requireAuth, requireEmailVerified, AuthError } from '@/lib/auth/middleware'
 import { parseBody } from '@/lib/http/validate'
+import { extractRequestContext } from '@/lib/security/request-context'
 import { CreateTransferBody } from './_schemas'
 
 export async function POST(request: Request) {
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
       sendAmount: new Decimal(sendAmount),
       exchangeRate: new Decimal(exchangeRate),
       fee: new Decimal(fee ?? '0'),
+      securityContext: extractRequestContext(request),
     })
 
     return NextResponse.json({ transfer }, { status: 201 })

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { loginUser, EmailNotVerifiedError } from '@/lib/auth/login'
 import { setSessionCookie } from '@/lib/auth/middleware'
 import { issueVerificationCode } from '@/lib/auth/email-verification'
-import { getClientIp } from '@/lib/http/ip'
+import { extractRequestContext } from '@/lib/security/request-context'
 import { parseBody } from '@/lib/http/validate'
 import { LoginBody } from './_schemas'
 
@@ -11,8 +11,8 @@ export async function POST(request: Request) {
   if (!parsed.ok) return parsed.response
   const { identifier, password } = parsed.data
 
-  const ip = getClientIp(request)
-  const userAgent = request.headers.get('user-agent') ?? undefined
+  const securityContext = extractRequestContext(request)
+  const { ip, userAgent } = securityContext
 
   try {
     // Email is already trimmed + lowercased by the Email primitive in
@@ -22,6 +22,7 @@ export async function POST(request: Request) {
       password,
       ip,
       userAgent,
+      securityContext,
     })
 
     const response = NextResponse.json({

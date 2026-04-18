@@ -10,9 +10,9 @@ import { setSessionCookie } from '@/lib/auth/middleware'
 import { buildSessionData } from '@/lib/auth/sessions'
 import { logAuthEvent, logAuthEventsMany } from '@/lib/auth/audit'
 import type { CompleteRegistrationReason } from '@/lib/auth/reasons'
-import { getClientIp } from '@/lib/http/ip'
 import { jsonError } from '@/lib/http/json-error'
 import { parseBody } from '@/lib/http/validate'
+import { extractRequestContext } from '@/lib/security/request-context'
 import { CompleteRegistrationBody } from './_schemas'
 
 // POST /api/v1/auth/complete-registration
@@ -73,8 +73,8 @@ export async function POST(request: Request) {
 
   const fullName = fullNameNormalized
   const addressLine2 = rawLine2 && rawLine2.length > 0 ? rawLine2 : null
-  const ip = getClientIp(request)
-  const userAgent = request.headers.get('user-agent') ?? undefined
+  const securityContext = extractRequestContext(request)
+  const { ip, userAgent, country, deviceFingerprintHash } = securityContext
 
   // Idempotent-retry short-circuit. If the client re-posts after a
   // successful-but-dropped response, the tx already deleted the pending
@@ -100,7 +100,11 @@ export async function POST(request: Request) {
       userId: u.id,
       event: 'LOGIN',
       ip,
-      metadata: { via: 'complete-registration-retry' },
+      metadata: {
+        via: 'complete-registration-retry',
+        ...(country ? { country } : {}),
+        ...(deviceFingerprintHash ? { deviceFingerprintHash } : {}),
+      },
     })
     const response = NextResponse.json(
       { user: { id: u.id, fullName: u.fullName } },
@@ -187,10 +191,30 @@ export async function POST(request: Request) {
 
         // Batch REGISTER + LOGIN into a single createMany round-trip,
         // shrinking the tx's lock window.
+        //
+        // Security-context fields (country + deviceFingerprintHash)
+        // are persisted onto the REGISTER/LOGIN events so the
+        // anomaly detector (Step 32) has a baseline fingerprint for
+        // every future login. First event → no anomaly check fires;
+        // this row IS the baseline.
+        const baseSecurity = {
+          ...(country ? { country } : {}),
+          ...(deviceFingerprintHash ? { deviceFingerprintHash } : {}),
+        }
         await logAuthEventsMany(
           [
-            { userId: user.id, event: 'REGISTER', ip, metadata: { via: 'verify-first' } },
-            { userId: user.id, event: 'LOGIN', ip, metadata: { via: 'email-verification' } },
+            {
+              userId: user.id,
+              event: 'REGISTER',
+              ip,
+              metadata: { via: 'verify-first', ...baseSecurity },
+            },
+            {
+              userId: user.id,
+              event: 'LOGIN',
+              ip,
+              metadata: { via: 'email-verification', ...baseSecurity },
+            },
           ],
           tx,
         )

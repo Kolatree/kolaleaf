@@ -10,6 +10,8 @@ import {
 import type { Transfer } from '../../generated/prisma/client'
 import { recordVelocityCheck } from '../compliance/velocity'
 import { recordAustracReports } from '../compliance/austrac-reports'
+import { recordSecurityAnomalyCheck } from '../security/anomaly'
+import type { RequestContext } from '../security/request-context'
 
 interface CreateTransferParams {
   userId: string
@@ -18,10 +20,15 @@ interface CreateTransferParams {
   sendAmount: Decimal
   exchangeRate: Decimal
   fee: Decimal
+  // Optional — when supplied, the anomaly detector runs post-commit
+  // and attaches any SUSPICIOUS report to this transfer. Omitted in
+  // contexts that create transfers outside an HTTP request (cron
+  // retries, tests).
+  securityContext?: RequestContext
 }
 
 export async function createTransfer(params: CreateTransferParams): Promise<Transfer> {
-  const { userId, recipientId, corridorId, sendAmount, exchangeRate, fee } = params
+  const { userId, recipientId, corridorId, sendAmount, exchangeRate, fee, securityContext } = params
 
   return prisma.$transaction(async (tx) => {
     // 1. Validate user exists and KYC is VERIFIED
@@ -132,6 +139,17 @@ export async function createTransfer(params: CreateTransferParams): Promise<Tran
       baseCurrency: corridor.baseCurrency,
       targetCurrency: corridor.targetCurrency,
     })
+    // Security anomaly check (Step 32) — flags transfers initiated
+    // from a new country or new device fingerprint relative to the
+    // user's 90-day AuthEvent history. Fire-and-forget.
+    if (securityContext) {
+      void recordSecurityAnomalyCheck({
+        userId,
+        context: securityContext,
+        event: 'TRANSFER_CREATE',
+        transferId: transfer.id,
+      })
+    }
     return transfer
   })
 }

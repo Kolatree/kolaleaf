@@ -4,6 +4,8 @@ import { verifyPassword } from './password'
 import { createSession } from './sessions'
 import { logAuthEvent } from './audit'
 import { issueSmsChallenge } from './two-factor-challenge'
+import { recordSecurityAnomalyCheck } from '@/lib/security/anomaly'
+import type { RequestContext } from '@/lib/security/request-context'
 
 // Pre-computed hash to burn CPU time on failed lookups, preventing timing attacks
 const DUMMY_HASH = bcrypt.hashSync('timing-attack-dummy', 12)
@@ -13,6 +15,12 @@ interface LoginParams {
   password: string
   ip?: string
   userAgent?: string
+  // Optional enrichment from extractRequestContext(). When provided,
+  // country + deviceFingerprintHash are persisted into the LOGIN
+  // AuthEvent metadata and the anomaly detector runs after a
+  // successful login (fire-and-forget — a broken compliance sink
+  // cannot fail a real user login).
+  securityContext?: RequestContext
 }
 
 // Narrow User — loginUser always returns a real user (throws if not found),
@@ -50,7 +58,7 @@ export class EmailNotVerifiedError extends Error {
 }
 
 export async function loginUser(params: LoginParams): Promise<LoginResult> {
-  const { identifier, password, ip, userAgent } = params
+  const { identifier, password, ip, userAgent, securityContext } = params
 
   // Find the identifier record
   const identRecord = await prisma.userIdentifier.findUnique({
@@ -131,8 +139,30 @@ export async function loginUser(params: LoginParams): Promise<LoginResult> {
     userId: user.id,
     event: 'LOGIN',
     ip,
-    metadata: { identifier, requires2FA, twoFactorMethod: method },
+    metadata: {
+      identifier,
+      requires2FA,
+      twoFactorMethod: method,
+      // Persist security context fingerprint alongside the LOGIN
+      // event so the anomaly detector can diff future logins against
+      // it without a schema migration.
+      ...(securityContext?.country ? { country: securityContext.country } : {}),
+      ...(securityContext?.deviceFingerprintHash
+        ? { deviceFingerprintHash: securityContext.deviceFingerprintHash }
+        : {}),
+    },
   })
+
+  // Fire-and-forget anomaly check. MUST run AFTER the LOGIN event
+  // has been persisted — otherwise the current request's own
+  // fingerprint is part of the history and every login looks benign.
+  if (securityContext) {
+    void recordSecurityAnomalyCheck({
+      userId: user.id,
+      context: securityContext,
+      event: 'LOGIN',
+    })
+  }
 
   return { user, session, requires2FA, twoFactorMethod: method, challengeId }
 }

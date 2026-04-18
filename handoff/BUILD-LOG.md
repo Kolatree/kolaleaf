@@ -5,10 +5,36 @@
 
 ## Current Status
 
-**Active step:** Pile B COMPLETE (Steps 19-25 all landed locally). Awaiting push.
-**Last cleared:** Step 24 -- observability foundation (24c9657)
-**Pending deploy:** 8 local commits on top of 6d3db06 (the pushed Step 19). Arch pushes when ready.
-**Tests:** 827 passing (baseline 706 + 121 new). tsc clean. build clean.
+**Active step:** Wave 1 COMPLETE (Steps 26–32 all landed + review-hardened).
+**Last cleared:** Step 32 hardening — security anomaly detection review fixes (4113332)
+**Pending deploy:** All Pile B + Wave 1 commits local past 6d3db06 (the pushed Step 19).
+**Tests:** 955 passing. tsc clean. build clean.
+
+### Wave 1 commit ledger (closes WAVE-1-AUDIT.md gaps)
+
+| Step | Hash | Title | Closes audit gaps |
+|---|---|---|---|
+| 26 | _(earlier session)_ | Admin ops tooling + admin-action audit log | 8 |
+| 27 | _(earlier session)_ | KYC retry route + Sumsub webhook coverage + initiate rate-limit | 4, 9, 16 |
+| 28 | _(earlier session)_ | AUSTRAC TTR ($9.5k buffered) + IFTI (every transfer) ComplianceReports | 1, 2 |
+| 30 | _(earlier session)_ | Audit-log completeness — LOGOUT, EMAIL_CHANGE_COMPLETED, velocity SMR | 6, 7, 15 |
+| 31 | 6001843 | Transfer state machine cleanup — NULL_STATE sentinel, dead edge removed, awaitingAudSince semantics, dedicated expiry cron, CancelTooLateError | 5, 10, 11, 12, 19 |
+| 29 | c27ead4 | Reconciliation vs provider statements — Monoova + Flutterwave + Paystack pulls, diff engine, SUSPICIOUS emission | 3 |
+| 29h | e221c59 | Step 29 hardening — unbounded transfer query bound, cross-provider ref collision fix, idempotency dedupe, prod auth fail-closed, write cap, timing-safe compare | review findings P0×2 + P1×5 |
+| 32 | cd664d6 | Security anomaly detection — IP + device fingerprint + anomaly detector + AuthEvent enrichment | 13, 14, 17, 18 |
+| 32h | 4113332 | Step 32 hardening — self-inclusion P0 fixed via observedAt filter, AuthEvent index, country-header trust gate, PII reduction, 24h dedupe, KYC-country mismatch kind | review findings P0×2 + P1×5 |
+
+### Wave 1 deferred / out-of-scope (tracked, not blocking)
+
+- AUSTRAC EMS API auto-filing (product-owner decision — dashboard consumption for now)
+- AES-256 at-rest encryption for AuthEvent.metadata + ComplianceReport.details — larger effort, CLAUDE.md mandate, next queued
+- Typed `source` enum column on ComplianceReport (currently a JSON key)
+- Metadata size cap at write time (AuthEvent.metadata)
+- Server-issued device cookie for cookie-replay hardening
+- AsyncLocalStorage propagation audit across detached fire-and-forget promises
+- 72 `console.*` bulk migration to pino structured logging (post-MVP polish)
+
+---
 
 ### Pile B commit ledger
 

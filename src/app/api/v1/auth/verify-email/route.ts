@@ -48,6 +48,10 @@ export async function POST(request: Request) {
   }
 
   const session = await createSession(result.userId, ip, userAgent)
+  // verifyEmailWithCode itself emits EMAIL_VERIFIED at the library
+  // level (email-verification.ts:138-144) — the route just logs the
+  // session start. Keeps the identity-vs-session audit split without
+  // a duplicate emit.
   await logAuthEvent({
     userId: result.userId,
     event: 'LOGIN',

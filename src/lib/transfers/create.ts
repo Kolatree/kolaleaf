@@ -8,6 +8,7 @@ import {
   RecipientNotOwnedError,
 } from './errors'
 import type { Transfer } from '../../generated/prisma/client'
+import { recordVelocityCheck } from '../compliance/velocity'
 
 interface CreateTransferParams {
   userId: string
@@ -110,6 +111,14 @@ export async function createTransfer(params: CreateTransferParams): Promise<Tran
       },
     })
 
+    return transfer
+  }).then(async (transfer) => {
+    // 9. Velocity check runs AFTER the transaction commits so a
+    //    compliance-pipe failure can't roll back a legitimate
+    //    transfer. recordVelocityCheck itself swallows errors and
+    //    only logs — belt-and-braces so a customer's transfer
+    //    succeeds even if ComplianceReport writes are broken.
+    void recordVelocityCheck(userId, transfer.id)
     return transfer
   })
 }

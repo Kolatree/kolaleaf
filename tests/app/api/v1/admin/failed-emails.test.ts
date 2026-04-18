@@ -22,6 +22,9 @@ vi.mock('@/lib/db/client', () => ({
     },
   },
 }))
+vi.mock('@/lib/auth/audit', () => ({
+  logAuthEvent: vi.fn(async () => undefined),
+}))
 
 import { GET as ListGET } from '@/app/api/v1/admin/failed-emails/route'
 import { POST as ResolvePOST } from '@/app/api/v1/admin/failed-emails/[id]/resolve/route'

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth/admin-middleware'
 import { AuthError } from '@/lib/auth/middleware'
 import { prisma } from '@/lib/db/client'
+import { logAuthEvent } from '@/lib/auth/audit'
 
 // POST /api/v1/admin/failed-emails/[id]/resolve
 //
@@ -35,6 +36,15 @@ export async function POST(
     const updated = await prisma.failedEmail.update({
       where: { id },
       data: { resolvedAt, resolvedBy: userId },
+    })
+
+    // Wave 1 audit gap #8: admin actions must be immutably logged.
+    // Attribute to the admin's userId + the failed-email id so the
+    // AuthEvent audit chain records which human resolved which row.
+    await logAuthEvent({
+      userId,
+      event: 'ADMIN_FAILED_EMAIL_RESOLVED',
+      metadata: { failedEmailId: id, toEmail: existing.toEmail, template: existing.template },
     })
 
     return NextResponse.json({

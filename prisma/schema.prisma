@@ -289,6 +289,10 @@ model AuthEvent {
   metadata  Json?
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  // Supports the Step 32 anomaly detector's
+  // `findMany({ where: { userId, createdAt: { gte } }, orderBy: { createdAt: desc } })`.
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 model WebhookEvent {

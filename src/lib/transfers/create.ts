@@ -141,13 +141,17 @@ export async function createTransfer(params: CreateTransferParams): Promise<Tran
     })
     // Security anomaly check (Step 32) — flags transfers initiated
     // from a new country or new device fingerprint relative to the
-    // user's 90-day AuthEvent history. Fire-and-forget.
+    // user's 90-day AuthEvent history, AND from a country different
+    // from the user's KYC-registered address. Fire-and-forget with
+    // a belt-and-braces catch against any synchronous pre-try throw.
     if (securityContext) {
       void recordSecurityAnomalyCheck({
         userId,
         context: securityContext,
         event: 'TRANSFER_CREATE',
         transferId: transfer.id,
+      }).catch(() => {
+        /* logged inside recordSecurityAnomalyCheck */
       })
     }
     return transfer

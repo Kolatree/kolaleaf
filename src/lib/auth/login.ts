@@ -135,6 +135,13 @@ export async function loginUser(params: LoginParams): Promise<LoginResult> {
     challengeId = issued.challengeId
   }
 
+  // Capture the observation time BEFORE the AuthEvent write. The
+  // anomaly detector uses this to filter its history query so the
+  // LOGIN row we're about to write is not part of its own baseline.
+  // (AUTHENTICATION_EVENT is the trigger event, it must not also be
+  // the event under evaluation.)
+  const observedAt = new Date()
+
   await logAuthEvent({
     userId: user.id,
     event: 'LOGIN',
@@ -144,8 +151,7 @@ export async function loginUser(params: LoginParams): Promise<LoginResult> {
       requires2FA,
       twoFactorMethod: method,
       // Persist security context fingerprint alongside the LOGIN
-      // event so the anomaly detector can diff future logins against
-      // it without a schema migration.
+      // event so future logins have a baseline to diff against.
       ...(securityContext?.country ? { country: securityContext.country } : {}),
       ...(securityContext?.deviceFingerprintHash
         ? { deviceFingerprintHash: securityContext.deviceFingerprintHash }
@@ -153,14 +159,17 @@ export async function loginUser(params: LoginParams): Promise<LoginResult> {
     },
   })
 
-  // Fire-and-forget anomaly check. MUST run AFTER the LOGIN event
-  // has been persisted — otherwise the current request's own
-  // fingerprint is part of the history and every login looks benign.
+  // Fire-and-forget anomaly check. `.catch` is belt-and-braces
+  // against a synchronous throw that escapes the function's own
+  // try/catch (e.g. prisma client uninitialized on cold start).
   if (securityContext) {
     void recordSecurityAnomalyCheck({
       userId: user.id,
       context: securityContext,
       event: 'LOGIN',
+      observedAt,
+    }).catch(() => {
+      /* logged inside recordSecurityAnomalyCheck */
     })
   }
 

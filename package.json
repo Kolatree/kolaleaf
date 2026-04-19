@@ -10,9 +10,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run",
+    "test": "tsx scripts/test/run-vitest.ts",
     "test:watch": "vitest",
     "worker": "tsx src/workers/webhook-worker.ts",
+    "db:up": "tsx scripts/db/up.ts",
+    "db:check": "tsx scripts/db/check.ts",
+    "db:prepare": "tsx scripts/db/prepare.ts",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

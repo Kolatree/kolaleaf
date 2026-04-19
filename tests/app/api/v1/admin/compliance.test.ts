@@ -26,8 +26,10 @@ vi.mock('@/lib/db/client', () => ({
 import { GET } from '@/app/api/v1/admin/compliance/route'
 import { requireAdmin } from '@/lib/auth/admin-middleware'
 import { AuthError } from '@/lib/auth/middleware'
+import { prisma } from '@/lib/db/client'
 
 const mockRequireAdmin = vi.mocked(requireAdmin)
+const mockFindMany = vi.mocked(prisma.complianceReport.findMany)
 
 function req(): Request {
   return new Request('http://localhost/api/v1/admin/compliance')
@@ -50,5 +52,23 @@ describe('GET /api/v1/admin/compliance', () => {
     expect(res.status).toBe(200)
     const json = await res.json()
     expect(json.reports).toEqual([])
+  })
+
+  it('applies reported-status filters to the query', async () => {
+    mockRequireAdmin.mockResolvedValueOnce({ userId: 'admin' } as never)
+    await GET(new Request('http://localhost/api/v1/admin/compliance?status=PENDING'))
+    expect(mockFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ reportedAt: null }),
+      }),
+    )
+
+    mockFindMany.mockClear()
+    await GET(new Request('http://localhost/api/v1/admin/compliance?status=REPORTED'))
+    expect(mockFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ reportedAt: { not: null } }),
+      }),
+    )
   })
 })

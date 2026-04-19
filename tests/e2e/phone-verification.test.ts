@@ -61,17 +61,11 @@ beforeAll(async () => {
 })
 
 afterEach(async () => {
-  await prisma.phoneVerificationCode.deleteMany({})
-  await prisma.authEvent.deleteMany({})
-  await prisma.session.deleteMany({})
-  await prisma.userIdentifier.deleteMany({})
-  await prisma.user.deleteMany({})
+  await cleanupTestData()
 })
 
 afterAll(async () => {
   await cleanupTestData()
-  await prisma.phoneVerificationCode.deleteMany({})
-  await prisma.$disconnect()
 })
 
 describe('Phone verification — cross-user ownership transfer (regression)', () => {

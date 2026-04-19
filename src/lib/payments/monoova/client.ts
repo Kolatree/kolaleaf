@@ -5,6 +5,8 @@ import {
   ProviderPermanentError,
   ProviderTemporaryError,
 } from '../../http/retry'
+import { isStubProvidersEnabled, assertStubProvidersSafe } from '../flag'
+import { StubMonoovaClient } from './stub-client'
 
 /**
  * Monoova PayID client.
@@ -71,10 +73,17 @@ export function validateMonoovaConfig(): MonoovaConfig {
 }
 
 export class MonoovaHttpClient implements MonoovaClient {
+  private readonly authHeader: string
+
   constructor(
     private readonly baseUrl: string,
-    private readonly apiKey: string,
-  ) {}
+    apiKey: string,
+  ) {
+    // Monoova's real API uses HTTP Basic auth where username = API key
+    // and password is blank. Computed once so subsequent requests reuse
+    // the same header value.
+    this.authHeader = 'Basic ' + Buffer.from(apiKey + ':').toString('base64')
+  }
 
   async createPayId(params: CreatePayIdParams): Promise<CreatePayIdResult> {
     const data = await withRetry<{
@@ -126,7 +135,7 @@ export class MonoovaHttpClient implements MonoovaClient {
       response = await fetch(`${this.baseUrl}${path}`, {
         method,
         headers: {
-          Authorization: `Bearer ${this.apiKey}`,
+          Authorization: this.authHeader,
           'Content-Type': 'application/json',
         },
         ...(opts.body ? { body: JSON.stringify(opts.body) } : {}),
@@ -161,12 +170,26 @@ export class MonoovaHttpClient implements MonoovaClient {
 }
 
 export function createMonoovaClient(): MonoovaClient {
+  // Stub escape hatch: `KOLA_USE_STUB_PROVIDERS=true` short-circuits
+  // to a zero-network `StubMonoovaClient` so dev can exercise the full
+  // CREATED → AWAITING_AUD transition without real Monoova creds. The
+  // `assertStubProvidersSafe` guard forbids this path in production so
+  // a stray env var cannot manufacture fake success against live users.
+  if (isStubProvidersEnabled()) {
+    assertStubProvidersSafe()
+    return new StubMonoovaClient()
+  }
+
   // Lazy validation: runs on first factory call, NOT at module import. In
   // production this throws with the specific missing-var message; in dev/test
-  // without creds it raises a generic "missing" error so call-sites that stub
-  // the client are still caught if they accidentally call the real factory.
+  // without creds we fall back to the stub as a convenience so local ops
+  // can run the app without wiring env. Production always requires real
+  // creds — `validateMonoovaConfig` throws there when they're missing.
   const { apiUrl, apiKey, isMock } = validateMonoovaConfig()
   if (isMock) {
+    if (process.env.NODE_ENV !== 'production') {
+      return new StubMonoovaClient()
+    }
     throw new Error(
       'Monoova client requested but MONOOVA_API_URL/MONOOVA_API_KEY are missing',
     )

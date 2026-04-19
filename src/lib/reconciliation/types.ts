@@ -1,16 +1,16 @@
 import type Decimal from 'decimal.js'
 
 // Normalized provider-statement entry shape. Every statement client
-// (Monoova / Flutterwave / Paystack) produces entries matching this
+// (Monoova / Flutterwave / BudPay) produces entries matching this
 // contract so the diff engine (diff.ts) can treat them uniformly.
 //
 // `direction` encodes which side of the ledger the entry belongs to:
 //   - 'credit': AUD received from a customer (Monoova)
-//   - 'debit':  NGN paid out to a recipient (Flutterwave / Paystack)
+//   - 'debit':  NGN paid out to a recipient (BudPay / Flutterwave)
 // The diff engine uses direction to pick which Transfer field
 // (payidProviderRef vs payoutProviderRef) to match on.
 
-export type ProviderName = 'monoova' | 'flutterwave' | 'paystack'
+export type ProviderName = 'monoova' | 'flutterwave' | 'budpay'
 export type StatementDirection = 'credit' | 'debit'
 
 export interface StatementEntry {

@@ -27,7 +27,6 @@ afterEach(async () => {
 
 afterAll(async () => {
   await cleanupTestData()
-  await prisma.$disconnect()
 })
 
 describe('Rate Engine E2E', () => {

@@ -1,4 +1,4 @@
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { AdminShell, AdminAlert, colors, radius, shadow, spacing, GRADIENT } from '@/components/design/KolaPrimitives'
 import { API_V1 } from '@/lib/http/api-client'
 
@@ -8,7 +8,7 @@ import { API_V1 } from '@/lib/http/api-client'
 // truth with the rest of the app. `path` is the tail ('admin/stats'), not
 // a fully-qualified URL.
 async function fetchAdminJson(path: string, cookieHeader: string) {
-  const base = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000'
+  const base = await getBaseUrl()
   const tail = path.startsWith('/') ? path.slice(1) : path
   const res = await fetch(`${base}${API_V1}/${tail}`, {
     headers: { cookie: cookieHeader },
@@ -16,6 +16,24 @@ async function fetchAdminJson(path: string, cookieHeader: string) {
   })
   if (!res.ok) return null
   return res.json()
+}
+
+async function getBaseUrl() {
+  if (process.env.NEXT_PUBLIC_BASE_URL) {
+    return process.env.NEXT_PUBLIC_BASE_URL
+  }
+
+  const requestHeaders = await headers()
+  const host =
+    requestHeaders.get('x-forwarded-host') ??
+    requestHeaders.get('host')
+  const proto = requestHeaders.get('x-forwarded-proto') ?? 'https'
+
+  if (!host) {
+    throw new Error('Cannot resolve admin API base URL from request headers')
+  }
+
+  return `${proto}://${host}`
 }
 
 interface Stats {

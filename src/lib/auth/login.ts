@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db/client'
 import { verifyPassword } from './password'
 import { createSession } from './sessions'
 import { logAuthEvent } from './audit'
-import { issueSmsChallenge } from './two-factor-challenge'
+import { issuePendingTwoFactorChallenge, issueSmsChallenge } from './two-factor-challenge'
 import { recordSecurityAnomalyCheck } from '@/lib/security/anomaly'
 import type { RequestContext } from '@/lib/security/request-context'
 
@@ -29,7 +29,7 @@ type LoggedInUser = NonNullable<Awaited<ReturnType<typeof prisma.user.findUnique
 
 interface LoginResult {
   user: LoggedInUser
-  session: Awaited<ReturnType<typeof createSession>>
+  session?: Awaited<ReturnType<typeof createSession>>
   requires2FA: boolean
   twoFactorMethod: 'NONE' | 'TOTP' | 'SMS'
   challengeId?: string
@@ -107,13 +107,9 @@ export async function loginUser(params: LoginParams): Promise<LoginResult> {
     })
   }
 
-  const session = await createSession(user.id, ip, userAgent)
   const method = user.twoFactorMethod
   const requires2FA = method !== 'NONE'
 
-  // For SMS 2FA we issue the challenge at login time so the user gets the
-  // code immediately. The caller persists `challengeId` on the pending-login
-  // session and submits it with the code to /api/auth/verify-2fa.
   let challengeId: string | undefined
   if (method === 'SMS') {
     const primaryPhone = await prisma.userIdentifier.findFirst({
@@ -133,7 +129,30 @@ export async function loginUser(params: LoginParams): Promise<LoginResult> {
     }
     const issued = await issueSmsChallenge(user.id, primaryPhone.identifier)
     challengeId = issued.challengeId
+  } else if (method === 'TOTP') {
+    const issued = await issuePendingTwoFactorChallenge(user.id, 'TOTP')
+    challengeId = issued.challengeId
   }
+
+  if (requires2FA) {
+    await logAuthEvent({
+      userId: user.id,
+      event: 'LOGIN_PENDING_2FA',
+      ip,
+      metadata: {
+        identifier,
+        twoFactorMethod: method,
+        ...(securityContext?.country ? { country: securityContext.country } : {}),
+        ...(securityContext?.deviceFingerprintHash
+          ? { deviceFingerprintHash: securityContext.deviceFingerprintHash }
+          : {}),
+      },
+    })
+
+    return { user, requires2FA, twoFactorMethod: method, challengeId }
+  }
+
+  const session = await createSession(user.id, ip, userAgent)
 
   // Capture the observation time BEFORE the AuthEvent write. The
   // anomaly detector uses this to filter its history query so the

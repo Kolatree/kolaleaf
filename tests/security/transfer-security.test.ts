@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest'
 import {
   prisma,
   registerTestUser,
@@ -18,6 +18,7 @@ import {
   NotTransferOwnerError,
   RecipientNotOwnedError,
 } from '../../src/lib/transfers/errors'
+import { generatePayIdForTransfer } from '../../src/lib/payments/monoova/payid-service'
 import Decimal from 'decimal.js'
 
 let corridorId: string
@@ -28,19 +29,11 @@ beforeAll(async () => {
 })
 
 afterEach(async () => {
-  await prisma.webhookEvent.deleteMany({})
-  await prisma.transferEvent.deleteMany({})
-  await prisma.transfer.deleteMany({})
-  await prisma.recipient.deleteMany({})
-  await prisma.authEvent.deleteMany({})
-  await prisma.session.deleteMany({})
-  await prisma.userIdentifier.deleteMany({})
-  await prisma.user.deleteMany({})
+  await cleanupTestData()
 })
 
 afterAll(async () => {
   await cleanupTestData()
-  await prisma.$disconnect()
 })
 
 describe('Transfer Security', () => {
@@ -77,12 +70,12 @@ describe('Transfer Security', () => {
     // User A sees only their 2 transfers
     const resultA = await listTransfers(userA.id)
     expect(resultA.transfers).toHaveLength(2)
-    expect(resultA.transfers.every((t) => t.userId === userA.id)).toBe(true)
+    expect(resultA.transfers.every((t) => t.recipient?.id === recipientA.id)).toBe(true)
 
     // User B sees only their 1 transfer
     const resultB = await listTransfers(userB.id)
     expect(resultB.transfers).toHaveLength(1)
-    expect(resultB.transfers[0].userId).toBe(userB.id)
+    expect(resultB.transfers[0].recipient?.id).toBe(recipientB.id)
   })
 
   it('user can only cancel own transfers — NotTransferOwnerError for another user', async () => {
@@ -104,36 +97,60 @@ describe('Transfer Security', () => {
     expect(cancelled.status).toBe('CANCELLED')
   })
 
-  it('KYC-unverified user cannot create transfer', async () => {
+  it('KYC-unverified user can draft a transfer but cannot generate a PayID', async () => {
     const { user } = await registerTestUser({ kycStatus: 'PENDING' })
     const recipient = await createTestRecipient(user.id)
+    const createPayId = vi.fn(async () => ({
+      payId: 'stub@payid.kolaleaf.test',
+      payIdReference: 'stub-ref',
+    }))
+    const monoovaClient = {
+      createPayId,
+      getPaymentStatus: async () => ({ status: 'pending', amount: 100 }),
+    }
+
+    const transfer = await createTransfer({
+      userId: user.id,
+      recipientId: recipient.id,
+      corridorId,
+      sendAmount: new Decimal(100),
+      exchangeRate: new Decimal(1042.65),
+      fee: new Decimal(5),
+    })
+    expect(transfer.status).toBe('CREATED')
 
     await expect(
-      createTransfer({
-        userId: user.id,
-        recipientId: recipient.id,
-        corridorId,
-        sendAmount: new Decimal(100),
-        exchangeRate: new Decimal(1042.65),
-        fee: new Decimal(5),
-      })
+      generatePayIdForTransfer(transfer.id, monoovaClient)
     ).rejects.toThrow(KycNotVerifiedError)
+    expect(createPayId).not.toHaveBeenCalled()
   })
 
-  it('IN_REVIEW KYC status also cannot create transfer', async () => {
+  it('IN_REVIEW KYC status can draft a transfer but still cannot generate a PayID', async () => {
     const { user } = await registerTestUser({ kycStatus: 'IN_REVIEW' })
     const recipient = await createTestRecipient(user.id)
+    const createPayId = vi.fn(async () => ({
+      payId: 'stub@payid.kolaleaf.test',
+      payIdReference: 'stub-ref',
+    }))
+    const monoovaClient = {
+      createPayId,
+      getPaymentStatus: async () => ({ status: 'pending', amount: 100 }),
+    }
+
+    const transfer = await createTransfer({
+      userId: user.id,
+      recipientId: recipient.id,
+      corridorId,
+      sendAmount: new Decimal(100),
+      exchangeRate: new Decimal(1042.65),
+      fee: new Decimal(5),
+    })
+    expect(transfer.status).toBe('CREATED')
 
     await expect(
-      createTransfer({
-        userId: user.id,
-        recipientId: recipient.id,
-        corridorId,
-        sendAmount: new Decimal(100),
-        exchangeRate: new Decimal(1042.65),
-        fee: new Decimal(5),
-      })
+      generatePayIdForTransfer(transfer.id, monoovaClient)
     ).rejects.toThrow(KycNotVerifiedError)
+    expect(createPayId).not.toHaveBeenCalled()
   })
 
   it('transfer amount below corridor minimum is rejected', async () => {

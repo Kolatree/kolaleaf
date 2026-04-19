@@ -21,7 +21,7 @@ export interface PayoutStatusResult {
 }
 
 export interface PayoutProvider {
-  name: 'FLUTTERWAVE' | 'PAYSTACK'
+  name: 'BUDPAY' | 'FLUTTERWAVE'
   initiatePayout(params: PayoutParams): Promise<PayoutResult>
   getPayoutStatus(providerRef: string): Promise<PayoutStatusResult>
 }

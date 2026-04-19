@@ -3,12 +3,21 @@ import { prisma } from '@/lib/db/client'
 import type { Session } from '@/generated/prisma/client'
 
 const SESSION_COOKIE_NAME = 'kolaleaf_session'
+const PENDING_2FA_COOKIE_NAME = 'kolaleaf_pending_2fa'
 
-export function getSessionTokenFromCookie(cookieHeader: string | null): string | null {
+function getCookieValue(cookieHeader: string | null, name: string): string | null {
   if (!cookieHeader) return null
-  const match = cookieHeader.split(';').find((c) => c.trim().startsWith(`${SESSION_COOKIE_NAME}=`))
+  const match = cookieHeader.split(';').find((c) => c.trim().startsWith(`${name}=`))
   if (!match) return null
   return match.split('=')[1]?.trim() ?? null
+}
+
+export function getSessionTokenFromCookie(cookieHeader: string | null): string | null {
+  return getCookieValue(cookieHeader, SESSION_COOKIE_NAME)
+}
+
+export function getPendingTwoFactorChallengeIdFromCookie(cookieHeader: string | null): string | null {
+  return getCookieValue(cookieHeader, PENDING_2FA_COOKIE_NAME)
 }
 
 export async function getSessionFromRequest(request: Request): Promise<Session | null> {
@@ -24,6 +33,14 @@ export async function requireAuth(request: Request): Promise<{ userId: string; s
     throw new AuthError(401, 'Authentication required')
   }
   return { userId: session.userId, session }
+}
+
+export function requirePendingTwoFactorChallenge(request: Request): { challengeId: string } {
+  const challengeId = getPendingTwoFactorChallengeIdFromCookie(request.headers.get('cookie'))
+  if (!challengeId) {
+    throw new AuthError(401, '2FA challenge required')
+  }
+  return { challengeId }
 }
 
 /**
@@ -70,4 +87,12 @@ export function setSessionCookie(token: string): string {
 
 export function clearSessionCookie(): string {
   return `${SESSION_COOKIE_NAME}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0; Secure`
+}
+
+export function setPendingTwoFactorCookie(challengeId: string): string {
+  return `${PENDING_2FA_COOKIE_NAME}=${challengeId}; HttpOnly; SameSite=Lax; Path=/; Max-Age=300; Secure`
+}
+
+export function clearPendingTwoFactorCookie(): string {
+  return `${PENDING_2FA_COOKIE_NAME}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0; Secure`
 }

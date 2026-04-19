@@ -8,7 +8,7 @@
 // This keeps the route handler free of BullMQ imports and lets tests stay
 // hermetic — no Redis required.
 
-export type WebhookProvider = 'monoova' | 'flutterwave' | 'paystack' | 'sumsub'
+export type WebhookProvider = 'monoova' | 'flutterwave' | 'budpay' | 'sumsub'
 
 export interface WebhookJob {
   provider: WebhookProvider

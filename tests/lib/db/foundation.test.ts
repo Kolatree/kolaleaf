@@ -6,7 +6,6 @@ import { KycStatus, TransferStatus, IdentifierType } from '../../../src/generate
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
 const prisma = new PrismaClient({ adapter })
 
-afterAll(async () => { await prisma.$disconnect() })
 
 describe('Database foundation', () => {
   // Ensure seed data exists (other tests may clean the DB)
@@ -20,7 +19,7 @@ describe('Database foundation', () => {
         active: true,
         minAmount: 10,
         maxAmount: 50000,
-        payoutProviders: ['FLUTTERWAVE', 'PAYSTACK'],
+        payoutProviders: ['FLUTTERWAVE', 'BUDPAY'],
       },
     }).then(async (corridor) => {
       const existing = await prisma.rate.findFirst({ where: { corridorId: corridor.id } })

@@ -2,8 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import Decimal from 'decimal.js'
 import {
   MonoovaHttpClient,
+  createMonoovaClient,
   validateMonoovaConfig,
 } from '../client'
+import { StubMonoovaClient } from '../stub-client'
 import type { MonoovaClient } from '../client'
 import {
   ProviderPermanentError,
@@ -44,9 +46,13 @@ describe('MonoovaHttpClient', () => {
       expect(fetchCall[0]).toBe(`${baseUrl}/payid/create`)
       const opts = fetchCall[1] as RequestInit
       expect(opts.method).toBe('POST')
+      // Monoova uses HTTP Basic auth: username = API key, password blank.
+      // Bearer is the common default but does NOT match Monoova's real API.
+      const expectedBasic =
+        'Basic ' + Buffer.from(apiKey + ':').toString('base64')
       expect(opts.headers).toEqual(
         expect.objectContaining({
-          'Authorization': `Bearer ${apiKey}`,
+          'Authorization': expectedBasic,
           'Content-Type': 'application/json',
         })
       )
@@ -212,5 +218,53 @@ describe('validateMonoovaConfig', () => {
     expect(cfg.isMock).toBe(false)
     expect(cfg.apiUrl).toBe('https://api.monoova.com')
     expect(cfg.apiKey).toBe('live-key')
+  })
+})
+
+describe('createMonoovaClient factory', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    delete process.env.MONOOVA_API_URL
+    delete process.env.MONOOVA_API_KEY
+    delete process.env.KOLA_USE_STUB_PROVIDERS
+  })
+
+  it('returns a StubMonoovaClient when KOLA_USE_STUB_PROVIDERS=true (dev)', () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    process.env.KOLA_USE_STUB_PROVIDERS = 'true'
+    const client = createMonoovaClient()
+    expect(client).toBeInstanceOf(StubMonoovaClient)
+  })
+
+  it('throws when KOLA_USE_STUB_PROVIDERS=true in production', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    process.env.KOLA_USE_STUB_PROVIDERS = 'true'
+    expect(() => createMonoovaClient()).toThrow(/forbidden in production/)
+  })
+
+  it('returns a StubMonoovaClient in dev when creds are missing (convenience)', () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    delete process.env.MONOOVA_API_URL
+    delete process.env.MONOOVA_API_KEY
+    const client = createMonoovaClient()
+    expect(client).toBeInstanceOf(StubMonoovaClient)
+  })
+
+  it('throws in production when creds are missing (existing behavior preserved)', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    delete process.env.MONOOVA_API_URL
+    delete process.env.MONOOVA_API_KEY
+    // validateMonoovaConfig throws first, before the isMock branch — so
+    // the message is the validate-layer one, not the factory's.
+    expect(() => createMonoovaClient()).toThrow(/Monoova config missing/)
+  })
+
+  it('returns a real MonoovaHttpClient when creds are present + flag off', () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    process.env.MONOOVA_API_URL = 'https://api.m-pay.com.au'
+    process.env.MONOOVA_API_KEY = 'sandbox-key'
+    const client = createMonoovaClient()
+    expect(client).toBeInstanceOf(MonoovaHttpClient)
+    expect(client).not.toBeInstanceOf(StubMonoovaClient)
   })
 })

@@ -20,6 +20,7 @@ import {
   ProviderTemporaryError,
   ProviderTimeoutError as HttpTimeoutError,
 } from '../../http/retry'
+import { isStubProvidersEnabled, assertStubProvidersSafe } from '../flag'
 
 /**
  * Hardcoded NG bank list used in dev/test when `FLUTTERWAVE_SECRET_KEY` is
@@ -104,6 +105,8 @@ const BANKS_CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
 // construct a fresh provider per case will only see the log on the first
 // instance — by design, not a test gap.
 let devListBanksLogged = false
+// Same once-per-process discipline for the payout stub.
+let devStubPayoutLogged = false
 
 interface BanksCacheEntry {
   fetchedAt: number
@@ -117,6 +120,40 @@ export class FlutterwaveProvider implements PayoutProvider {
 
   constructor(config: Pick<FlutterwaveConfig, 'secretKey' | 'apiUrl'>) {
     this.config = config
+  }
+
+  /**
+   * Stub-mode gate for `initiatePayout` / `getPayoutStatus`. Mirrors the
+   * semantics of `BudPayProvider.inStubMode` — triggered by either the
+   * global `KOLA_USE_STUB_PROVIDERS` flag or by a missing secret key in
+   * non-production environments. Production use of either trigger
+   * throws rather than synthesizing fake success.
+   *
+   * Note: `listBanks` and `resolveAccount` retain their own in-method
+   * stub branches (they predate this flag and still function as a
+   * secretKey-missing fallback for the bank-dropdown dev ergonomics).
+   */
+  private inStubMode(): boolean {
+    if (isStubProvidersEnabled()) {
+      assertStubProvidersSafe()
+      return true
+    }
+    if (!this.config.secretKey) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error(
+          'Flutterwave stub path hit in production — FLUTTERWAVE_SECRET_KEY is missing',
+        )
+      }
+      return true
+    }
+    return false
+  }
+
+  private logStubOnce(): void {
+    if (!devStubPayoutLogged) {
+      console.log('[flutterwave-dev] initiatePayout -> stub (no network)')
+      devStubPayoutLogged = true
+    }
   }
 
   /**
@@ -247,6 +284,14 @@ export class FlutterwaveProvider implements PayoutProvider {
   }
 
   async initiatePayout(params: PayoutParams): Promise<PayoutResult> {
+    if (this.inStubMode()) {
+      this.logStubOnce()
+      return {
+        providerRef: `STUB-FW-${params.reference}`,
+        status: 'SUCCESSFUL',
+      }
+    }
+
     const body = {
       account_bank: params.bankCode,
       account_number: params.accountNumber,
@@ -273,6 +318,10 @@ export class FlutterwaveProvider implements PayoutProvider {
   }
 
   async getPayoutStatus(providerRef: string): Promise<PayoutStatusResult> {
+    if (this.inStubMode()) {
+      return { status: 'SUCCESSFUL' }
+    }
+
     const response = await withRetry(
       (signal) =>
         this.request('GET', `/transfers/${providerRef}`, undefined, { signal }),
@@ -287,6 +336,11 @@ export class FlutterwaveProvider implements PayoutProvider {
   }
 
   async getWalletBalance(currency: string): Promise<Decimal> {
+    if (this.inStubMode()) {
+      this.logStubOnce()
+      return new Decimal(process.env.FLOAT_BALANCE_NGN ?? '0')
+    }
+
     const response = await withRetry(
       (signal) =>
         this.request('GET', `/balances/${currency}`, undefined, { signal }),

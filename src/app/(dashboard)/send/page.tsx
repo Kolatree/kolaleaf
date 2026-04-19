@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import Decimal from 'decimal.js'
 import {
   KolaLogo,
@@ -32,6 +33,7 @@ interface RateData {
 }
 
 export default function SendPage() {
+  const router = useRouter()
   const [sendAmount, setSendAmount] = useState('1000')
   const [rate, setRate] = useState<RateData | null>(null)
   const [recipients, setRecipients] = useState<Recipient[]>([])
@@ -39,7 +41,6 @@ export default function SendPage() {
   const [kycVerified, setKycVerified] = useState<boolean | null>(null)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
 
   const fetchRate = useCallback(async () => {
     try {
@@ -95,7 +96,6 @@ export default function SendPage() {
   async function handleSend() {
     if (!selectedRecipientId || !rate) return
     setError('')
-    setSuccess('')
     setSending(true)
 
     try {
@@ -116,15 +116,31 @@ export default function SendPage() {
         setError(data.error || 'Transfer failed')
         return
       }
-      // Unverified users now land here too. The transfer is saved in
-      // CREATED state; PayID issuance (the AUD-collection step) will
-      // block until KYC is VERIFIED. Steer them to the verification
-      // wizard so they can unblock processing.
-      setSuccess(
-        kycVerified
-          ? 'Transfer created — check Activity for status.'
-          : 'Transfer saved. Verify your identity to begin processing.',
-      )
+
+      const transferId = data?.transfer?.id as string | undefined
+      if (!transferId) {
+        setError('Transfer created, but the app could not open its detail page.')
+        return
+      }
+
+      if (kycVerified) {
+        const payIdRes = await apiFetch(`transfers/${transferId}/issue-payid`, {
+          method: 'POST',
+        })
+        if (!payIdRes.ok && payIdRes.status !== 409) {
+          const payIdData = await payIdRes
+            .json()
+            .catch(() => ({ error: 'Could not issue payment instructions.' }))
+          setError(
+            typeof payIdData.error === 'string'
+              ? payIdData.error
+              : 'Could not issue payment instructions.',
+          )
+          return
+        }
+      }
+
+      router.push(`/activity/${transferId}`)
     } catch {
       setError('Something went wrong. Please try again.')
     } finally {
@@ -211,12 +227,6 @@ export default function SendPage() {
                   {error}
                 </div>
               )}
-              {success && (
-                <div className="mt-3" style={{ background: colors.bgSoft, color: colors.green, fontSize: '13px', padding: '10px 12px', borderRadius: '8px' }}>
-                  {success}
-                </div>
-              )}
-
               <button
                 type="button"
                 onClick={handleSend}

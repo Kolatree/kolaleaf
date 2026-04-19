@@ -35,7 +35,6 @@ afterEach(async () => {
 
 afterAll(async () => {
   await cleanupTestData()
-  await prisma.$disconnect()
 })
 
 describe('createTransfer', () => {

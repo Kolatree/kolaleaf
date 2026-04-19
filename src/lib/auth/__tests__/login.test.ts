@@ -44,7 +44,8 @@ describe('login service', () => {
       identifier: 'login1@example.com',
       password: 'CorrectPass1!',
     })
-    expect(result.session.token).toMatch(/^[a-f0-9]{64}$/)
+    expect(result.session).toBeDefined()
+    expect(result.session!.token).toMatch(/^[a-f0-9]{64}$/)
     expect(result.requires2FA).toBe(false)
   })
 
@@ -106,7 +107,8 @@ describe('login service', () => {
     })
     expect(result.requires2FA).toBe(true)
     expect(result.twoFactorMethod).toBe('TOTP')
-    expect(result.challengeId).toBeUndefined()
+    expect(result.challengeId).toBeDefined()
+    expect(result.session).toBeUndefined()
   })
 
   it('returns requires2FA=true with method=SMS + challengeId when SMS 2FA is enabled', async () => {
@@ -136,6 +138,7 @@ describe('login service', () => {
     expect(result.twoFactorMethod).toBe('SMS')
     expect(result.challengeId).toBeDefined()
     expect(typeof result.challengeId).toBe('string')
+    expect(result.session).toBeUndefined()
   })
 
   it('throws on unknown identifier', async () => {

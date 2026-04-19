@@ -28,9 +28,9 @@ vi.mock('@/lib/reconciliation/flutterwave-statement-client', () => ({
     fetchStatement: vi.fn(),
   })),
 }))
-vi.mock('@/lib/reconciliation/paystack-statement-client', () => ({
-  createPaystackStatementClient: vi.fn(() => ({
-    provider: 'paystack',
+vi.mock('@/lib/reconciliation/budpay-statement-client', () => ({
+  createBudPayStatementClient: vi.fn(() => ({
+    provider: 'budpay',
     fetchStatement: vi.fn(),
   })),
 }))
@@ -39,7 +39,7 @@ import { GET, POST } from '@/app/api/cron/provider-reconciliation/route'
 import { prisma } from '@/lib/db/client'
 import { MonoovaStatementClient } from '@/lib/reconciliation/monoova-statement-client'
 import { createFlutterwaveStatementClient } from '@/lib/reconciliation/flutterwave-statement-client'
-import { createPaystackStatementClient } from '@/lib/reconciliation/paystack-statement-client'
+import { createBudPayStatementClient } from '@/lib/reconciliation/budpay-statement-client'
 
 const mockFindMany = vi.mocked(prisma.transfer.findMany)
 const mockCreate = vi.mocked(prisma.complianceReport.create)
@@ -75,8 +75,8 @@ describe('GET/POST /api/cron/provider-reconciliation', () => {
     vi.mocked(createFlutterwaveStatementClient).mockReturnValue(
       makeClient('flutterwave') as never,
     )
-    vi.mocked(createPaystackStatementClient).mockReturnValue(
-      makeClient('paystack') as never,
+    vi.mocked(createBudPayStatementClient).mockReturnValue(
+      makeClient('budpay') as never,
     )
   })
 

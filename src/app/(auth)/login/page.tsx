@@ -10,8 +10,9 @@ export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [totpCode, setTotpCode] = useState('')
+  const [twoFactorCode, setTwoFactorCode] = useState('')
   const [needs2FA, setNeeds2FA] = useState(false)
+  const [twoFactorMethod, setTwoFactorMethod] = useState<'TOTP' | 'SMS' | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -45,6 +46,7 @@ export default function LoginPage() {
       }
 
       if (data.requires2FA) {
+        setTwoFactorMethod(data.twoFactorMethod ?? 'TOTP')
         setNeeds2FA(true)
         return
       }
@@ -66,7 +68,7 @@ export default function LoginPage() {
       const res = await apiFetch('auth/verify-2fa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: totpCode }),
+        body: JSON.stringify({ code: twoFactorCode.trim() }),
       })
 
       const data = await res.json()
@@ -175,7 +177,9 @@ export default function LoginPage() {
             <div className="text-center">
               <h2 style={{ fontSize: '18px', fontWeight: 600 }}>Two-factor authentication</h2>
               <p style={{ fontSize: '13px', color: colors.muted, marginTop: '6px' }}>
-                Enter the 6-digit code from your authenticator app.
+                {twoFactorMethod === 'SMS'
+                  ? 'Enter the SMS code we just sent, or use a backup code.'
+                  : 'Enter the code from your authenticator app, or use a backup code.'}
               </p>
             </div>
 
@@ -187,21 +191,21 @@ export default function LoginPage() {
 
             <input
               type="text"
-              value={totpCode}
-              onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              value={twoFactorCode}
+              onChange={(e) => setTwoFactorCode(e.target.value.trimStart().slice(0, 32))}
               required
-              maxLength={6}
-              inputMode="numeric"
-              aria-label="6-digit code"
+              maxLength={32}
+              inputMode={twoFactorMethod === 'SMS' ? 'numeric' : 'text'}
+              aria-label="Two-factor code"
               autoFocus
-              placeholder="000000"
+              placeholder={twoFactorMethod === 'SMS' ? '123456' : '123456 or backup code'}
               className="tabular-nums text-center"
               style={{
                 border: `1px solid ${colors.border}`,
                 borderRadius: '8px',
                 padding: '12px',
                 fontSize: '24px',
-                letterSpacing: '8px',
+                letterSpacing: twoFactorMethod === 'SMS' ? '8px' : '2px',
                 outline: 'none',
               }}
               onFocus={(e) => (e.currentTarget.style.borderColor = colors.purple)}
@@ -210,7 +214,7 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading || totpCode.length !== 6}
+              disabled={loading || twoFactorCode.trim().length === 0}
               aria-busy={loading}
               className="w-full text-white transition hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
               style={{

@@ -2,6 +2,7 @@ import Decimal from 'decimal.js'
 import { prisma } from '../../db/client'
 import { transitionTransfer } from '../../transfers/state-machine'
 import { TransferStatus, ActorType } from '../../../generated/prisma/enums'
+import { getOrchestrator } from './orchestrator'
 
 interface FloatBalanceProvider {
   name: string
@@ -60,6 +61,7 @@ export class FloatMonitor {
     const transfers = await prisma.transfer.findMany({
       where: { status: TransferStatus.FLOAT_INSUFFICIENT },
     })
+    const orchestrator = getOrchestrator()
 
     for (const transfer of transfers) {
       // FLOAT_INSUFFICIENT -> AUD_RECEIVED: re-queue for payout pickup
@@ -70,6 +72,15 @@ export class FloatMonitor {
         expectedStatus: TransferStatus.FLOAT_INSUFFICIENT,
         metadata: { reason: 'Float balance restored' },
       })
+
+      try {
+        await orchestrator.initiatePayout(transfer.id)
+      } catch (error) {
+        console.error('[float-monitor] failed to resume payout after float restore', {
+          transferId: transfer.id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
     }
 
     return transfers.length

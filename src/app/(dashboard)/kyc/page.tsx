@@ -11,24 +11,10 @@ import {
 } from '@/components/design/KolaPrimitives'
 import { AuthShell } from '@/components/design/AuthShell'
 import { useWizardSubmit } from '@/lib/hooks/use-wizard-submit'
+import { isAllowedSumsubUrl } from '../account/kyc-actions'
 
 // Post-registration KYC prompt. Skippable at this stage — the hard
 // block lives at transfer creation (KYC gates PayID per CLAUDE.md).
-
-// Refuse any redirect that isn't a Sumsub host over HTTPS. A future
-// Sumsub misconfiguration or a header-injected response cannot turn
-// this page into an open redirect.
-function isAllowedSumsubUrl(raw: unknown): raw is string {
-  if (typeof raw !== 'string') return false
-  let url: URL
-  try {
-    url = new URL(raw)
-  } catch {
-    return false
-  }
-  if (url.protocol !== 'https:') return false
-  return url.host === 'sumsub.com' || url.host.endsWith('.sumsub.com')
-}
 
 export default function KycPage() {
   const router = useRouter()

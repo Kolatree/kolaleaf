@@ -16,6 +16,8 @@ export interface TransferUserView {
   receiveCurrency: string
   exchangeRate: Prisma.Decimal
   fee: Prisma.Decimal
+  payidProviderRef: string | null
+  payidReference: string | null
   createdAt: Date
   updatedAt: Date
   completedAt: Date | null
@@ -34,6 +36,8 @@ const USER_SAFE_TRANSFER_SELECT = {
   receiveCurrency: true,
   exchangeRate: true,
   fee: true,
+  payidProviderRef: true,
+  payidReference: true,
   createdAt: true,
   updatedAt: true,
   completedAt: true,
@@ -65,9 +69,7 @@ export interface TransferListRecipient {
   bankName: string
 }
 
-export type TransferWithRecipient = Transfer & {
-  recipient: TransferListRecipient | null
-}
+export type TransferWithRecipient = TransferUserView
 
 interface ListResult {
   transfers: TransferWithRecipient[]
@@ -86,9 +88,7 @@ export async function listTransfers(
     where,
     orderBy: { createdAt: 'desc' },
     take: limit + 1,
-    include: {
-      recipient: { select: { id: true, fullName: true, bankName: true } },
-    },
+    select: USER_SAFE_TRANSFER_SELECT,
     ...(params.cursor
       ? { skip: 1, cursor: { id: params.cursor } }
       : {}),

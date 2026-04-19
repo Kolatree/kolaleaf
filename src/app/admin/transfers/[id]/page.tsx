@@ -46,6 +46,8 @@ export default function AdminTransferDetailPage({
   const [transfer, setTransfer] = useState<TransferDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
+  const [refundReference, setRefundReference] = useState('')
+  const [refundNote, setRefundNote] = useState('')
 
   async function fetchTransfer() {
     const res = await apiFetch(`admin/transfers/${id}`)
@@ -76,9 +78,20 @@ export default function AdminTransferDetailPage({
   }
 
   async function handleRefund() {
+    if (!refundReference.trim()) {
+      setError('Enter the external refund reference before marking this transfer refunded.')
+      return
+    }
     setActionLoading(true)
     setError(null)
-    const res = await apiFetch(`admin/transfers/${id}/refund`, { method: 'POST' })
+    const res = await apiFetch(`admin/transfers/${id}/refund`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        refundReference: refundReference.trim(),
+        note: refundNote.trim() || undefined,
+      }),
+    })
     if (res.ok) await fetchTransfer()
     else {
       const data = await res.json()
@@ -159,27 +172,86 @@ export default function AdminTransferDetailPage({
 
           {/* Actions */}
           {transfer.status === 'NEEDS_MANUAL' && (
-            <div className="flex gap-3 mb-6">
-              <button
-                type="button"
-                onClick={handleRetry}
-                disabled={actionLoading}
-                className="text-white transition hover:brightness-110 disabled:opacity-60"
-                style={{
-                  background: GRADIENT,
-                  padding: '10px 18px',
-                  borderRadius: radius.cta,
-                  fontSize: '14px',
-                  fontWeight: 600,
-                }}
-              >
-                {actionLoading ? 'Processing…' : 'Retry payout'}
-              </button>
+            <section
+              className="mb-6"
+              style={{ background: colors.cardBg, borderRadius: radius.card, padding: spacing.cardPad, boxShadow: shadow.card }}
+            >
+              <h2 style={{ fontSize: '15px', fontWeight: 600, color: colors.ink }}>
+                Manual actions
+              </h2>
+              <p className="mt-2" style={{ fontSize: '13px', color: colors.muted, lineHeight: 1.5 }}>
+                Retry will create a real payout attempt. Mark refunded is manual only and
+                requires the external refund reference used off-platform.
+              </p>
+
+              <div className="mt-4 flex gap-3 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleRetry}
+                  disabled={actionLoading}
+                  className="text-white transition hover:brightness-110 disabled:opacity-60"
+                  style={{
+                    background: GRADIENT,
+                    padding: '10px 18px',
+                    borderRadius: radius.cta,
+                    fontSize: '14px',
+                    fontWeight: 600,
+                  }}
+                >
+                  {actionLoading ? 'Processing…' : 'Retry payout'}
+                </button>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label>
+                  <div style={{ fontSize: '10px', color: colors.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Refund reference
+                  </div>
+                  <input
+                    type="text"
+                    value={refundReference}
+                    onChange={(e) => setRefundReference(e.target.value)}
+                    placeholder="Bank receipt / case ID"
+                    style={{
+                      width: '100%',
+                      marginTop: '6px',
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: '8px',
+                      padding: '10px 12px',
+                      fontSize: '13px',
+                      background: colors.cardBg,
+                      color: colors.ink,
+                    }}
+                  />
+                </label>
+                <label>
+                  <div style={{ fontSize: '10px', color: colors.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Note
+                  </div>
+                  <input
+                    type="text"
+                    value={refundNote}
+                    onChange={(e) => setRefundNote(e.target.value)}
+                    placeholder="Optional operator note"
+                    style={{
+                      width: '100%',
+                      marginTop: '6px',
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: '8px',
+                      padding: '10px 12px',
+                      fontSize: '13px',
+                      background: colors.cardBg,
+                      color: colors.ink,
+                    }}
+                  />
+                </label>
+              </div>
+
               <button
                 type="button"
                 onClick={handleRefund}
                 disabled={actionLoading}
-                className="transition hover:brightness-110 disabled:opacity-60"
+                className="mt-4 transition hover:brightness-110 disabled:opacity-60"
                 style={{
                   background: '#b00020',
                   color: '#fff',
@@ -189,9 +261,9 @@ export default function AdminTransferDetailPage({
                   fontWeight: 600,
                 }}
               >
-                {actionLoading ? 'Processing…' : 'Refund'}
+                {actionLoading ? 'Processing…' : 'Mark refunded'}
               </button>
-            </div>
+            </section>
           )}
 
           {/* Timeline */}

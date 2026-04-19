@@ -50,7 +50,6 @@ afterEach(async () => {
 
 afterAll(async () => {
   await cleanupTestData()
-  await prisma.$disconnect()
 })
 
 function req(path: string, body: unknown): Request {

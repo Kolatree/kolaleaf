@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest'
 import Decimal from 'decimal.js'
 import { prisma } from '@/lib/db/client'
+
+const orchestratorMocks = {
+  initiatePayout: vi.fn(),
+}
+vi.mock('@/lib/payments/payout/orchestrator', () => ({
+  getOrchestrator: () => orchestratorMocks,
+}))
+
 import { FloatMonitor } from '../float-monitor'
 
 // Mock Flutterwave wallet balance check
@@ -38,6 +46,18 @@ async function createTestTransfer(overrides: Record<string, unknown> = {}) {
 
 beforeEach(async () => {
   mockGetWalletBalance.mockReset()
+  orchestratorMocks.initiatePayout.mockReset()
+  orchestratorMocks.initiatePayout.mockImplementation(async (transferId: string) => {
+    await prisma.transfer.update({
+      where: { id: transferId },
+      data: {
+        status: 'PROCESSING_NGN',
+        payoutProvider: 'BUDPAY',
+        payoutProviderRef: `restored-${transferId}`,
+      },
+    })
+    return prisma.transfer.findUniqueOrThrow({ where: { id: transferId } })
+  })
 
   await prisma.transferEvent.deleteMany({ where: { transfer: { user: { fullName: { startsWith: 'FloatTest' } } } } })
   await prisma.transfer.deleteMany({ where: { user: { fullName: { startsWith: 'FloatTest' } } } })
@@ -175,11 +195,12 @@ describe('FloatMonitor', () => {
       const count = await monitor.resumeTransfersIfFloatRestored()
 
       expect(count).toBe(2)
+      expect(orchestratorMocks.initiatePayout).toHaveBeenCalledTimes(2)
 
       const restored = await prisma.transfer.count({
-        where: { status: 'AUD_RECEIVED' },
+        where: { status: 'PROCESSING_NGN' },
       })
-      expect(restored).toBe(2)
+      expect(restored).toBe(3)
     })
 
     it('does not resume when float is still low', async () => {

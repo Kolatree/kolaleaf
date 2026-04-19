@@ -31,7 +31,6 @@ afterEach(async () => {
 
 afterAll(async () => {
   await cleanupTestData()
-  await prisma.$disconnect()
 })
 
 describe('Transfer Failure + Recovery E2E', () => {

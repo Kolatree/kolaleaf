@@ -9,11 +9,14 @@ export async function GET(request: Request) {
 
     const url = new URL(request.url)
     const type = url.searchParams.get('type') ?? undefined
+    const status = url.searchParams.get('status') ?? undefined
     const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '50', 10), 100)
     const cursor = url.searchParams.get('cursor') ?? undefined
 
     const where: Record<string, unknown> = {}
     if (type) where.type = type
+    if (status === 'PENDING') where.reportedAt = null
+    if (status === 'REPORTED') where.reportedAt = { not: null }
 
     const reports = await prisma.complianceReport.findMany({
       where,

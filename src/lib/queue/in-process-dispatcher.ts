@@ -12,7 +12,7 @@ import type { WebhookDispatcher, WebhookJob } from './webhook-dispatcher'
 import { handleMonoovaWebhook } from '@/lib/payments/monoova/webhook'
 import {
   handleFlutterwaveWebhook,
-  handlePaystackWebhook,
+  handleBudPayWebhook,
 } from '@/lib/payments/payout/webhooks'
 import { handleSumsubWebhook } from '@/lib/kyc/sumsub/webhook'
 
@@ -28,10 +28,10 @@ export class InProcessDispatcher implements WebhookDispatcher {
         await handleFlutterwaveWebhook(job.rawBody, job.signature, secret)
         return
       }
-      case 'paystack': {
-        const secret = process.env.PAYSTACK_SECRET_KEY
-        if (!secret) throw new Error('PAYSTACK_SECRET_KEY not configured')
-        await handlePaystackWebhook(job.rawBody, job.signature, secret)
+      case 'budpay': {
+        const secret = process.env.BUDPAY_WEBHOOK_SECRET
+        if (!secret) throw new Error('BUDPAY_WEBHOOK_SECRET not configured')
+        await handleBudPayWebhook(job.rawBody, job.signature, secret)
         return
       }
       case 'sumsub':

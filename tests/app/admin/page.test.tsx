@@ -7,6 +7,13 @@ vi.mock('next/headers', () => ({
   cookies: async () => ({
     getAll: () => [{ name: 'session', value: 'tok' }],
   }),
+  headers: async () => ({
+    get: (name: string) => {
+      if (name === 'host') return 'kolaleaf.test'
+      if (name === 'x-forwarded-proto') return 'https'
+      return null
+    },
+  }),
 }))
 
 import AdminDashboard from '@/app/admin/page'

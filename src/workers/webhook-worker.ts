@@ -31,12 +31,12 @@ import { verifyMonoovaSignature } from '@/lib/payments/monoova/verify-signature'
 import { verifySumsubSignature } from '@/lib/kyc/sumsub/verify-signature'
 import {
   verifyFlutterwaveSignature,
-  verifyPaystackSignature,
+  verifyBudPaySignature,
 } from '@/lib/payments/payout/verify-signature'
 import { handleMonoovaWebhook } from '@/lib/payments/monoova/webhook'
 import {
   handleFlutterwaveWebhook,
-  handlePaystackWebhook,
+  handleBudPayWebhook,
 } from '@/lib/payments/payout/webhooks'
 import { handleSumsubWebhook } from '@/lib/kyc/sumsub/webhook'
 import {
@@ -48,7 +48,7 @@ import {
 import { log } from '@/lib/obs/logger'
 
 // Verify the signature and return the resolved secret so the caller can pass
-// it into handlers that expect one (Flutterwave, Paystack) without a second
+// it into handlers that expect one (Flutterwave, BudPay) without a second
 // env lookup. The two lookups were harmless but invited drift.
 function verify(
   provider: WebhookProvider,
@@ -80,11 +80,11 @@ function verify(
       }
       return secret
     }
-    case 'paystack': {
-      const secret = process.env.PAYSTACK_SECRET_KEY
-      if (!secret) throw new Error('PAYSTACK_SECRET_KEY not configured')
-      if (!verifyPaystackSignature(rawBody, signature, secret)) {
-        throw new Error('Invalid Paystack webhook signature')
+    case 'budpay': {
+      const secret = process.env.BUDPAY_WEBHOOK_SECRET
+      if (!secret) throw new Error('BUDPAY_WEBHOOK_SECRET not configured')
+      if (!verifyBudPaySignature(rawBody, signature, secret)) {
+        throw new Error('Invalid BudPay webhook signature')
       }
       return secret
     }
@@ -113,8 +113,8 @@ async function processJob(job: Job<WebhookJob>): Promise<void> {
     case 'flutterwave':
       await handleFlutterwaveWebhook(rawBody, signature, secret)
       break
-    case 'paystack':
-      await handlePaystackWebhook(rawBody, signature, secret)
+    case 'budpay':
+      await handleBudPayWebhook(rawBody, signature, secret)
       break
     case 'sumsub':
       await handleSumsubWebhook(rawBody, signature)

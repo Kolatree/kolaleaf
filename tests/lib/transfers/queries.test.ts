@@ -37,7 +37,6 @@ afterEach(async () => {
 
 afterAll(async () => {
   await cleanupTestData()
-  await prisma.$disconnect()
 })
 
 describe('getTransfer', () => {
@@ -59,7 +58,7 @@ describe('getTransfer', () => {
     expect(result).toBeNull()
   })
 
-  it('omits internal fields from the user-safe projection', async () => {
+  it('omits internal admin-only fields while exposing PayID instructions', async () => {
     // Ensure leaks like provider refs, retry counts, and failure reasons are
     // never returned to user-facing routes (they ARE allowed in admin views,
     // but admin uses prisma directly, not getTransfer).
@@ -84,9 +83,9 @@ describe('getTransfer', () => {
     expect(view.failureReason).toBeUndefined()
     expect(view.payoutProviderRef).toBeUndefined()
     expect(view.payoutProvider).toBeUndefined()
-    expect(view.payidProviderRef).toBeUndefined()
-    expect(view.payidReference).toBeUndefined()
     expect(view.retryCount).toBeUndefined()
+    expect(result!.payidProviderRef).toBe('payid-ref-456')
+    expect(result!.payidReference).toBe('payid-789')
 
     // Sanity: the public fields ARE present.
     expect(result!.id).toBe(transfer.id)
@@ -174,6 +173,32 @@ describe('listTransfers', () => {
     const recipientFields = t.recipient as unknown as Record<string, unknown>
     expect(recipientFields.accountNumber).toBeUndefined()
     expect(recipientFields.bankCode).toBeUndefined()
+  })
+
+  it('does not leak internal admin-only fields from listTransfers', async () => {
+    const transfer = await createTestTransfer(userId, recipientId)
+    await prisma.transfer.update({
+      where: { id: transfer.id },
+      data: {
+        failureReason: 'should-not-leak',
+        payoutProviderRef: 'pp-ref-123',
+        payoutProvider: 'FLUTTERWAVE',
+        payidProviderRef: 'payid-ref-456',
+        payidReference: 'payid-789',
+        retryCount: 3,
+      },
+    })
+
+    const result = await listTransfers(userId)
+    expect(result.transfers).toHaveLength(1)
+
+    const view = result.transfers[0] as unknown as Record<string, unknown>
+    expect(view.failureReason).toBeUndefined()
+    expect(view.payoutProviderRef).toBeUndefined()
+    expect(view.payoutProvider).toBeUndefined()
+    expect(view.retryCount).toBeUndefined()
+    expect(result.transfers[0].payidProviderRef).toBe('payid-ref-456')
+    expect(result.transfers[0].payidReference).toBe('payid-789')
   })
 })
 

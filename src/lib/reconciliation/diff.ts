@@ -4,7 +4,7 @@ import type { Transfer } from '@/generated/prisma/client'
 
 // Pure diff engine for the reconciliation job. Given the statement
 // entries pulled from a provider (Monoova inbound credits,
-// Flutterwave/Paystack outbound debits) and the Transfer rows from
+// BudPay/Flutterwave outbound debits) and the Transfer rows from
 // our ledger in the same window, emit the set of discrepancies that
 // compliance-ops must triage.
 //
@@ -23,12 +23,12 @@ const OUTBOUND_EXPECTED_STATUSES = new Set<string>(['NGN_SENT', 'COMPLETED'])
 
 function payoutProviderToName(p: Transfer['payoutProvider']): ProviderName | null {
   if (p === 'FLUTTERWAVE') return 'flutterwave'
-  if (p === 'PAYSTACK') return 'paystack'
+  if (p === 'BUDPAY') return 'budpay'
   return null
 }
 
 // Composite key for debit-side lookups. Providers MUST NOT be collapsed
-// to providerRef alone because Flutterwave/Paystack can independently
+// to providerRef alone because BudPay/Flutterwave can independently
 // mint short alphanumeric refs that happen to collide. A collision
 // would misroute a debit onto the wrong Transfer (wrong amount → false
 // amount_mismatch, or worse, a real fraud signal silently suppressed).
@@ -98,8 +98,8 @@ export function computeDiscrepancies(input: {
         })
       }
     } else {
-      // debit — lookup scoped to (provider, ref) so Flutterwave and
-      // Paystack cannot shadow each other on colliding refs.
+      // debit — lookup scoped to (provider, ref) so BudPay and
+      // Flutterwave cannot shadow each other on colliding refs.
       const key = debitKey(entry.provider, entry.providerRef)
       const transfer = transfersByPayoutRef.get(key)
       if (!transfer) {
@@ -156,7 +156,7 @@ export function computeDiscrepancies(input: {
       })
     }
 
-    // Outbound debit expectation (Flutterwave or Paystack).
+    // Outbound debit expectation (BudPay or Flutterwave).
     const payoutName = payoutProviderToName(transfer.payoutProvider)
     if (
       payoutName &&

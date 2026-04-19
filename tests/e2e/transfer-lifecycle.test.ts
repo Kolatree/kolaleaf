@@ -13,8 +13,12 @@ import { loginUser } from '../../src/lib/auth/login'
 import { handleKycApproved } from '../../src/lib/kyc/sumsub/kyc-service'
 import { createTransfer } from '../../src/lib/transfers/create'
 import { transitionTransfer } from '../../src/lib/transfers/state-machine'
-import { handlePaymentReceived } from '../../src/lib/payments/monoova/payid-service'
+import {
+  generatePayIdForTransfer,
+  handlePaymentReceived,
+} from '../../src/lib/payments/monoova/payid-service'
 import { handleMonoovaWebhook } from '../../src/lib/payments/monoova/webhook'
+import { StubMonoovaClient } from '../../src/lib/payments/monoova'
 import Decimal from 'decimal.js'
 
 let corridorId: string
@@ -25,19 +29,11 @@ beforeAll(async () => {
 })
 
 afterEach(async () => {
-  await prisma.webhookEvent.deleteMany({})
-  await prisma.transferEvent.deleteMany({})
-  await prisma.transfer.deleteMany({})
-  await prisma.recipient.deleteMany({})
-  await prisma.authEvent.deleteMany({})
-  await prisma.session.deleteMany({})
-  await prisma.userIdentifier.deleteMany({})
-  await prisma.user.deleteMany({})
+  await cleanupTestData()
 })
 
 afterAll(async () => {
   await cleanupTestData()
-  await prisma.$disconnect()
 })
 
 describe('Transfer Lifecycle E2E — Golden Path', () => {
@@ -105,32 +101,24 @@ describe('Transfer Lifecycle E2E — Golden Path', () => {
     expect(initialEvent).not.toBeNull()
 
     // ── Step 5: Transition CREATED → AWAITING_AUD (PayID generated) ──
-    const payidRef = `KL-${transfer.id}-${Date.now()}`
-    await prisma.transfer.update({
-      where: { id: transfer.id },
-      data: { payidReference: payidRef },
-    })
-    const awaitingTransfer = await transitionTransfer({
-      transferId: transfer.id,
-      toStatus: 'AWAITING_AUD',
-      actor: 'SYSTEM',
-      metadata: { payidReference: payidRef },
-    })
+    const awaitingTransfer = await generatePayIdForTransfer(
+      transfer.id,
+      new StubMonoovaClient(),
+    )
     expect(awaitingTransfer.status).toBe('AWAITING_AUD')
+    expect(awaitingTransfer.payidProviderRef).toBe('stub@payid.kolaleaf.dev')
+    expect(awaitingTransfer.payidReference).toMatch(new RegExp(`^STUB-KL-${transfer.id}-`))
 
-    // ── Step 6: Simulate PayID payment received (AUD_RECEIVED) ──
+    // ── Step 6: Simulate PayID payment received (AUD_RECEIVED -> payout kickoff) ──
     const audReceived = await handlePaymentReceived(transfer.id, new Decimal(500))
     expect(audReceived.status).toBe('AUD_RECEIVED')
 
-    // ── Step 7: PROCESSING_NGN ──
-    const processingTransfer = await transitionTransfer({
-      transferId: transfer.id,
-      toStatus: 'PROCESSING_NGN',
-      actor: 'SYSTEM',
+    const processingTransfer = await prisma.transfer.findUniqueOrThrow({
+      where: { id: transfer.id },
     })
     expect(processingTransfer.status).toBe('PROCESSING_NGN')
 
-    // ── Step 8: NGN_SENT ──
+    // ── Step 7: NGN_SENT ──
     const ngnSent = await transitionTransfer({
       transferId: transfer.id,
       toStatus: 'NGN_SENT',
@@ -138,7 +126,7 @@ describe('Transfer Lifecycle E2E — Golden Path', () => {
     })
     expect(ngnSent.status).toBe('NGN_SENT')
 
-    // ── Step 9: COMPLETED ──
+    // ── Step 8: COMPLETED ──
     const completed = await transitionTransfer({
       transferId: transfer.id,
       toStatus: 'COMPLETED',
@@ -162,7 +150,7 @@ describe('Transfer Lifecycle E2E — Golden Path', () => {
       'PROCESSING_NGN → NGN_SENT',
       'NGN_SENT → COMPLETED',
     ])
-  })
+  }, 15000)
 
   it('walks the full state machine via Monoova webhook for AUD receipt', async () => {
     // Setup: verified user + recipient + transfer in AWAITING_AUD
@@ -210,9 +198,9 @@ describe('Transfer Lifecycle E2E — Golden Path', () => {
       process.env.MONOOVA_WEBHOOK_SECRET = originalEnv
     }
 
-    // Verify transfer is now AUD_RECEIVED
+    // Verify transfer moved straight into payout processing after AUD receipt.
     const updated = await prisma.transfer.findUniqueOrThrow({ where: { id: transfer.id } })
-    expect(updated.status).toBe('AUD_RECEIVED')
+    expect(updated.status).toBe('PROCESSING_NGN')
 
     // Verify webhook event recorded
     const webhookEvent = await prisma.webhookEvent.findFirst({
@@ -246,7 +234,8 @@ describe('Transfer Lifecycle E2E — Golden Path', () => {
     })
     expect(user).not.toBeNull()
     expect(user!.fullName).toBe('Login User')
-    expect(session.token).toHaveLength(64)
+    expect(session).toBeDefined()
+    expect(session!.token).toHaveLength(64)
     expect(requires2FA).toBe(false)
   })
 })

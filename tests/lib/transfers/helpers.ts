@@ -80,14 +80,20 @@ export async function createTestTransfer(
 }
 
 export async function cleanupTestData() {
+  await prisma.failedEmail.deleteMany({})
   await prisma.complianceReport.deleteMany({})
   await prisma.webhookEvent.deleteMany({})
   await prisma.transferEvent.deleteMany({})
   await prisma.transfer.deleteMany({})
   await prisma.referral.deleteMany({})
   await prisma.recipient.deleteMany({})
+  await prisma.emailVerificationToken.deleteMany({})
+  await prisma.passwordResetToken.deleteMany({})
+  await prisma.phoneVerificationCode.deleteMany({})
+  await prisma.twoFactorChallenge.deleteMany({})
   await prisma.authEvent.deleteMany({})
   await prisma.session.deleteMany({})
   await prisma.userIdentifier.deleteMany({})
   await prisma.user.deleteMany({})
+  await prisma.pendingEmailVerification.deleteMany({})
 }

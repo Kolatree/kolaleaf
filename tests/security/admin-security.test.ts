@@ -23,7 +23,6 @@ afterEach(async () => {
 
 afterAll(async () => {
   await cleanupTestData()
-  await prisma.$disconnect()
 })
 
 function makeRequest(cookieHeader?: string): Request {

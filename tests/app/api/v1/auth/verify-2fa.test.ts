@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/auth/middleware', () => ({
-  requireAuth: vi.fn(),
+  requirePendingTwoFactorChallenge: vi.fn(),
+  clearPendingTwoFactorCookie: vi.fn(() => 'kolaleaf_pending_2fa=; Max-Age=0'),
+  setSessionCookie: vi.fn(() => 'kolaleaf_session=tok; HttpOnly'),
   AuthError: class extends Error {
     statusCode: number
     constructor(statusCode: number, msg: string) {
@@ -14,6 +16,7 @@ vi.mock('@/lib/auth/middleware', () => ({
 
 vi.mock('@/lib/db/client', () => ({
   prisma: {
+    twoFactorChallenge: { findUnique: vi.fn() },
     user: { findUniqueOrThrow: vi.fn(), update: vi.fn() },
   },
 }))
@@ -25,19 +28,31 @@ vi.mock('@/lib/auth/totp', () => ({
 
 vi.mock('@/lib/auth/two-factor-challenge', () => ({
   verifyChallenge: vi.fn(async () => false),
+  consumeChallenge: vi.fn(async () => undefined),
 }))
 
 vi.mock('@/lib/auth/audit', () => ({
   logAuthEvent: vi.fn(async () => undefined),
 }))
 
+vi.mock('@/lib/auth/sessions', () => ({
+  createSession: vi.fn(async () => ({ token: 'tok' })),
+}))
+
+vi.mock('@/lib/security/anomaly', () => ({
+  recordSecurityAnomalyCheck: vi.fn(async () => undefined),
+}))
+
 import { POST } from '@/app/api/v1/auth/verify-2fa/route'
-import { requireAuth } from '@/lib/auth/middleware'
+import { requirePendingTwoFactorChallenge } from '@/lib/auth/middleware'
 
 function makeRequest(body: unknown): Request {
   return new Request('http://localhost/api/v1/auth/verify-2fa', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      cookie: 'kolaleaf_pending_2fa=challenge-1',
+    },
     body: JSON.stringify(body),
   })
 }
@@ -45,9 +60,7 @@ function makeRequest(body: unknown): Request {
 describe('POST /api/v1/auth/verify-2fa (schema validation)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // Auth runs before parseBody; schema-validation cases need a
-    // passing auth mock so parseBody is reached.
-    vi.mocked(requireAuth).mockResolvedValue({ userId: 'u1' } as never)
+    vi.mocked(requirePendingTwoFactorChallenge).mockReturnValue({ challengeId: 'challenge-1' })
   })
 
   it('returns 400 malformed_json on invalid JSON', async () => {

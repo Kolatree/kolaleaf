@@ -5,7 +5,7 @@ import type { Transfer } from '../../../generated/prisma/client'
 import type { PayoutProvider } from './types'
 import { generatePayoutReference } from './types'
 import { FlutterwaveProvider } from './flutterwave'
-import { PaystackProvider } from './paystack'
+import { BudPayProvider } from './budpay'
 
 const MAX_RETRIES = 3
 
@@ -18,6 +18,57 @@ export class PayoutOrchestrator {
     this.fallback = fallback
   }
 
+  private getProviderByName(name: PayoutProviderEnum | null): PayoutProvider {
+    return name === PayoutProviderEnum.FLUTTERWAVE ? this.fallback : this.primary
+  }
+
+  private async startPayoutAttempt(
+    transfer: Transfer & {
+      recipient: {
+        bankCode: string
+        accountNumber: string
+        fullName: string
+      }
+    },
+    provider: PayoutProvider,
+    expectedStatus: TransferStatus,
+    actor: ActorType,
+    actorId?: string,
+    metadata: Record<string, unknown> = {},
+    transferPatch: Partial<{
+      retryCount: number
+    }> = {},
+  ): Promise<Transfer> {
+    const reference = generatePayoutReference(transfer.id)
+    const result = await provider.initiatePayout({
+      transferId: transfer.id,
+      amount: transfer.receiveAmount,
+      currency: transfer.receiveCurrency,
+      bankCode: transfer.recipient.bankCode,
+      accountNumber: transfer.recipient.accountNumber,
+      recipientName: transfer.recipient.fullName,
+      reference,
+    })
+
+    await prisma.transfer.update({
+      where: { id: transfer.id },
+      data: {
+        payoutProvider: provider.name as PayoutProviderEnum,
+        payoutProviderRef: result.providerRef,
+        ...transferPatch,
+      },
+    })
+
+    return transitionTransfer({
+      transferId: transfer.id,
+      toStatus: TransferStatus.PROCESSING_NGN,
+      actor,
+      actorId,
+      expectedStatus,
+      metadata: { ...metadata, provider: provider.name, providerRef: result.providerRef, reference },
+    })
+  }
+
   async initiatePayout(transferId: string): Promise<Transfer> {
     const transfer = await prisma.transfer.findUniqueOrThrow({
       where: { id: transferId },
@@ -28,36 +79,12 @@ export class PayoutOrchestrator {
       throw new Error(`Cannot initiate payout: transfer ${transferId} is in state ${transfer.status}, expected AUD_RECEIVED`)
     }
 
-    const provider = this.primary
-    const reference = generatePayoutReference(transferId)
-
-    const result = await provider.initiatePayout({
-      transferId,
-      amount: transfer.receiveAmount,
-      currency: transfer.receiveCurrency,
-      bankCode: transfer.recipient.bankCode,
-      accountNumber: transfer.recipient.accountNumber,
-      recipientName: transfer.recipient.fullName,
-      reference,
-    })
-
-    // Set provider info on the transfer
-    await prisma.transfer.update({
-      where: { id: transferId },
-      data: {
-        payoutProvider: provider.name as PayoutProviderEnum,
-        payoutProviderRef: result.providerRef,
-      },
-    })
-
-    // Transition AUD_RECEIVED -> PROCESSING_NGN
-    return transitionTransfer({
-      transferId,
-      toStatus: TransferStatus.PROCESSING_NGN,
-      actor: ActorType.SYSTEM,
-      expectedStatus: TransferStatus.AUD_RECEIVED,
-      metadata: { provider: provider.name, providerRef: result.providerRef, reference },
-    })
+    return this.startPayoutAttempt(
+      transfer,
+      this.primary,
+      TransferStatus.AUD_RECEIVED,
+      ActorType.SYSTEM,
+    )
   }
 
   async handlePayoutSuccess(transferId: string): Promise<Transfer> {
@@ -96,81 +123,77 @@ export class PayoutOrchestrator {
     const currentRetryCount = transfer.retryCount
     const currentProvider = transfer.payoutProvider
 
-    // If retryCount < MAX_RETRIES - 1: retry with same provider
-    // (We check < MAX_RETRIES - 1 because the transition from NGN_RETRY -> PROCESSING_NGN will increment retryCount)
+    // If retryCount < MAX_RETRIES - 1: re-initiate payout with the same
+    // provider. A pure NGN_RETRY -> PROCESSING_NGN status flip is not a retry;
+    // it just lies about work being in flight.
     if (currentRetryCount < MAX_RETRIES - 1) {
-      // NGN_FAILED -> NGN_RETRY
       await transitionTransfer({
         transferId,
         toStatus: TransferStatus.NGN_RETRY,
         actor: ActorType.SYSTEM,
         expectedStatus: TransferStatus.NGN_FAILED,
+        metadata: { retryProvider: currentProvider },
       })
 
-      // NGN_RETRY -> PROCESSING_NGN (state machine increments retryCount)
-      return transitionTransfer({
-        transferId,
-        toStatus: TransferStatus.PROCESSING_NGN,
-        actor: ActorType.SYSTEM,
-        expectedStatus: TransferStatus.NGN_RETRY,
-      })
-    }
-
-    // retryCount >= MAX_RETRIES - 1 (this retry will make it = MAX_RETRIES)
-    if (currentProvider === 'FLUTTERWAVE') {
-      // Failover: switch to Paystack
-      // NGN_FAILED -> NGN_RETRY
-      await transitionTransfer({
-        transferId,
-        toStatus: TransferStatus.NGN_RETRY,
-        actor: ActorType.SYSTEM,
-        expectedStatus: TransferStatus.NGN_FAILED,
-        metadata: { failover: true, fromProvider: 'FLUTTERWAVE', toProvider: 'PAYSTACK' },
-      })
-
-      // Initiate payout with fallback provider
-      const reference = generatePayoutReference(transferId)
-      const result = await this.fallback.initiatePayout({
-        transferId,
-        amount: transfer.receiveAmount,
-        currency: transfer.receiveCurrency,
-        bankCode: transfer.recipient.bankCode,
-        accountNumber: transfer.recipient.accountNumber,
-        recipientName: transfer.recipient.fullName,
-        reference,
-      })
-
-      // Switch provider, set providerRef, and reset retryCount to -1 in one write.
-      // The state machine increments retryCount on NGN_RETRY -> PROCESSING_NGN,
-      // so -1 becomes 0 — a clean start for the new provider.
-      await prisma.transfer.update({
+      const retryTransfer = await prisma.transfer.findUniqueOrThrow({
         where: { id: transferId },
-        data: {
-          payoutProvider: 'PAYSTACK' as PayoutProviderEnum,
-          payoutProviderRef: result.providerRef,
-          retryCount: -1,
+        include: { recipient: true },
+      })
+
+      return this.startPayoutAttempt(
+        retryTransfer,
+        this.getProviderByName(currentProvider),
+        TransferStatus.NGN_RETRY,
+        ActorType.SYSTEM,
+        undefined,
+        {
+          retryProvider: currentProvider,
+          retryAttempt: currentRetryCount + 1,
         },
-      })
-
-      const updated = await transitionTransfer({
-        transferId,
-        toStatus: TransferStatus.PROCESSING_NGN,
-        actor: ActorType.SYSTEM,
-        expectedStatus: TransferStatus.NGN_RETRY,
-        metadata: { provider: 'PAYSTACK', providerRef: result.providerRef },
-      })
-
-      return updated
+      )
     }
 
-    // Paystack also exhausted: NEEDS_MANUAL
+    // retryCount >= MAX_RETRIES - 1 (this retry will make it = MAX_RETRIES).
+    // Primary is BudPay; Flutterwave is the fallback.
+    if (currentProvider === 'BUDPAY') {
+      // Failover: BudPay → Flutterwave
+      // NGN_FAILED -> NGN_RETRY
+      await transitionTransfer({
+        transferId,
+        toStatus: TransferStatus.NGN_RETRY,
+        actor: ActorType.SYSTEM,
+        expectedStatus: TransferStatus.NGN_FAILED,
+        metadata: { failover: true, fromProvider: 'BUDPAY', toProvider: 'FLUTTERWAVE' },
+      })
+
+      const retryTransfer = await prisma.transfer.findUniqueOrThrow({
+        where: { id: transferId },
+        include: { recipient: true },
+      })
+
+      return this.startPayoutAttempt(
+        retryTransfer,
+        this.fallback,
+        TransferStatus.NGN_RETRY,
+        ActorType.SYSTEM,
+        undefined,
+        {
+          failover: true,
+          fromProvider: 'BUDPAY',
+          toProvider: 'FLUTTERWAVE',
+        },
+        { retryCount: -1 },
+      )
+    }
+
+    // Flutterwave (fallback) also exhausted: NEEDS_MANUAL
     // NGN_FAILED -> NEEDS_MANUAL
     return transitionTransfer({
       transferId,
       toStatus: TransferStatus.NEEDS_MANUAL,
       actor: ActorType.SYSTEM,
       expectedStatus: TransferStatus.NGN_FAILED,
-      metadata: { reason, exhaustedProviders: ['FLUTTERWAVE', 'PAYSTACK'] },
+      metadata: { reason, exhaustedProviders: ['BUDPAY', 'FLUTTERWAVE'] },
     })
   }
 
@@ -184,54 +207,49 @@ export class PayoutOrchestrator {
       throw new Error(`Cannot manual retry: transfer ${transferId} is in state ${transfer.status}, expected NEEDS_MANUAL`)
     }
 
-    // Reset retryCount for fresh retry
-    await prisma.transfer.update({
+    return this.startPayoutAttempt(
+      transfer,
+      this.primary,
+      TransferStatus.NEEDS_MANUAL,
+      ActorType.ADMIN,
+      adminId,
+      { manualRetry: true },
+      { retryCount: 0 },
+    )
+  }
+
+  async resumeRetry(transferId: string): Promise<Transfer> {
+    const transfer = await prisma.transfer.findUniqueOrThrow({
       where: { id: transferId },
-      data: { retryCount: 0 },
+      include: { recipient: true },
     })
 
-    // Select provider (use primary by default for manual retry)
-    const provider = this.primary
-    const reference = generatePayoutReference(transferId)
+    if (transfer.status !== TransferStatus.NGN_RETRY) {
+      throw new Error(
+        `Cannot resume retry: transfer ${transferId} is in state ${transfer.status}, expected NGN_RETRY`,
+      )
+    }
 
-    const result = await provider.initiatePayout({
-      transferId,
-      amount: transfer.receiveAmount,
-      currency: transfer.receiveCurrency,
-      bankCode: transfer.recipient.bankCode,
-      accountNumber: transfer.recipient.accountNumber,
-      recipientName: transfer.recipient.fullName,
-      reference,
-    })
-
-    await prisma.transfer.update({
-      where: { id: transferId },
-      data: {
-        payoutProvider: provider.name as PayoutProviderEnum,
-        payoutProviderRef: result.providerRef,
-      },
-    })
-
-    // NEEDS_MANUAL -> PROCESSING_NGN
-    return transitionTransfer({
-      transferId,
-      toStatus: TransferStatus.PROCESSING_NGN,
-      actor: ActorType.ADMIN,
-      actorId: adminId,
-      expectedStatus: TransferStatus.NEEDS_MANUAL,
-      metadata: { manualRetry: true, provider: provider.name, providerRef: result.providerRef },
-    })
+    return this.startPayoutAttempt(
+      transfer,
+      this.getProviderByName(transfer.payoutProvider),
+      TransferStatus.NGN_RETRY,
+      ActorType.SYSTEM,
+      undefined,
+      { reason: 'reconciliation_retry_resume' },
+    )
   }
 }
 
 export function getOrchestrator(): PayoutOrchestrator {
-  const primary = new FlutterwaveProvider({
-    secretKey: process.env.FLUTTERWAVE_SECRET_KEY!,
-    apiUrl: process.env.FLUTTERWAVE_API_URL ?? 'https://api.flutterwave.com/v3',
+  // Primary: BudPay (CBN-licensed NGN disburser). Fallback: Flutterwave.
+  const primary = new BudPayProvider({
+    secretKey: process.env.BUDPAY_SECRET_KEY ?? '',
+    apiUrl: process.env.BUDPAY_API_URL ?? 'https://api.budpay.com',
   })
-  const fallback = new PaystackProvider({
-    secretKey: process.env.PAYSTACK_SECRET_KEY!,
-    apiUrl: process.env.PAYSTACK_API_URL ?? 'https://api.paystack.co',
+  const fallback = new FlutterwaveProvider({
+    secretKey: process.env.FLUTTERWAVE_SECRET_KEY ?? '',
+    apiUrl: process.env.FLUTTERWAVE_API_URL ?? 'https://api.flutterwave.com/v3',
   })
   return new PayoutOrchestrator(primary, fallback)
 }

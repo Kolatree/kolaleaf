@@ -62,7 +62,7 @@ export default function PrivacyPage() {
         <ul className="mt-3 list-disc pl-6 space-y-1">
           <li>Sumsub — identity verification (KYC)</li>
           <li>Monoova — inbound AUD collection via PayID</li>
-          <li>Flutterwave and Paystack — NGN payout to recipient banks</li>
+          <li>BudPay and Flutterwave — NGN payout to recipient banks</li>
           <li>Resend — transactional email notifications</li>
           <li>Twilio — SMS notifications and 2FA codes</li>
         </ul>

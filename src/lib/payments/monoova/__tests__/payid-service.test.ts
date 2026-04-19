@@ -6,10 +6,12 @@ import type { MonoovaClient } from '../client'
 // Mock the db client module
 vi.mock('../../../db/client', () => ({
   prisma: {
-    $transaction: vi.fn(),
     transfer: {
       findUnique: vi.fn(),
       updateMany: vi.fn(),
+      findUniqueOrThrow: vi.fn(),
+    },
+    user: {
       findUniqueOrThrow: vi.fn(),
     },
     transferEvent: {
@@ -21,6 +23,32 @@ vi.mock('../../../db/client', () => ({
 // Mock the state machine
 vi.mock('../../../transfers/state-machine', () => ({
   transitionTransfer: vi.fn(),
+}))
+
+// Mock the payout orchestrator so handlePaymentReceived's post-transition
+// kickoff doesn't touch real providers (or real prisma for the transfer
+// lookup orchestrator.initiatePayout performs).
+const orchestratorMocks = {
+  initiatePayout: vi.fn(),
+  handlePayoutSuccess: vi.fn(),
+  handlePayoutFailure: vi.fn(),
+}
+vi.mock('../../payout/orchestrator', () => ({
+  getOrchestrator: () => orchestratorMocks,
+}))
+
+const floatMonitorMocks = {
+  checkFloatBalance: vi.fn(),
+}
+vi.mock('../../payout/float-monitor', () => ({
+  FloatMonitor: class {
+    checkFloatBalance = floatMonitorMocks.checkFloatBalance
+  },
+}))
+vi.mock('../../payout/flutterwave', () => ({
+  FlutterwaveProvider: class {
+    constructor(_config: unknown) {}
+  },
 }))
 
 import { prisma } from '../../../db/client'
@@ -69,6 +97,24 @@ function makeMockClient(overrides: Partial<MonoovaClient> = {}): MonoovaClient {
 describe('PayID Service', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    vi.mocked(prisma.transfer.findUnique).mockReset()
+    vi.mocked(prisma.transfer.updateMany).mockReset()
+    vi.mocked(prisma.transfer.findUniqueOrThrow).mockReset()
+    vi.mocked(prisma.user.findUniqueOrThrow).mockReset()
+    vi.mocked(prisma.transferEvent.create).mockReset()
+    vi.mocked(transitionTransfer).mockReset()
+    orchestratorMocks.initiatePayout.mockReset()
+    orchestratorMocks.handlePayoutSuccess.mockReset()
+    orchestratorMocks.handlePayoutFailure.mockReset()
+    floatMonitorMocks.checkFloatBalance.mockReset()
+    // Default happy-path behavior for orchestrator — override per test.
+    orchestratorMocks.initiatePayout.mockResolvedValue({ id: 'txn-001', status: 'PROCESSING_NGN' })
+    orchestratorMocks.handlePayoutSuccess.mockResolvedValue({ id: 'txn-001', status: 'COMPLETED' })
+    floatMonitorMocks.checkFloatBalance.mockResolvedValue({
+      provider: 'FLUTTERWAVE',
+      balance: new Decimal('1000000'),
+      sufficient: true,
+    })
   })
 
   describe('generatePayIdForTransfer', () => {
@@ -76,23 +122,9 @@ describe('PayID Service', () => {
       const transfer = makeTransfer()
       const mockClient = makeMockClient()
 
-      // Mock $transaction to execute the callback with a mock tx.
-      // user.findUniqueOrThrow is required because Step 32 moved the
-      // KYC gate from createTransfer into generatePayIdForTransfer.
-      const mockTx = {
-        transfer: {
-          findUnique: vi.fn().mockResolvedValue(transfer),
-          update: vi.fn().mockResolvedValue({
-            ...transfer,
-            payidReference: expect.any(String),
-            payidProviderRef: 'kolaleaf@payid.monoova.com',
-          }),
-        },
-        user: {
-          findUniqueOrThrow: vi.fn().mockResolvedValue({ kycStatus: 'VERIFIED' }),
-        },
-      }
-      vi.mocked(prisma.$transaction).mockImplementation(async (cb: Function) => cb(mockTx))
+      vi.mocked(prisma.transfer.findUnique).mockResolvedValue(transfer as any)
+      vi.mocked(prisma.user.findUniqueOrThrow).mockResolvedValue({ kycStatus: 'VERIFIED' } as any)
+      vi.mocked(prisma.transfer.updateMany).mockResolvedValue({ count: 1 } as any)
 
       // Mock transitionTransfer to return the updated transfer
       vi.mocked(transitionTransfer).mockResolvedValue({
@@ -114,8 +146,8 @@ describe('PayID Service', () => {
       )
 
       // Verify transfer was updated with PayID refs
-      expect(mockTx.transfer.update).toHaveBeenCalledWith({
-        where: { id: 'txn-001' },
+      expect(prisma.transfer.updateMany).toHaveBeenCalledWith({
+        where: { id: 'txn-001', status: 'CREATED' },
         data: expect.objectContaining({
           payidReference: expect.stringMatching(/^KL-txn-001-/),
           payidProviderRef: 'kolaleaf@payid.monoova.com',
@@ -128,6 +160,7 @@ describe('PayID Service', () => {
           transferId: 'txn-001',
           toStatus: 'AWAITING_AUD',
           actor: 'SYSTEM',
+          expectedStatus: 'CREATED',
         })
       )
 
@@ -138,11 +171,8 @@ describe('PayID Service', () => {
       const transfer = makeTransfer({ status: 'AWAITING_AUD' })
       const mockClient = makeMockClient()
 
-      const mockTx = {
-        transfer: { findUnique: vi.fn().mockResolvedValue(transfer) },
-        user: { findUniqueOrThrow: vi.fn().mockResolvedValue({ kycStatus: 'VERIFIED' }) },
-      }
-      vi.mocked(prisma.$transaction).mockImplementation(async (cb: Function) => cb(mockTx))
+      vi.mocked(prisma.transfer.findUnique).mockResolvedValue(transfer as any)
+      vi.mocked(prisma.user.findUniqueOrThrow).mockResolvedValue({ kycStatus: 'VERIFIED' } as any)
 
       await expect(
         generatePayIdForTransfer('txn-001', mockClient)
@@ -152,11 +182,7 @@ describe('PayID Service', () => {
     it('rejects if transfer does not exist', async () => {
       const mockClient = makeMockClient()
 
-      const mockTx = {
-        transfer: { findUnique: vi.fn().mockResolvedValue(null) },
-        user: { findUniqueOrThrow: vi.fn() },
-      }
-      vi.mocked(prisma.$transaction).mockImplementation(async (cb: Function) => cb(mockTx))
+      vi.mocked(prisma.transfer.findUnique).mockResolvedValue(null)
 
       await expect(
         generatePayIdForTransfer('txn-missing', mockClient)
@@ -170,11 +196,8 @@ describe('PayID Service', () => {
       const transfer = makeTransfer()
       const mockClient = makeMockClient()
 
-      const mockTx = {
-        transfer: { findUnique: vi.fn().mockResolvedValue(transfer) },
-        user: { findUniqueOrThrow: vi.fn().mockResolvedValue({ kycStatus: 'PENDING' }) },
-      }
-      vi.mocked(prisma.$transaction).mockImplementation(async (cb: Function) => cb(mockTx))
+      vi.mocked(prisma.transfer.findUnique).mockResolvedValue(transfer as any)
+      vi.mocked(prisma.user.findUniqueOrThrow).mockResolvedValue({ kycStatus: 'PENDING' } as any)
 
       await expect(
         generatePayIdForTransfer('txn-001', mockClient)
@@ -184,17 +207,43 @@ describe('PayID Service', () => {
       expect(mockClient.createPayId).not.toHaveBeenCalled()
     })
 
+    it('bypasses the KYC gate when KOLA_DISABLE_KYC_GATE=true (dev/test only)', async () => {
+      // Escape hatch for transaction-flow testing before Sumsub keys
+      // land. With the flag ON, PENDING users should still get a
+      // PayID so the CREATED → AWAITING_AUD transition can be
+      // exercised. Flag defaults off in production.
+      const prev = process.env.KOLA_DISABLE_KYC_GATE
+      process.env.KOLA_DISABLE_KYC_GATE = 'true'
+      try {
+        const transfer = makeTransfer()
+        const mockClient = makeMockClient()
+
+        vi.mocked(prisma.transfer.findUnique).mockResolvedValue(transfer as any)
+        vi.mocked(prisma.user.findUniqueOrThrow).mockResolvedValue({ kycStatus: 'PENDING' } as any)
+        vi.mocked(prisma.transfer.updateMany).mockResolvedValue({ count: 1 } as any)
+        vi.mocked(transitionTransfer).mockResolvedValue({
+          ...transfer,
+          status: 'AWAITING_AUD',
+        } as any)
+
+        const result = await generatePayIdForTransfer('txn-001', mockClient)
+
+        expect(mockClient.createPayId).toHaveBeenCalled()
+        expect(result.status).toBe('AWAITING_AUD')
+      } finally {
+        if (prev === undefined) delete process.env.KOLA_DISABLE_KYC_GATE
+        else process.env.KOLA_DISABLE_KYC_GATE = prev
+      }
+    })
+
     it('propagates Monoova client errors', async () => {
       const transfer = makeTransfer()
       const mockClient = makeMockClient({
         createPayId: vi.fn().mockRejectedValue(new Error('Monoova API error: 500')),
       })
 
-      const mockTx = {
-        transfer: { findUnique: vi.fn().mockResolvedValue(transfer) },
-        user: { findUniqueOrThrow: vi.fn().mockResolvedValue({ kycStatus: 'VERIFIED' }) },
-      }
-      vi.mocked(prisma.$transaction).mockImplementation(async (cb: Function) => cb(mockTx))
+      vi.mocked(prisma.transfer.findUnique).mockResolvedValue(transfer as any)
+      vi.mocked(prisma.user.findUniqueOrThrow).mockResolvedValue({ kycStatus: 'VERIFIED' } as any)
 
       await expect(
         generatePayIdForTransfer('txn-001', mockClient)
@@ -276,6 +325,122 @@ describe('PayID Service', () => {
       await expect(
         handlePaymentReceived('txn-001', new Decimal('249.00'))
       ).rejects.toThrow('Amount mismatch')
+    })
+
+    it('kicks off payout orchestration after the AUD_RECEIVED transition', async () => {
+      const transfer = makeTransfer({
+        status: 'AWAITING_AUD',
+        sendAmount: new Decimal('250.00'),
+      })
+
+      vi.mocked(prisma.transfer.findUnique).mockResolvedValue(transfer as any)
+      vi.mocked(transitionTransfer).mockResolvedValue({
+        ...transfer,
+        status: 'AUD_RECEIVED',
+      } as any)
+
+      await handlePaymentReceived('txn-001', new Decimal('250.00'))
+
+      // Mock history persists across tests in this file; the critical
+      // assertion is that the orchestrator kickoff runs with the right
+      // transferId — not the total call count.
+      expect(transitionTransfer).toHaveBeenCalledWith(
+        expect.objectContaining({ transferId: 'txn-001', toStatus: 'AUD_RECEIVED' }),
+      )
+      expect(orchestratorMocks.initiatePayout).toHaveBeenCalledWith('txn-001')
+    })
+
+    it('parks the transfer in FLOAT_INSUFFICIENT when preflight float is low', async () => {
+      const transfer = makeTransfer({
+        status: 'AWAITING_AUD',
+        sendAmount: new Decimal('250.00'),
+      })
+
+      vi.mocked(prisma.transfer.findUnique).mockResolvedValue(transfer as any)
+      vi.mocked(transitionTransfer)
+        .mockResolvedValueOnce({ ...transfer, status: 'AUD_RECEIVED' } as any)
+        .mockResolvedValueOnce({ ...transfer, status: 'FLOAT_INSUFFICIENT' } as any)
+      floatMonitorMocks.checkFloatBalance.mockResolvedValueOnce({
+        provider: 'FLUTTERWAVE',
+        balance: new Decimal('1000'),
+        sufficient: false,
+      })
+
+      const result = await handlePaymentReceived('txn-001', new Decimal('250.00'))
+
+      expect(result.status).toBe('FLOAT_INSUFFICIENT')
+      expect(transitionTransfer).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          transferId: 'txn-001',
+          toStatus: 'FLOAT_INSUFFICIENT',
+          expectedStatus: 'AUD_RECEIVED',
+        }),
+      )
+      expect(orchestratorMocks.initiatePayout).not.toHaveBeenCalled()
+    })
+
+    it('cascades to COMPLETED in stub mode via handlePayoutSuccess', async () => {
+      const prev = process.env.KOLA_USE_STUB_PROVIDERS
+      process.env.KOLA_USE_STUB_PROVIDERS = 'true'
+      try {
+        const transfer = makeTransfer({
+          status: 'AWAITING_AUD',
+          sendAmount: new Decimal('250.00'),
+        })
+
+        vi.mocked(prisma.transfer.findUnique).mockResolvedValue(transfer as any)
+        vi.mocked(transitionTransfer).mockResolvedValue({
+          ...transfer,
+          status: 'AUD_RECEIVED',
+        } as any)
+
+        const result = await handlePaymentReceived('txn-001', new Decimal('250.00'))
+
+        expect(orchestratorMocks.initiatePayout).toHaveBeenCalledWith('txn-001')
+        expect(orchestratorMocks.handlePayoutSuccess).toHaveBeenCalledWith('txn-001')
+        expect(result.status).toBe('COMPLETED')
+      } finally {
+        if (prev === undefined) delete process.env.KOLA_USE_STUB_PROVIDERS
+        else process.env.KOLA_USE_STUB_PROVIDERS = prev
+      }
+    })
+
+    it('does NOT cascade when stub flag is off (real webhook-driven path)', async () => {
+      delete process.env.KOLA_USE_STUB_PROVIDERS
+      const transfer = makeTransfer({
+        status: 'AWAITING_AUD',
+        sendAmount: new Decimal('250.00'),
+      })
+
+      vi.mocked(prisma.transfer.findUnique).mockResolvedValue(transfer as any)
+      vi.mocked(transitionTransfer).mockResolvedValue({
+        ...transfer,
+        status: 'AUD_RECEIVED',
+      } as any)
+
+      await handlePaymentReceived('txn-001', new Decimal('250.00'))
+
+      expect(orchestratorMocks.initiatePayout).toHaveBeenCalledWith('txn-001')
+      expect(orchestratorMocks.handlePayoutSuccess).not.toHaveBeenCalled()
+    })
+
+    it('swallows orchestrator.initiatePayout errors — webhook worker must ack', async () => {
+      const transfer = makeTransfer({
+        status: 'AWAITING_AUD',
+        sendAmount: new Decimal('250.00'),
+      })
+
+      vi.mocked(prisma.transfer.findUnique).mockResolvedValue(transfer as any)
+      const audReceived = { ...transfer, status: 'AUD_RECEIVED' }
+      vi.mocked(transitionTransfer).mockResolvedValue(audReceived as any)
+      orchestratorMocks.initiatePayout.mockRejectedValueOnce(
+        new Error('BudPay down'),
+      )
+
+      // Must NOT throw — the outer webhook worker has to ack.
+      const result = await handlePaymentReceived('txn-001', new Decimal('250.00'))
+      expect(result.status).toBe('AUD_RECEIVED')
     })
 
     it('rejects payment outside tolerance (overpay)', async () => {

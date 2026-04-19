@@ -12,7 +12,7 @@ import {
 } from '../e2e/helpers'
 import { handleMonoovaWebhook } from '../../src/lib/payments/monoova/webhook'
 import { handleSumsubWebhook } from '../../src/lib/kyc/sumsub/webhook'
-import { handleFlutterwaveWebhook, handlePaystackWebhook } from '../../src/lib/payments/payout/webhooks'
+import { handleBudPayWebhook, handleFlutterwaveWebhook } from '../../src/lib/payments/payout/webhooks'
 import { verifyMonoovaSignature } from '../../src/lib/payments/monoova/verify-signature'
 import { verifySumsubSignature } from '../../src/lib/kyc/sumsub/verify-signature'
 import { transitionTransfer } from '../../src/lib/transfers/state-machine'
@@ -37,7 +37,6 @@ afterEach(async () => {
 
 afterAll(async () => {
   await cleanupTestData()
-  await prisma.$disconnect()
 })
 
 describe('Webhook Security', () => {
@@ -124,18 +123,18 @@ describe('Webhook Security', () => {
     })
   })
 
-  describe('Paystack signature verification', () => {
-    it('rejects invalid Paystack signature (HMAC-SHA512 mismatch)', async () => {
+  describe('BudPay signature verification', () => {
+    it('rejects invalid BudPay signature (HMAC-SHA512 mismatch)', async () => {
       const rawBody = JSON.stringify({
-        event: 'transfer.success',
-        data: { transfer_code: 'TRF_xyz', reference: 'ref-2', status: 'success' },
+        notify: 'transfer',
+        data: { reference: 'KL-PO-ref-2', status: 'success' },
       })
 
       const wrongSignature = hmacSha512(rawBody, 'wrong-key')
 
       await expect(
-        handlePaystackWebhook(rawBody, wrongSignature, 'correct-key')
-      ).rejects.toThrow('Invalid Paystack webhook signature')
+        handleBudPayWebhook(rawBody, wrongSignature, 'correct-key')
+      ).rejects.toThrow('Invalid BudPay webhook signature')
     })
   })
 
@@ -203,29 +202,29 @@ describe('Webhook Security', () => {
       expect(events).toHaveLength(1)
     })
 
-    it('duplicate Paystack webhooks are skipped', async () => {
+    it('duplicate BudPay webhooks are skipped', async () => {
       const { user } = await registerTestUser({ kycStatus: 'VERIFIED' })
       const recipient = await createTestRecipient(user.id)
       const transfer = await createTestTransfer(user.id, recipient.id, {
         status: 'PROCESSING_NGN',
-        payoutProvider: 'PAYSTACK',
-        payoutProviderRef: 'TRF_dup_test',
+        payoutProvider: 'BUDPAY',
+        payoutProviderRef: 'KL-PO-dup-test',
       })
 
-      const secretKey = 'paystack-test-secret'
+      const secretKey = 'budpay-test-secret'
       const rawBody = JSON.stringify({
-        event: 'transfer.success',
-        data: { transfer_code: 'TRF_dup_test', reference: 'ref-dup-ps', status: 'success' },
+        notify: 'transfer',
+        data: { reference: 'KL-PO-dup-test', status: 'success' },
       })
       const signature = hmacSha512(rawBody, secretKey)
 
       // First call
-      await handlePaystackWebhook(rawBody, signature, secretKey)
+      await handleBudPayWebhook(rawBody, signature, secretKey)
       // Second call: idempotent
-      await handlePaystackWebhook(rawBody, signature, secretKey)
+      await handleBudPayWebhook(rawBody, signature, secretKey)
 
       const events = await prisma.webhookEvent.findMany({
-        where: { provider: 'PAYSTACK', eventId: 'TRF_dup_test' },
+        where: { provider: 'BUDPAY', eventId: 'KL-PO-dup-test' },
       })
       expect(events).toHaveLength(1)
     })

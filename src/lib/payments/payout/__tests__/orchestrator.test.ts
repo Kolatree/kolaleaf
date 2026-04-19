@@ -1,14 +1,13 @@
-import { describe, it, expect, beforeEach, afterAll } from 'vitest'
+import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest'
 import Decimal from 'decimal.js'
 import { prisma } from '@/lib/db/client'
 import { PayoutOrchestrator } from '../orchestrator'
 import type { PayoutProvider, PayoutResult, PayoutStatusResult } from '../types'
-import { PayoutError } from '../types'
 
 // ─── In-memory mock providers ─────────────────────────────────
 
 function createMockProvider(
-  name: 'FLUTTERWAVE' | 'PAYSTACK',
+  name: 'BUDPAY' | 'FLUTTERWAVE',
   behavior: {
     initiate?: () => Promise<PayoutResult>
     status?: () => Promise<PayoutStatusResult>
@@ -98,28 +97,30 @@ afterAll(async () => {
 })
 
 // ─── Tests ───────────────────────────────────────────────────
+//
+// BudPay is primary; Flutterwave is fallback. `bp` = primary, `fw` = fallback.
 
 describe('PayoutOrchestrator', () => {
   describe('initiatePayout', () => {
-    it('initiates payout from AUD_RECEIVED and transitions to PROCESSING_NGN', async () => {
+    it('initiates payout from AUD_RECEIVED via the primary provider (BudPay)', async () => {
       const transfer = await createTestTransfer()
+      const bp = createMockProvider('BUDPAY')
       const fw = createMockProvider('FLUTTERWAVE')
-      const ps = createMockProvider('PAYSTACK')
-      const orc = new PayoutOrchestrator(fw, ps)
+      const orc = new PayoutOrchestrator(bp, fw)
 
       const updated = await orc.initiatePayout(transfer.id)
 
       expect(updated.status).toBe('PROCESSING_NGN')
-      expect(updated.payoutProvider).toBe('FLUTTERWAVE')
-      expect(updated.payoutProviderRef).toBe('FLUTTERWAVE-ref-001')
+      expect(updated.payoutProvider).toBe('BUDPAY')
+      expect(updated.payoutProviderRef).toBe('BUDPAY-ref-001')
     })
 
     it('initiates payout from FLOAT_INSUFFICIENT (restored) transfer', async () => {
       // A transfer that was paused due to low float, now restored back to AUD_RECEIVED
       const transfer = await createTestTransfer({ status: 'AUD_RECEIVED' })
+      const bp = createMockProvider('BUDPAY')
       const fw = createMockProvider('FLUTTERWAVE')
-      const ps = createMockProvider('PAYSTACK')
-      const orc = new PayoutOrchestrator(fw, ps)
+      const orc = new PayoutOrchestrator(bp, fw)
 
       const updated = await orc.initiatePayout(transfer.id)
       expect(updated.status).toBe('PROCESSING_NGN')
@@ -127,33 +128,33 @@ describe('PayoutOrchestrator', () => {
 
     it('rejects payout for non-AUD_RECEIVED transfer', async () => {
       const transfer = await createTestTransfer({ status: 'CREATED' })
+      const bp = createMockProvider('BUDPAY')
       const fw = createMockProvider('FLUTTERWAVE')
-      const ps = createMockProvider('PAYSTACK')
-      const orc = new PayoutOrchestrator(fw, ps)
+      const orc = new PayoutOrchestrator(bp, fw)
 
       await expect(orc.initiatePayout(transfer.id)).rejects.toThrow()
     })
 
     it('sets payoutProvider reference on the transfer', async () => {
       const transfer = await createTestTransfer()
-      const fw = createMockProvider('FLUTTERWAVE', {
-        initiate: async () => ({ providerRef: 'FW-12345', status: 'NEW' }),
+      const bp = createMockProvider('BUDPAY', {
+        initiate: async () => ({ providerRef: 'BP-12345', status: 'pending' }),
       })
-      const ps = createMockProvider('PAYSTACK')
-      const orc = new PayoutOrchestrator(fw, ps)
+      const fw = createMockProvider('FLUTTERWAVE')
+      const orc = new PayoutOrchestrator(bp, fw)
 
       const updated = await orc.initiatePayout(transfer.id)
 
-      expect(updated.payoutProviderRef).toBe('FW-12345')
+      expect(updated.payoutProviderRef).toBe('BP-12345')
     })
   })
 
   describe('handlePayoutSuccess', () => {
     it('transitions from PROCESSING_NGN through NGN_SENT to COMPLETED', async () => {
-      const transfer = await createTestTransfer({ status: 'PROCESSING_NGN', payoutProvider: 'FLUTTERWAVE' })
+      const transfer = await createTestTransfer({ status: 'PROCESSING_NGN', payoutProvider: 'BUDPAY' })
+      const bp = createMockProvider('BUDPAY')
       const fw = createMockProvider('FLUTTERWAVE')
-      const ps = createMockProvider('PAYSTACK')
-      const orc = new PayoutOrchestrator(fw, ps)
+      const orc = new PayoutOrchestrator(bp, fw)
 
       const updated = await orc.handlePayoutSuccess(transfer.id)
 
@@ -172,22 +173,30 @@ describe('PayoutOrchestrator', () => {
   })
 
   describe('handlePayoutFailure', () => {
-    it('transitions to NGN_FAILED then retries (retryCount < 3)', async () => {
+    it('transitions to NGN_FAILED then re-initiates payout with the same provider when retryCount < 3', async () => {
+      const retryAttempt = vi.fn(async () => ({
+        providerRef: 'BUDPAY-ref-002',
+        status: 'pending',
+      }))
       const transfer = await createTestTransfer({
         status: 'PROCESSING_NGN',
-        payoutProvider: 'FLUTTERWAVE',
+        payoutProvider: 'BUDPAY',
         retryCount: 0,
       })
+      const bp = createMockProvider('BUDPAY', {
+        initiate: retryAttempt,
+      })
       const fw = createMockProvider('FLUTTERWAVE')
-      const ps = createMockProvider('PAYSTACK')
-      const orc = new PayoutOrchestrator(fw, ps)
+      const orc = new PayoutOrchestrator(bp, fw)
 
       const updated = await orc.handlePayoutFailure(transfer.id, 'Bank timeout')
 
       expect(updated.status).toBe('PROCESSING_NGN')
-      expect(updated.payoutProvider).toBe('FLUTTERWAVE')
+      expect(updated.payoutProvider).toBe('BUDPAY')
+      expect(updated.payoutProviderRef).toBe('BUDPAY-ref-002')
       // retryCount should have been incremented in the NGN_RETRY -> PROCESSING_NGN transition
       expect(updated.retryCount).toBe(1)
+      expect(retryAttempt).toHaveBeenCalledTimes(1)
 
       // Audit: NGN_FAILED, NGN_RETRY, PROCESSING_NGN
       const events = await prisma.transferEvent.findMany({
@@ -197,35 +206,35 @@ describe('PayoutOrchestrator', () => {
       expect(events.length).toBeGreaterThanOrEqual(3)
     })
 
-    it('fails over from Flutterwave to Paystack after 3 retries', async () => {
+    it('fails over from BudPay to Flutterwave after 3 retries', async () => {
       const transfer = await createTestTransfer({
         status: 'PROCESSING_NGN',
-        payoutProvider: 'FLUTTERWAVE',
+        payoutProvider: 'BUDPAY',
         retryCount: 2, // This is the third attempt (0, 1, 2)
       })
-      const fw = createMockProvider('FLUTTERWAVE')
-      const ps = createMockProvider('PAYSTACK', {
-        initiate: async () => ({ providerRef: 'PS-99999', status: 'pending' }),
+      const bp = createMockProvider('BUDPAY')
+      const fw = createMockProvider('FLUTTERWAVE', {
+        initiate: async () => ({ providerRef: 'FW-99999', status: 'pending' }),
       })
-      const orc = new PayoutOrchestrator(fw, ps)
+      const orc = new PayoutOrchestrator(bp, fw)
 
       const updated = await orc.handlePayoutFailure(transfer.id, 'Repeated failure')
 
-      expect(updated.payoutProvider).toBe('PAYSTACK')
-      expect(updated.payoutProviderRef).toBe('PS-99999')
+      expect(updated.payoutProvider).toBe('FLUTTERWAVE')
+      expect(updated.payoutProviderRef).toBe('FW-99999')
       expect(updated.retryCount).toBe(0) // Reset for new provider
       expect(updated.status).toBe('PROCESSING_NGN')
     })
 
-    it('transitions to NEEDS_MANUAL when Paystack also exhausts retries', async () => {
+    it('transitions to NEEDS_MANUAL when Flutterwave (fallback) also exhausts retries', async () => {
       const transfer = await createTestTransfer({
         status: 'PROCESSING_NGN',
-        payoutProvider: 'PAYSTACK',
-        retryCount: 2, // Third attempt on Paystack
+        payoutProvider: 'FLUTTERWAVE',
+        retryCount: 2, // Third attempt on Flutterwave
       })
+      const bp = createMockProvider('BUDPAY')
       const fw = createMockProvider('FLUTTERWAVE')
-      const ps = createMockProvider('PAYSTACK')
-      const orc = new PayoutOrchestrator(fw, ps)
+      const orc = new PayoutOrchestrator(bp, fw)
 
       const updated = await orc.handlePayoutFailure(transfer.id, 'Final failure')
 
@@ -235,12 +244,12 @@ describe('PayoutOrchestrator', () => {
     it('records failure reason in metadata', async () => {
       const transfer = await createTestTransfer({
         status: 'PROCESSING_NGN',
-        payoutProvider: 'FLUTTERWAVE',
+        payoutProvider: 'BUDPAY',
         retryCount: 0,
       })
+      const bp = createMockProvider('BUDPAY')
       const fw = createMockProvider('FLUTTERWAVE')
-      const ps = createMockProvider('PAYSTACK')
-      const orc = new PayoutOrchestrator(fw, ps)
+      const orc = new PayoutOrchestrator(bp, fw)
 
       await orc.handlePayoutFailure(transfer.id, 'Connection refused')
 
@@ -256,20 +265,20 @@ describe('PayoutOrchestrator', () => {
     it('allows admin to retry from NEEDS_MANUAL', async () => {
       const transfer = await createTestTransfer({
         status: 'NEEDS_MANUAL',
-        payoutProvider: 'FLUTTERWAVE',
+        payoutProvider: 'BUDPAY',
         retryCount: 3,
       })
-      const fw = createMockProvider('FLUTTERWAVE', {
-        initiate: async () => ({ providerRef: 'FW-MANUAL-1', status: 'NEW' }),
+      const bp = createMockProvider('BUDPAY', {
+        initiate: async () => ({ providerRef: 'BP-MANUAL-1', status: 'pending' }),
       })
-      const ps = createMockProvider('PAYSTACK')
-      const orc = new PayoutOrchestrator(fw, ps)
+      const fw = createMockProvider('FLUTTERWAVE')
+      const orc = new PayoutOrchestrator(bp, fw)
 
       const updated = await orc.handleManualRetry(transfer.id, 'admin_001')
 
       expect(updated.status).toBe('PROCESSING_NGN')
       expect(updated.retryCount).toBe(0) // Reset on manual retry
-      expect(updated.payoutProviderRef).toBe('FW-MANUAL-1')
+      expect(updated.payoutProviderRef).toBe('BP-MANUAL-1')
 
       // Verify admin actor in event
       const events = await prisma.transferEvent.findMany({
@@ -283,11 +292,38 @@ describe('PayoutOrchestrator', () => {
 
     it('rejects manual retry from non-NEEDS_MANUAL state', async () => {
       const transfer = await createTestTransfer({ status: 'PROCESSING_NGN' })
+      const bp = createMockProvider('BUDPAY')
       const fw = createMockProvider('FLUTTERWAVE')
-      const ps = createMockProvider('PAYSTACK')
-      const orc = new PayoutOrchestrator(fw, ps)
+      const orc = new PayoutOrchestrator(bp, fw)
 
       await expect(orc.handleManualRetry(transfer.id, 'admin_001')).rejects.toThrow()
+    })
+  })
+
+  describe('resumeRetry', () => {
+    it('re-initiates payout from NGN_RETRY with the current provider', async () => {
+      const retryAttempt = vi.fn(async () => ({
+        providerRef: 'FW-RETRY-123',
+        status: 'pending',
+      }))
+      const transfer = await createTestTransfer({
+        status: 'NGN_RETRY',
+        payoutProvider: 'FLUTTERWAVE',
+        retryCount: 1,
+      })
+      const bp = createMockProvider('BUDPAY')
+      const fw = createMockProvider('FLUTTERWAVE', {
+        initiate: retryAttempt,
+      })
+      const orc = new PayoutOrchestrator(bp, fw)
+
+      const updated = await orc.resumeRetry(transfer.id)
+
+      expect(updated.status).toBe('PROCESSING_NGN')
+      expect(updated.payoutProvider).toBe('FLUTTERWAVE')
+      expect(updated.payoutProviderRef).toBe('FW-RETRY-123')
+      expect(updated.retryCount).toBe(2)
+      expect(retryAttempt).toHaveBeenCalledTimes(1)
     })
   })
 })

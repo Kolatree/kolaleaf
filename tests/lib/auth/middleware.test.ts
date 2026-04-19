@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
   getSessionTokenFromCookie,
+  getPendingTwoFactorChallengeIdFromCookie,
   setSessionCookie,
   clearSessionCookie,
+  setPendingTwoFactorCookie,
+  clearPendingTwoFactorCookie,
   AuthError,
 } from '@/lib/auth/middleware'
 
@@ -30,6 +33,16 @@ describe('getSessionTokenFromCookie', () => {
   })
 })
 
+describe('getPendingTwoFactorChallengeIdFromCookie', () => {
+  it('returns null when pending 2FA cookie is absent', () => {
+    expect(getPendingTwoFactorChallengeIdFromCookie('other_cookie=abc')).toBeNull()
+  })
+
+  it('extracts pending 2FA challenge id from cookie header', () => {
+    expect(getPendingTwoFactorChallengeIdFromCookie('kolaleaf_pending_2fa=challenge-123')).toBe('challenge-123')
+  })
+})
+
 describe('setSessionCookie', () => {
   it('creates a cookie string with correct attributes', () => {
     const cookie = setSessionCookie('test-token')
@@ -45,6 +58,23 @@ describe('clearSessionCookie', () => {
   it('creates a cookie string that expires the cookie', () => {
     const cookie = clearSessionCookie()
     expect(cookie).toContain('kolaleaf_session=')
+    expect(cookie).toContain('Max-Age=0')
+  })
+})
+
+describe('pending 2FA cookies', () => {
+  it('creates a pending 2FA cookie string with correct attributes', () => {
+    const cookie = setPendingTwoFactorCookie('challenge-123')
+    expect(cookie).toContain('kolaleaf_pending_2fa=challenge-123')
+    expect(cookie).toContain('HttpOnly')
+    expect(cookie).toContain('SameSite=Lax')
+    expect(cookie).toContain('Path=/')
+    expect(cookie).toContain('Max-Age=300')
+  })
+
+  it('creates a cookie string that expires the pending 2FA cookie', () => {
+    const cookie = clearPendingTwoFactorCookie()
+    expect(cookie).toContain('kolaleaf_pending_2fa=')
     expect(cookie).toContain('Max-Age=0')
   })
 })

@@ -1,7 +1,7 @@
 /**
  * Shared retry + timeout helpers for outbound provider calls.
  *
- * Every third-party integration (Sumsub, Monoova, Flutterwave, Paystack,
+ * Every third-party integration (Sumsub, Monoova, BudPay, Flutterwave,
  * FX rate API) routes its network calls through `withRetry` so a hung
  * provider cannot block the platform indefinitely and a transient blip
  * doesn't kill a transfer that would have succeeded on retry.

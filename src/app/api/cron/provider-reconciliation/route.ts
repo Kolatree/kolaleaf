@@ -5,7 +5,7 @@ import { log } from '@/lib/obs/logger'
 import { computeDiscrepancies } from '@/lib/reconciliation/diff'
 import { MonoovaStatementClient } from '@/lib/reconciliation/monoova-statement-client'
 import { createFlutterwaveStatementClient } from '@/lib/reconciliation/flutterwave-statement-client'
-import { createPaystackStatementClient } from '@/lib/reconciliation/paystack-statement-client'
+import { createBudPayStatementClient } from '@/lib/reconciliation/budpay-statement-client'
 import type {
   Discrepancy,
   ProviderName,
@@ -17,7 +17,7 @@ import type {
 //
 // Step 29 — closes Wave 1 audit P0 gap #3. Pulls today's statements
 // from every configured external provider (Monoova AUD credits +
-// Flutterwave / Paystack NGN debits), diffs them against the
+// BudPay / Flutterwave NGN debits), diffs them against the
 // internal Transfer ledger for the same window, and creates a
 // SUSPICIOUS ComplianceReport row per discrepancy.
 //
@@ -143,16 +143,16 @@ async function handle(request: Request): Promise<NextResponse> {
 
   // Parallel fetch — independent networks, independent providers.
   // One's failure cannot block the others.
-  const [monoova, flutterwave, paystack] = await Promise.all([
+  const [monoova, flutterwave, budpay] = await Promise.all([
     safeFetch(MonoovaStatementClient.fromEnv(), windowStart, windowEnd),
     safeFetch(createFlutterwaveStatementClient(), windowStart, windowEnd),
-    safeFetch(createPaystackStatementClient(), windowStart, windowEnd),
+    safeFetch(createBudPayStatementClient(), windowStart, windowEnd),
   ])
 
   const failedProviders = new Set<ProviderName>()
   if (monoova.error) failedProviders.add('monoova')
   if (flutterwave.error) failedProviders.add('flutterwave')
-  if (paystack.error) failedProviders.add('paystack')
+  if (budpay.error) failedProviders.add('budpay')
 
   // Bound the Transfer scan by lookback window. Without this, every
   // historical transfer with a providerRef is scanned nightly and
@@ -170,7 +170,7 @@ async function handle(request: Request): Promise<NextResponse> {
   const allEntries = [
     ...monoova.entries,
     ...flutterwave.entries,
-    ...paystack.entries,
+    ...budpay.entries,
   ]
 
   const discrepancies = computeDiscrepancies({
@@ -306,7 +306,7 @@ async function handle(request: Request): Promise<NextResponse> {
     providers: [
       { provider: 'monoova', entries: monoova.entries.length, ...(monoova.error ? { error: 'fetch_failed' } : {}) },
       { provider: 'flutterwave', entries: flutterwave.entries.length, ...(flutterwave.error ? { error: 'fetch_failed' } : {}) },
-      { provider: 'paystack', entries: paystack.entries.length, ...(paystack.error ? { error: 'fetch_failed' } : {}) },
+      { provider: 'budpay', entries: budpay.entries.length, ...(budpay.error ? { error: 'fetch_failed' } : {}) },
     ],
     discrepancies: writes,
     discrepancyBreakdown: breakdown,

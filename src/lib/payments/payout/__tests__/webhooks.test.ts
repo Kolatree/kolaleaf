@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db/client'
 import Decimal from 'decimal.js'
 import {
   handleFlutterwaveWebhook,
-  handlePaystackWebhook,
+  handleBudPayWebhook,
 } from '../webhooks'
 
 // Mock the orchestrator module so webhooks route to it without real provider calls
@@ -25,7 +25,7 @@ vi.mock('../orchestrator', () => {
 // ─── Test data helpers ────────────────────────────────
 
 const FW_WEBHOOK_SECRET = 'fw-webhook-secret-hash'
-const PS_SECRET_KEY = 'sk_test_paystack_secret'
+const BP_WEBHOOK_SECRET = 'bp-webhook-secret'
 
 function makeFlutterwavePayload(overrides: Record<string, unknown> = {}) {
   return {
@@ -39,19 +39,21 @@ function makeFlutterwavePayload(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function makePaystackPayload(overrides: Record<string, unknown> = {}) {
+function makeBudPayPayload(overrides: Record<string, unknown> = {}) {
   return {
-    event: 'transfer.success',
+    notify: 'transfer',
     data: {
-      transfer_code: 'TRF_ps_001',
-      reference: 'KL-PO-txn_ps_001-1700000000000',
+      reference: 'KL-PO-txn_bp_001-1700000000000',
       status: 'success',
+      amount: '500000.00',
+      currency: 'NGN',
+      fee: '50.00',
       ...overrides,
     },
   }
 }
 
-function paystackSignature(rawBody: string, secret: string): string {
+function budpaySignature(rawBody: string, secret: string): string {
   return crypto
     .createHmac('sha512', secret)
     .update(rawBody)
@@ -204,20 +206,20 @@ describe('Flutterwave webhook handler', () => {
   })
 })
 
-describe('Paystack webhook handler', () => {
+describe('BudPay webhook handler', () => {
   it('processes a successful transfer webhook', async () => {
     await createTestTransfer({
-      payoutProvider: 'PAYSTACK',
-      payoutProviderRef: 'TRF_ps_001',
+      payoutProvider: 'BUDPAY',
+      payoutProviderRef: 'KL-PO-txn_bp_001-1700000000000',
     })
 
-    const rawBody = JSON.stringify(makePaystackPayload())
-    const signature = paystackSignature(rawBody, PS_SECRET_KEY)
+    const rawBody = JSON.stringify(makeBudPayPayload())
+    const signature = budpaySignature(rawBody, BP_WEBHOOK_SECRET)
 
-    await handlePaystackWebhook(rawBody, signature, PS_SECRET_KEY)
+    await handleBudPayWebhook(rawBody, signature, BP_WEBHOOK_SECRET)
 
     const event = await prisma.webhookEvent.findFirst({
-      where: { provider: 'PAYSTACK', eventId: 'TRF_ps_001' },
+      where: { provider: 'BUDPAY', eventId: 'KL-PO-txn_bp_001-1700000000000' },
     })
     expect(event).not.toBeNull()
     expect(event!.processed).toBe(true)
@@ -225,63 +227,61 @@ describe('Paystack webhook handler', () => {
 
   it('skips duplicate webhook events (idempotency)', async () => {
     await createTestTransfer({
-      payoutProvider: 'PAYSTACK',
-      payoutProviderRef: 'TRF_ps_001',
+      payoutProvider: 'BUDPAY',
+      payoutProviderRef: 'KL-PO-txn_bp_001-1700000000000',
     })
 
-    const rawBody = JSON.stringify(makePaystackPayload())
-    const signature = paystackSignature(rawBody, PS_SECRET_KEY)
+    const rawBody = JSON.stringify(makeBudPayPayload())
+    const signature = budpaySignature(rawBody, BP_WEBHOOK_SECRET)
 
-    await handlePaystackWebhook(rawBody, signature, PS_SECRET_KEY)
-    await handlePaystackWebhook(rawBody, signature, PS_SECRET_KEY)
+    await handleBudPayWebhook(rawBody, signature, BP_WEBHOOK_SECRET)
+    await handleBudPayWebhook(rawBody, signature, BP_WEBHOOK_SECRET)
 
     const count = await prisma.webhookEvent.count({
-      where: { provider: 'PAYSTACK', eventId: 'TRF_ps_001' },
+      where: { provider: 'BUDPAY', eventId: 'KL-PO-txn_bp_001-1700000000000' },
     })
     expect(count).toBe(1)
   })
 
   it('rejects invalid HMAC signature', async () => {
-    const rawBody = JSON.stringify(makePaystackPayload())
+    const rawBody = JSON.stringify(makeBudPayPayload())
 
     await expect(
-      handlePaystackWebhook(rawBody, 'invalid-signature', PS_SECRET_KEY),
-    ).rejects.toThrow('Invalid Paystack webhook signature')
+      handleBudPayWebhook(rawBody, 'invalid-signature', BP_WEBHOOK_SECRET),
+    ).rejects.toThrow('Invalid BudPay webhook signature')
   })
 
   it('handles unknown transfer reference gracefully', async () => {
-    const rawBody = JSON.stringify(makePaystackPayload({
-      transfer_code: 'TRF_unknown',
+    const rawBody = JSON.stringify(makeBudPayPayload({
       reference: 'KL-PO-unknown-1700000000000',
     }))
-    const signature = paystackSignature(rawBody, PS_SECRET_KEY)
+    const signature = budpaySignature(rawBody, BP_WEBHOOK_SECRET)
 
-    await handlePaystackWebhook(rawBody, signature, PS_SECRET_KEY)
+    await handleBudPayWebhook(rawBody, signature, BP_WEBHOOK_SECRET)
 
     const event = await prisma.webhookEvent.findFirst({
-      where: { provider: 'PAYSTACK', eventId: 'TRF_unknown' },
+      where: { provider: 'BUDPAY', eventId: 'KL-PO-unknown-1700000000000' },
     })
     expect(event).not.toBeNull()
   })
 
   it('routes failed transfer to handlePayoutFailure', async () => {
     await createTestTransfer({
-      payoutProvider: 'PAYSTACK',
-      payoutProviderRef: 'TRF_ps_fail',
+      payoutProvider: 'BUDPAY',
+      payoutProviderRef: 'KL-PO-txn_bp_fail-1700000000000',
     })
 
-    const rawBody = JSON.stringify(makePaystackPayload({
-      transfer_code: 'TRF_ps_fail',
-      reference: 'KL-PO-txn_ps_fail-1700000000000',
+    const rawBody = JSON.stringify(makeBudPayPayload({
+      reference: 'KL-PO-txn_bp_fail-1700000000000',
       status: 'failed',
       reason: 'Could not credit account',
     }))
-    const signature = paystackSignature(rawBody, PS_SECRET_KEY)
+    const signature = budpaySignature(rawBody, BP_WEBHOOK_SECRET)
 
-    await handlePaystackWebhook(rawBody, signature, PS_SECRET_KEY)
+    await handleBudPayWebhook(rawBody, signature, BP_WEBHOOK_SECRET)
 
     const event = await prisma.webhookEvent.findFirst({
-      where: { provider: 'PAYSTACK', eventId: 'TRF_ps_fail' },
+      where: { provider: 'BUDPAY', eventId: 'KL-PO-txn_bp_fail-1700000000000' },
     })
     expect(event).not.toBeNull()
     expect(event!.processed).toBe(true)

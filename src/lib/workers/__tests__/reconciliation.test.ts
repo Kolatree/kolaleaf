@@ -1,6 +1,14 @@
-import { describe, it, expect, beforeEach, afterAll } from 'vitest'
+import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest'
 import Decimal from 'decimal.js'
 import { prisma } from '@/lib/db/client'
+
+const orchestratorMocks = {
+  resumeRetry: vi.fn(),
+}
+vi.mock('@/lib/payments/payout/orchestrator', () => ({
+  getOrchestrator: () => orchestratorMocks,
+}))
+
 import { runDailyReconciliation } from '../reconciliation'
 
 // ─── Test data helpers ───────────────────────────────
@@ -30,6 +38,19 @@ async function createTestTransfer(overrides: Record<string, unknown> = {}) {
 // ─── Setup / Teardown ────────────────────────────────
 
 beforeEach(async () => {
+  orchestratorMocks.resumeRetry.mockReset()
+  orchestratorMocks.resumeRetry.mockImplementation(async (transferId: string) => {
+    await prisma.transfer.update({
+      where: { id: transferId },
+      data: {
+        status: 'PROCESSING_NGN',
+        payoutProvider: 'BUDPAY',
+        payoutProviderRef: `retry-${transferId}`,
+      },
+    })
+    return prisma.transfer.findUniqueOrThrow({ where: { id: transferId } })
+  })
+
   await prisma.transferEvent.deleteMany({ where: { transfer: { user: { fullName: { startsWith: TEST_PREFIX } } } } })
   await prisma.transfer.deleteMany({ where: { user: { fullName: { startsWith: TEST_PREFIX } } } })
   await prisma.recipient.deleteMany({ where: { user: { fullName: { startsWith: TEST_PREFIX } } } })
@@ -172,6 +193,7 @@ describe('runDailyReconciliation', () => {
       where: { userId, status: 'PROCESSING_NGN' },
     })
     expect(transfer).not.toBeNull()
+    expect(orchestratorMocks.resumeRetry).toHaveBeenCalledTimes(1)
   })
 
   it('does NOT retry NGN_RETRY transfers under 30min old', async () => {

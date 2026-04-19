@@ -1,6 +1,7 @@
 import { prisma } from '../db/client'
 import { transitionTransfer } from '../transfers/state-machine'
 import { TransferStatus, ActorType } from '../../generated/prisma/enums'
+import { getOrchestrator } from '../payments/payout/orchestrator'
 
 const AWAITING_AUD_EXPIRE_HOURS = 24
 const PROCESSING_NGN_FLAG_HOURS = 1
@@ -89,15 +90,10 @@ export async function runDailyReconciliation(): Promise<ReconciliationReport> {
         updatedAt: { lt: retryCutoff },
       },
     })
+    const orchestrator = getOrchestrator()
 
     for (const transfer of staleRetries) {
-      await transitionTransfer({
-        transferId: transfer.id,
-        toStatus: TransferStatus.PROCESSING_NGN,
-        actor: ActorType.SYSTEM,
-        expectedStatus: TransferStatus.NGN_RETRY,
-        metadata: { reason: 'reconciliation_retry', minutesStale: NGN_RETRY_STALE_MINUTES },
-      })
+      await orchestrator.resumeRetry(transfer.id)
       report.retried++
       report.retriedIds.push(transfer.id)
     }

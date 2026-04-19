@@ -12,17 +12,34 @@ vi.mock('@/lib/auth/login', async (orig) => {
 
 vi.mock('@/lib/auth/middleware', () => ({
   setSessionCookie: vi.fn(() => 'kolaleaf_session=mock; HttpOnly'),
+  setPendingTwoFactorCookie: vi.fn(() => 'kolaleaf_pending_2fa=challenge; HttpOnly'),
+  clearPendingTwoFactorCookie: vi.fn(() => 'kolaleaf_pending_2fa=; Max-Age=0'),
+  clearSessionCookie: vi.fn(() => 'kolaleaf_session=; Max-Age=0'),
 }))
 
 vi.mock('@/lib/auth/email-verification', () => ({
   issueVerificationCode: vi.fn(async () => ({ ok: true })),
 }))
 
+vi.mock('@/lib/auth/login-rate-limit', () => ({
+  checkLoginRateLimit: vi.fn(() => ({ allowed: true, retryAfterMs: 0 })),
+  clearLoginRateLimit: vi.fn(),
+  recordLoginFailure: vi.fn(),
+}))
+
 import { loginUser } from '@/lib/auth/login'
 import { issueVerificationCode } from '@/lib/auth/email-verification'
+import {
+  checkLoginRateLimit,
+  clearLoginRateLimit,
+  recordLoginFailure,
+} from '@/lib/auth/login-rate-limit'
 
 const mockLogin = vi.mocked(loginUser)
 const mockIssue = vi.mocked(issueVerificationCode)
+const mockCheckRateLimit = vi.mocked(checkLoginRateLimit)
+const mockClearRateLimit = vi.mocked(clearLoginRateLimit)
+const mockRecordFailure = vi.mocked(recordLoginFailure)
 
 function makeRequest(body: unknown): Request {
   return new Request('http://localhost/api/v1/auth/login', {
@@ -42,6 +59,7 @@ describe('POST /api/v1/auth/login', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockIssue.mockResolvedValue({ ok: true })
+    mockCheckRateLimit.mockReturnValue({ allowed: true, retryAfterMs: 0 })
   })
 
   it('returns 422 for missing identifier (Zod)', async () => {
@@ -128,14 +146,16 @@ describe('POST /api/v1/auth/login', () => {
   it('returns requires2FA true when user has TOTP enabled', async () => {
     mockLogin.mockResolvedValue({
       user: { id: 'u1', fullName: 'Test' } as never,
-      session: { token: 'tok' } as never,
       requires2FA: true,
       twoFactorMethod: 'TOTP',
+      challengeId: 'challenge-1',
     })
 
     const res = await POST(makeRequest(validBody()))
     const json = await res.json()
     expect(json.requires2FA).toBe(true)
+    expect(json.twoFactorMethod).toBe('TOTP')
+    expect(res.headers.get('Set-Cookie')).toContain('kolaleaf_pending_2fa')
   })
 
   it('returns 401 for invalid credentials', async () => {
@@ -143,6 +163,18 @@ describe('POST /api/v1/auth/login', () => {
 
     const res = await POST(makeRequest(validBody('a@b.com', 'wrong')))
     expect(res.status).toBe(401)
+    expect(mockRecordFailure).toHaveBeenCalledWith('a@b.com', undefined)
+  })
+
+  it('returns 429 when login rate limit is exceeded', async () => {
+    mockCheckRateLimit.mockReturnValueOnce({ allowed: false, retryAfterMs: 30_000 })
+
+    const res = await POST(makeRequest(validBody()))
+    expect(res.status).toBe(429)
+    const json = await res.json()
+    expect(json.error).toBe('rate_limited')
+    expect(json.retryAfter).toBe(30)
+    expect(mockLogin).not.toHaveBeenCalled()
   })
 
   it('returns 202 with requiresVerification when email is unverified', async () => {
@@ -156,6 +188,7 @@ describe('POST /api/v1/auth/login', () => {
     expect(json.requiresVerification).toBe(true)
     expect(json.email).toBe('a@b.com')
     expect(res.headers.get('Set-Cookie')).toBeNull()
+    expect(mockClearRateLimit).toHaveBeenCalledWith('a@b.com', undefined)
     expect(mockIssue).toHaveBeenCalledWith({
       userId: 'u1',
       email: 'a@b.com',

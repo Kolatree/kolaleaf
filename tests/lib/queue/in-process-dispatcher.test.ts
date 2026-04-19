@@ -5,7 +5,7 @@ vi.mock('@/lib/payments/monoova/webhook', () => ({
 }))
 vi.mock('@/lib/payments/payout/webhooks', () => ({
   handleFlutterwaveWebhook: vi.fn(),
-  handlePaystackWebhook: vi.fn(),
+  handleBudPayWebhook: vi.fn(),
 }))
 vi.mock('@/lib/kyc/sumsub/webhook', () => ({
   handleSumsubWebhook: vi.fn(),
@@ -15,13 +15,13 @@ import { InProcessDispatcher } from '@/lib/queue/in-process-dispatcher'
 import { handleMonoovaWebhook } from '@/lib/payments/monoova/webhook'
 import {
   handleFlutterwaveWebhook,
-  handlePaystackWebhook,
+  handleBudPayWebhook,
 } from '@/lib/payments/payout/webhooks'
 import { handleSumsubWebhook } from '@/lib/kyc/sumsub/webhook'
 
 const monoovaMock = vi.mocked(handleMonoovaWebhook)
 const flutterwaveMock = vi.mocked(handleFlutterwaveWebhook)
-const paystackMock = vi.mocked(handlePaystackWebhook)
+const budpayMock = vi.mocked(handleBudPayWebhook)
 const sumsubMock = vi.mocked(handleSumsubWebhook)
 
 describe('InProcessDispatcher', () => {
@@ -31,7 +31,7 @@ describe('InProcessDispatcher', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     process.env.FLUTTERWAVE_WEBHOOK_SECRET = 'fw-secret'
-    process.env.PAYSTACK_SECRET_KEY = 'ps-secret'
+    process.env.BUDPAY_WEBHOOK_SECRET = 'bp-secret'
   })
 
   it('dispatches monoova jobs to the monoova handler', async () => {
@@ -61,18 +61,18 @@ describe('InProcessDispatcher', () => {
     )
   })
 
-  it('dispatches paystack jobs with the env secret', async () => {
-    paystackMock.mockResolvedValue(undefined)
+  it('dispatches BudPay jobs with the env secret', async () => {
+    budpayMock.mockResolvedValue(undefined)
     await dispatcher.dispatch({
-      provider: 'paystack',
+      provider: 'budpay',
       rawBody: '{"event":"x"}',
-      signature: 'ps-sig',
+      signature: 'bp-sig',
       receivedAt,
     })
-    expect(paystackMock).toHaveBeenCalledWith(
+    expect(budpayMock).toHaveBeenCalledWith(
       '{"event":"x"}',
-      'ps-sig',
-      'ps-secret',
+      'bp-sig',
+      'bp-secret',
     )
   })
 
@@ -112,16 +112,16 @@ describe('InProcessDispatcher', () => {
     expect(flutterwaveMock).not.toHaveBeenCalled()
   })
 
-  it('throws when paystack secret is missing', async () => {
-    delete process.env.PAYSTACK_SECRET_KEY
+  it('throws when BudPay secret is missing', async () => {
+    delete process.env.BUDPAY_WEBHOOK_SECRET
     await expect(
       dispatcher.dispatch({
-        provider: 'paystack',
+        provider: 'budpay',
         rawBody: '{}',
         signature: 's',
         receivedAt,
       }),
-    ).rejects.toThrow('PAYSTACK_SECRET_KEY not configured')
-    expect(paystackMock).not.toHaveBeenCalled()
+    ).rejects.toThrow('BUDPAY_WEBHOOK_SECRET not configured')
+    expect(budpayMock).not.toHaveBeenCalled()
   })
 })

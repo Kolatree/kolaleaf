@@ -8,26 +8,25 @@ import {
 import type { StatementClient, StatementEntry } from './types'
 
 /**
- * Paystack NGN payout statement client (fallback provider).
+ * BudPay NGN payout statement client (primary provider).
  *
- * Paystack is the failover for Flutterwave; it carries a subset of the
- * payout volume and the reconciliation job must diff it independently.
+ * BudPay is the primary NGN disburser; the reconciliation job pulls
+ * BudPay's debit-side statement for this corridor.
  *
  * Endpoint (provisional — schema confirmed in staging; amounts below
  * are the only contract that matters to the diff engine):
- *   GET {PAYSTACK_API_URL}/transfer?from={iso}&to={iso}
- *   → { data: [{ reference, amount: kobo, currency,
- *                transferred_at, status }, ...] }
+ *   GET {BUDPAY_API_URL}/api/v2/list_transfers?from={iso}&to={iso}
+ *   → { data: [{ reference, amount, currency, transferred_at,
+ *                status }, ...] }
  * Only entries with status === 'success' are surfaced.
  *
- * Amount unit: Paystack returns amounts in **kobo** (1/100 NGN). All
- * entries are divided by 100 via decimal.js so rounding does not drift
- * across a reconciliation window (a cent lost per transfer compounds
- * into an AUSTRAC finding fast).
+ * Amount unit: BudPay returns NGN in major units (not kobo). Parsed
+ * via decimal.js so a provider-side precision tweak (string vs number)
+ * does not crash the diff.
  *
  * Env contract:
- *   - PAYSTACK_API_URL     (new; example: https://api.paystack.co)
- *   - PAYSTACK_SECRET_KEY  (already used by webhook handler)
+ *   - BUDPAY_API_URL     (example: https://api.budpay.com)
+ *   - BUDPAY_SECRET_KEY  (already used by webhook handler)
  * Both required in production. In dev/test, absence yields a no-op
  * mock client that returns [] so the job can run safely without
  * creds and every real ledger row is flagged as missing_in_statement —
@@ -37,20 +36,20 @@ import type { StatementClient, StatementEntry } from './types'
  * import, so `next build` can traverse importers without creds wired.
  */
 
-export interface PaystackStatementConfig {
+export interface BudPayStatementConfig {
   apiUrl: string
   apiKey: string
   isMock: boolean
 }
 
-export function validatePaystackStatementConfig(): PaystackStatementConfig {
-  const apiUrl = process.env.PAYSTACK_API_URL
-  const apiKey = process.env.PAYSTACK_SECRET_KEY
+export function validateBudPayStatementConfig(): BudPayStatementConfig {
+  const apiUrl = process.env.BUDPAY_API_URL
+  const apiKey = process.env.BUDPAY_SECRET_KEY
   const isProduction = process.env.NODE_ENV === 'production'
 
   if (isProduction && (!apiUrl || !apiKey)) {
     throw new Error(
-      'Paystack statement config missing in production: PAYSTACK_API_URL, PAYSTACK_SECRET_KEY',
+      'BudPay statement config missing in production: BUDPAY_API_URL, BUDPAY_SECRET_KEY',
     )
   }
 
@@ -61,7 +60,7 @@ export function validatePaystackStatementConfig(): PaystackStatementConfig {
   }
 }
 
-interface PaystackTransferRaw {
+interface BudPayTransferRaw {
   reference?: string
   amount?: number | string
   currency?: string
@@ -69,10 +68,8 @@ interface PaystackTransferRaw {
   status?: string
 }
 
-const KOBO_PER_NGN = new Decimal(100)
-
-export class PaystackStatementClient implements StatementClient {
-  public readonly provider = 'paystack' as const
+export class BudPayStatementClient implements StatementClient {
+  public readonly provider = 'budpay' as const
 
   constructor(
     private readonly baseUrl: string,
@@ -84,9 +81,9 @@ export class PaystackStatementClient implements StatementClient {
       from: from.toISOString(),
       to: to.toISOString(),
     })
-    const url = `${this.baseUrl}/transfer?${qs.toString()}`
+    const url = `${this.baseUrl}/api/v2/list_transfers?${qs.toString()}`
 
-    const payload = await withRetry<{ data?: PaystackTransferRaw[] }>(
+    const payload = await withRetry<{ data?: BudPayTransferRaw[] }>(
       (signal) => this.request(url, signal),
     )
 
@@ -97,12 +94,13 @@ export class PaystackStatementClient implements StatementClient {
       if (row.status !== 'success') continue
       if (!row.reference || row.amount == null || !row.transferred_at) continue
 
-      // Kobo → NGN via decimal.js; integer/string inputs accepted so a
-      // provider-side precision tweak doesn't crash the diff.
-      const amountNgn = new Decimal(row.amount).dividedBy(KOBO_PER_NGN)
+      // NGN major units — no kobo conversion. String/number inputs
+      // accepted so a provider-side precision tweak doesn't crash the
+      // diff.
+      const amountNgn = new Decimal(row.amount)
 
       entries.push({
-        provider: 'paystack',
+        provider: 'budpay',
         providerRef: String(row.reference),
         amount: amountNgn,
         currency: String(row.currency ?? 'NGN'),
@@ -129,14 +127,14 @@ export class PaystackStatementClient implements StatementClient {
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') throw err
       throw new ProviderTemporaryError(
-        `Paystack network error: ${String(err)}`,
+        `BudPay network error: ${String(err)}`,
       )
     }
 
     if (!response.ok) {
       throw errorForStatus(
         response.status,
-        `Paystack API error: ${response.status}`,
+        `BudPay API error: ${response.status}`,
       )
     }
 
@@ -144,7 +142,7 @@ export class PaystackStatementClient implements StatementClient {
       return (await response.json()) as T
     } catch (err) {
       throw new ProviderPermanentError(
-        `Paystack response parse error: ${String(err)}`,
+        `BudPay response parse error: ${String(err)}`,
       )
     }
   }
@@ -156,15 +154,15 @@ export class PaystackStatementClient implements StatementClient {
  * `missing_in_statement`. Never synthesises data — a fake-match would
  * hide a real reconciliation gap.
  */
-class PaystackStatementMockClient implements StatementClient {
-  public readonly provider = 'paystack' as const
+class BudPayStatementMockClient implements StatementClient {
+  public readonly provider = 'budpay' as const
   async fetchStatement(): Promise<StatementEntry[]> {
     return []
   }
 }
 
-export function createPaystackStatementClient(): StatementClient {
-  const { apiUrl, apiKey, isMock } = validatePaystackStatementConfig()
-  if (isMock) return new PaystackStatementMockClient()
-  return new PaystackStatementClient(apiUrl, apiKey)
+export function createBudPayStatementClient(): StatementClient {
+  const { apiUrl, apiKey, isMock } = validateBudPayStatementConfig()
+  if (isMock) return new BudPayStatementMockClient()
+  return new BudPayStatementClient(apiUrl, apiKey)
 }

@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth/admin-middleware'
 import { AuthError } from '@/lib/auth/middleware'
-import { transitionTransfer } from '@/lib/transfers/state-machine'
-import { TransferStatus, ActorType } from '@/generated/prisma/enums'
 import { logAuthEvent } from '@/lib/auth/audit'
+import { getOrchestrator } from '@/lib/payments/payout/orchestrator'
 
 export async function POST(
   request: Request,
@@ -13,19 +12,18 @@ export async function POST(
     const { userId } = await requireAdmin(request)
     const { id: transferId } = await params
 
-    const transfer = await transitionTransfer({
-      transferId,
-      toStatus: TransferStatus.PROCESSING_NGN,
-      actor: ActorType.ADMIN,
-      actorId: userId,
-      expectedStatus: TransferStatus.NEEDS_MANUAL,
-      metadata: { action: 'manual_retry', adminId: userId },
-    })
+    const transfer = await getOrchestrator().handleManualRetry(transferId, userId)
 
     await logAuthEvent({
       userId,
       event: 'ADMIN_TRANSFER_RETRY',
-      metadata: { transferId, fromStatus: 'NEEDS_MANUAL' },
+      metadata: {
+        transferId,
+        fromStatus: 'NEEDS_MANUAL',
+        action: 'manual_retry',
+        payoutProvider: transfer.payoutProvider,
+        payoutProviderRef: transfer.payoutProviderRef,
+      },
     })
 
     return NextResponse.json({ transfer })

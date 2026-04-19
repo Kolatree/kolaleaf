@@ -12,6 +12,7 @@ import {
   GRADIENT,
 } from '@/components/design/KolaPrimitives'
 import { CancelTransferButton } from './_components/cancel-transfer-button'
+import { IssuePayIdButton } from './_components/issue-payid-button'
 
 // Server component — ownership is enforced at the query layer via
 // getUserTransferWithEvents (where: { id, userId }). A user asking for a
@@ -27,7 +28,7 @@ const STATUS_TONE: Record<
     bg: 'rgba(136,136,136,0.15)',
     fg: colors.muted,
     label: 'Pending',
-    description: 'Your transfer has been created. Next, push AUD to the PayID to start the payment.',
+    description: 'Your transfer has been created. Next, issue PayID instructions so you can send the AUD payment.',
   },
   AWAITING_AUD: {
     bg: 'rgba(255,215,0,0.20)',
@@ -170,6 +171,10 @@ export default async function TransferDetailPage({
     }
 
   const cancellable = CANCELLABLE.has(transfer.status)
+  const needsPayIdIssuance =
+    transfer.status === 'CREATED' && !transfer.payidProviderRef
+  const hasPaymentInstructions =
+    transfer.status === 'AWAITING_AUD' && !!transfer.payidProviderRef
   const recipientName = transfer.recipient?.fullName ?? 'Unknown recipient'
   const initials = recipientName
     .split(' ')
@@ -319,6 +324,65 @@ export default async function TransferDetailPage({
             </div>
           )}
         </section>
+
+        {(needsPayIdIssuance || hasPaymentInstructions) && (
+          <section
+            style={{
+              background: colors.cardBg,
+              borderRadius: radius.card,
+              padding: spacing.cardPad,
+              boxShadow: shadow.card,
+            }}
+          >
+            <h2 style={{ fontSize: '15px', fontWeight: 600, color: colors.ink }}>
+              AUD payment instructions
+            </h2>
+
+            {needsPayIdIssuance ? (
+              <>
+                <p
+                  className="mt-3"
+                  style={{ fontSize: '13px', color: colors.muted, lineHeight: 1.5 }}
+                >
+                  This transfer is still waiting for PayID instructions. Issue them now to
+                  start the AUD payment step.
+                </p>
+                <div className="mt-4">
+                  <IssuePayIdButton transferId={transfer.id} />
+                </div>
+              </>
+            ) : null}
+
+            {hasPaymentInstructions ? (
+              <div className="mt-3 grid gap-3 text-sm">
+                <div>
+                  <div style={{ fontSize: '11px', color: colors.muted }}>PayID</div>
+                  <div
+                    className="mt-1 tabular-nums break-all"
+                    style={{ fontSize: '15px', fontWeight: 600, color: colors.ink }}
+                  >
+                    {transfer.payidProviderRef}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: colors.muted }}>Reference</div>
+                  <div
+                    className="mt-1 tabular-nums break-all"
+                    style={{ fontSize: '14px', color: colors.ink }}
+                  >
+                    {transfer.payidReference ?? transfer.id}
+                  </div>
+                </div>
+                <p
+                  style={{ fontSize: '12px', color: colors.muted, lineHeight: 1.5 }}
+                >
+                  Send the exact AUD amount from your bank and include the reference so we
+                  can match the payment to this transfer.
+                </p>
+              </div>
+            ) : null}
+          </section>
+        )}
 
         {/* Timeline card */}
         <section

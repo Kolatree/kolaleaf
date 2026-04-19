@@ -27,6 +27,7 @@ export const LoginBody = z.object({
 export const LoginResponse = z.object({
   user: z.object({ id: z.string(), fullName: z.string().nullable() }),
   requires2FA: z.boolean(),
+  twoFactorMethod: z.enum(['NONE', 'TOTP', 'SMS']).optional(),
 })
 
 export const LoginVerificationRequiredResponse = z.object({

@@ -189,7 +189,7 @@ export function LandingPage() {
             <FeatureCard icon="💸" title="Better rates — structurally" body="Our margin comes from treasury, not fees. So we can undercut incumbents without racing to zero." />
             <FeatureCard icon="🛡️" title="AUSTRAC-registered" body="Licensed remitter. Compliant with Australia's AML/CTF framework. Your money is protected." />
             <FeatureCard icon="🌏" title="Built by operators" body="We ran CashRemit in the same corridor for 4 years. We know the banks, the pain points, the fraud patterns." />
-            <FeatureCard icon="⚡" title="Delivered in minutes" body="PayID collection, Flutterwave + Paystack disbursement with failover. No overnight batches." />
+            <FeatureCard icon="⚡" title="Delivered in minutes" body="PayID collection, BudPay + Flutterwave disbursement with failover. No overnight batches." />
           </div>
         </div>
       </section>

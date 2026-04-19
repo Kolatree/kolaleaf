@@ -15,21 +15,27 @@ async function main() {
       active: true,
       minAmount: 10,
       maxAmount: 50000,
-      payoutProviders: ['FLUTTERWAVE', 'PAYSTACK'],
+      payoutProviders: ['BUDPAY', 'FLUTTERWAVE'],
     },
   })
 
-  // Create initial test rate
-  await prisma.rate.create({
-    data: {
-      corridorId: corridor.id,
-      provider: 'seed',
-      wholesaleRate: 1050.00,
-      spread: 0.007,
-      customerRate: 1042.65,
-      effectiveAt: new Date(),
-    },
+  const existingSeedRate = await prisma.rate.findFirst({
+    where: { corridorId: corridor.id, provider: 'seed' },
+    orderBy: { effectiveAt: 'desc' },
   })
+
+  if (!existingSeedRate) {
+    await prisma.rate.create({
+      data: {
+        corridorId: corridor.id,
+        provider: 'seed',
+        wholesaleRate: 1050.00,
+        spread: 0.007,
+        customerRate: 1042.65,
+        effectiveAt: new Date(),
+      },
+    })
+  }
 
   console.log('Seed complete: AUD-NGN corridor with test rate')
 }

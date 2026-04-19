@@ -21,6 +21,7 @@ export async function POST(
 
     if (name === 'TransferNotFoundError') return NextResponse.json({ error: message }, { status: 404 })
     if (name === 'NotTransferOwnerError') return NextResponse.json({ error: message }, { status: 403 })
+    if (name === 'CancelTooLateError') return NextResponse.json({ error: message }, { status: 409 })
     if (name === 'InvalidTransitionError') return NextResponse.json({ error: message }, { status: 409 })
 
     return NextResponse.json({ error: message }, { status: 500 })

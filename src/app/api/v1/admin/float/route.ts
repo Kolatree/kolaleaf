@@ -2,17 +2,12 @@ import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth/admin-middleware'
 import { AuthError } from '@/lib/auth/middleware'
 import { FloatMonitor } from '@/lib/payments/payout'
-import Decimal from 'decimal.js'
+import { FlutterwaveProvider } from '@/lib/payments/payout/flutterwave'
 
-// Lightweight balance provider that reads from the environment
-// In production, this would call the Flutterwave wallet API
-const floatProvider = {
-  name: 'flutterwave',
-  async getWalletBalance(_currency: string) {
-    const balance = process.env.FLOAT_BALANCE_NGN
-    return balance ? new Decimal(balance) : new Decimal(0)
-  },
-}
+const floatProvider = new FlutterwaveProvider({
+  secretKey: process.env.FLUTTERWAVE_SECRET_KEY ?? '',
+  apiUrl: process.env.FLUTTERWAVE_API_URL ?? 'https://api.flutterwave.com/v3',
+})
 
 const floatMonitor = new FloatMonitor(floatProvider)
 

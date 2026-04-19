@@ -222,6 +222,78 @@ describe('FlutterwaveProvider', () => {
   })
 })
 
+describe('FlutterwaveProvider stub mode', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    delete process.env.KOLA_USE_STUB_PROVIDERS
+    mockFetch.mockReset()
+  })
+
+  it('initiatePayout returns a STUB-FW- ref when secret key is missing (dev)', async () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    const stub = new FlutterwaveProvider({
+      secretKey: '',
+      apiUrl: 'https://api.flutterwave.com/v3',
+    })
+
+    const result = await stub.initiatePayout(validParams)
+
+    expect(result.providerRef).toBe('STUB-FW-' + validParams.reference)
+    expect(result.status).toBe('SUCCESSFUL')
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('initiatePayout uses the stub path when KOLA_USE_STUB_PROVIDERS=true even with a secret key', async () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    process.env.KOLA_USE_STUB_PROVIDERS = 'true'
+    const stub = new FlutterwaveProvider({
+      secretKey: 'FLWSECK-live-abc',
+      apiUrl: 'https://api.flutterwave.com/v3',
+    })
+
+    const result = await stub.initiatePayout(validParams)
+
+    expect(result.providerRef).toBe('STUB-FW-' + validParams.reference)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('throws when KOLA_USE_STUB_PROVIDERS=true in production', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    process.env.KOLA_USE_STUB_PROVIDERS = 'true'
+    const stub = new FlutterwaveProvider({
+      secretKey: 'FLWSECK-live-abc',
+      apiUrl: 'https://api.flutterwave.com/v3',
+    })
+
+    await expect(stub.initiatePayout(validParams)).rejects.toThrow(/forbidden in production/)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('throws when secret key is missing in production (defense-in-depth)', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    const stub = new FlutterwaveProvider({
+      secretKey: '',
+      apiUrl: 'https://api.flutterwave.com/v3',
+    })
+
+    await expect(stub.initiatePayout(validParams)).rejects.toThrow(/production/)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('getPayoutStatus returns SUCCESSFUL in stub mode', async () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    const stub = new FlutterwaveProvider({
+      secretKey: '',
+      apiUrl: 'https://api.flutterwave.com/v3',
+    })
+
+    const result = await stub.getPayoutStatus('STUB-FW-abc')
+
+    expect(result.status).toBe('SUCCESSFUL')
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+})
+
 describe('validateFlutterwaveConfig', () => {
   afterEach(() => {
     vi.unstubAllEnvs()

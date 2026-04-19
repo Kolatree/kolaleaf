@@ -14,15 +14,11 @@ beforeAll(async () => {
 })
 
 afterEach(async () => {
-  await prisma.authEvent.deleteMany({})
-  await prisma.session.deleteMany({})
-  await prisma.userIdentifier.deleteMany({})
-  await prisma.user.deleteMany({})
+  await cleanupTestData()
 })
 
 afterAll(async () => {
   await cleanupTestData()
-  await prisma.$disconnect()
 })
 
 describe('Auth Lifecycle E2E', () => {
@@ -60,8 +56,9 @@ describe('Auth Lifecycle E2E', () => {
       identifier: email,
       password,
     })
+    expect(loginSession).toBeDefined()
     expect(requires2FA).toBe(false)
-    expect(loginSession.token).toHaveLength(64)
+    expect(loginSession!.token).toHaveLength(64)
 
     // ── Step 3: Enable 2FA (TOTP) ──
     const secret = generateTotpSecret()
@@ -100,13 +97,13 @@ describe('Auth Lifecycle E2E', () => {
 
     // ── Step 6: Force-revoke all sessions ──
     const revokedCount = await revokeAllUserSessions(user.id)
-    expect(revokedCount).toBeGreaterThanOrEqual(2) // at least reg + 2 logins
+    expect(revokedCount).toBeGreaterThanOrEqual(2) // at least reg + first login
 
     // Old session should now be invalid
     const invalidSession = await validateSession(regSession.token)
     expect(invalidSession).toBeNull()
 
-    const invalidLogin = await validateSession(loginSession.token)
+    const invalidLogin = await validateSession(loginSession!.token)
     expect(invalidLogin).toBeNull()
   })
 
@@ -145,7 +142,8 @@ describe('Auth Lifecycle E2E', () => {
     })
     expect(loggedInUser).not.toBeNull()
     expect(loggedInUser!.id).toBe(user.id)
-    expect(session.token).toHaveLength(64)
+    expect(session).toBeDefined()
+    expect(session!.token).toHaveLength(64)
   })
 
   it('expired session is rejected', async () => {

@@ -30,7 +30,6 @@ afterEach(async () => {
 
 afterAll(async () => {
   await cleanupTestData()
-  await prisma.$disconnect()
 })
 
 describe('getUserTransferWithEvents', () => {
@@ -71,7 +70,7 @@ describe('getUserTransferWithEvents', () => {
     }
   })
 
-  it('omits internal fields (failureReason, payoutProviderRef, retryCount) and event metadata', async () => {
+  it('omits internal admin-only fields while exposing PayID instructions and hiding event metadata', async () => {
     const transfer = await createTestTransfer(userId, recipientId)
     await prisma.transfer.update({
       where: { id: transfer.id },
@@ -91,9 +90,9 @@ describe('getUserTransferWithEvents', () => {
     expect(view.failureReason).toBeUndefined()
     expect(view.payoutProviderRef).toBeUndefined()
     expect(view.payoutProvider).toBeUndefined()
-    expect(view.payidProviderRef).toBeUndefined()
-    expect(view.payidReference).toBeUndefined()
     expect(view.retryCount).toBeUndefined()
+    expect(result!.payidProviderRef).toBe('payid-ref')
+    expect(result!.payidReference).toBe('payid-ref-2')
 
     // Events must not include metadata (may contain provider error text).
     for (const event of result!.events) {

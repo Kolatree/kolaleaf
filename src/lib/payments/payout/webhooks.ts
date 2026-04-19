@@ -2,6 +2,14 @@ import crypto, { timingSafeEqual } from 'crypto'
 import { Prisma } from '../../../generated/prisma/client'
 import { prisma } from '../../db/client'
 
+// Webhook handlers for BudPay + Flutterwave.
+//
+// BudPay is the primary NGN disburser; Flutterwave is the fallback.
+// Both handlers share the create-as-lock idempotency pattern used by
+// Monoova: a unique
+// constraint on WebhookEvent(provider, eventId) ensures at-most-once
+// processing even when the provider retries.
+
 // Lazy import to allow mocking in tests
 async function getOrchestrator() {
   const mod = await import('./orchestrator')
@@ -99,27 +107,35 @@ export async function handleFlutterwaveWebhook(
   })
 }
 
-// ─── Paystack ────────────────────────────────────────
+// ─── BudPay ──────────────────────────────────────────
 
-interface PaystackWebhookPayload {
-  event: string
+interface BudPayWebhookPayload {
+  notify?: string
+  // BudPay's documented envelope is `{ notify: 'transfer', data: { ... } }`.
+  // We keep the event type on an optional `event` alias too so older
+  // docs / sandbox payloads that use `event` still parse.
+  event?: string
   data: {
-    transfer_code: string
     reference: string
     status: string
     reason?: string
+    amount?: string | number
+    currency?: string
+    fee?: string | number
   }
 }
 
-// Handles a Paystack payout webhook.
+// Handles a BudPay payout webhook.
 //
-// Security: HMAC-SHA512 over the raw HTTP body, keyed on the secret key.
-// Signing `JSON.stringify(payload)` on a re-parsed body can differ from the
-// original bytes (whitespace, key order), breaking verification — so we
-// verify against `rawBody` directly.
+// Security: HMAC-SHA512 over the raw HTTP body, keyed on the BudPay
+// merchant secret. Verifying against `rawBody` (not
+// `JSON.stringify(payload)`) preserves whitespace and key order so a
+// re-serialized body can't fail verification.
 //
-// Idempotency: create-as-lock pattern (see monoova/webhook.ts).
-export async function handlePaystackWebhook(
+// Idempotency: create-as-lock pattern (see monoova/webhook.ts). The
+// eventId is the payout `reference` we generated — it is unique per
+// payout and echoed back by BudPay.
+export async function handleBudPayWebhook(
   rawBody: string,
   signature: string,
   secretKey: string,
@@ -132,18 +148,19 @@ export async function handlePaystackWebhook(
   const expectedBuf = Buffer.from(expectedSignature, 'hex')
   const receivedBuf = Buffer.from(signature, 'hex')
   if (expectedBuf.length !== receivedBuf.length || !timingSafeEqual(expectedBuf, receivedBuf)) {
-    throw new Error('Invalid Paystack webhook signature')
+    throw new Error('Invalid BudPay webhook signature')
   }
 
-  const body = JSON.parse(rawBody) as PaystackWebhookPayload
-  const eventId = body.data.transfer_code
+  const body = JSON.parse(rawBody) as BudPayWebhookPayload
+  const eventId = body.data.reference
+  const eventType = body.notify ?? body.event ?? 'transfer'
 
   try {
     await prisma.webhookEvent.create({
       data: {
-        provider: 'PAYSTACK',
+        provider: 'BUDPAY',
         eventId,
-        eventType: body.event,
+        eventType,
         payload: body as unknown as object,
         processed: false,
       },
@@ -160,7 +177,7 @@ export async function handlePaystackWebhook(
 
   try {
     const transfer = await prisma.transfer.findFirst({
-      where: { payoutProviderRef: eventId, payoutProvider: 'PAYSTACK' },
+      where: { payoutProviderRef: eventId, payoutProvider: 'BUDPAY' },
     })
 
     if (transfer) {
@@ -177,13 +194,13 @@ export async function handlePaystackWebhook(
     }
   } catch (err) {
     await prisma.webhookEvent.delete({
-      where: { provider_eventId: { provider: 'PAYSTACK', eventId } },
+      where: { provider_eventId: { provider: 'BUDPAY', eventId } },
     })
     throw err
   }
 
   await prisma.webhookEvent.update({
-    where: { provider_eventId: { provider: 'PAYSTACK', eventId } },
+    where: { provider_eventId: { provider: 'BUDPAY', eventId } },
     data: { processed: true, processedAt: new Date() },
   })
 }

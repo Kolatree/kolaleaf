@@ -1,9 +1,32 @@
 import { prisma } from '@/lib/db/client'
 import { generateSmsCode, verifySmsCode } from './phone'
 import { sendSms } from '@/lib/sms'
+import type { TwoFactorMethod } from '@/generated/prisma/enums'
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 const MAX_ATTEMPTS = 5
+
+export async function issuePendingTwoFactorChallenge(
+  userId: string,
+  method: Extract<TwoFactorMethod, 'TOTP' | 'SMS'>,
+): Promise<{ challengeId: string }> {
+  const challenge = await prisma.twoFactorChallenge.create({
+    data: {
+      userId,
+      method,
+      expiresAt: new Date(Date.now() + CHALLENGE_TTL_MS),
+    },
+  })
+
+  return { challengeId: challenge.id }
+}
+
+export async function consumeChallenge(challengeId: string): Promise<void> {
+  await prisma.twoFactorChallenge.update({
+    where: { id: challengeId },
+    data: { consumedAt: new Date() },
+  })
+}
 
 /**
  * Issue an SMS 2FA challenge for a user.

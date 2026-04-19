@@ -207,11 +207,11 @@ describe('computeDiscrepancies', () => {
     expect(result).toEqual([])
   })
 
-  it('does not mis-match a debit entry when Flutterwave and Paystack collide on providerRef', () => {
+  it('does not mis-match a debit entry when Flutterwave and BudPay collide on providerRef', () => {
     // Adversarial case: both providers happen to mint the same short
     // alphanumeric ref. Before the composite-key fix, the second
     // transfer inserted into the map would shadow the first, so a
-    // Paystack entry could "match" a Flutterwave-paid transfer and
+    // BudPay entry could "match" a Flutterwave-paid transfer and
     // silently emit a bogus amount_mismatch.
     const flwTransfer = makeTransfer({
       id: 'tr_flw',
@@ -221,10 +221,10 @@ describe('computeDiscrepancies', () => {
       status: 'COMPLETED',
       payidProviderRef: null,
     })
-    const pskTransfer = makeTransfer({
-      id: 'tr_psk',
+    const budpayTransfer = makeTransfer({
+      id: 'tr_bp',
       receiveAmount: new Decimal('500000.00'),
-      payoutProvider: 'PAYSTACK',
+      payoutProvider: 'BUDPAY',
       payoutProviderRef: 'TXN-12345',
       status: 'COMPLETED',
       payidProviderRef: null,
@@ -236,16 +236,16 @@ describe('computeDiscrepancies', () => {
       currency: 'NGN',
       direction: 'debit',
     })
-    const pskEntry = makeEntry({
-      provider: 'paystack',
+    const budpayEntry = makeEntry({
+      provider: 'budpay',
       providerRef: 'TXN-12345',
       amount: new Decimal('500000.00'),
       currency: 'NGN',
       direction: 'debit',
     })
     const result = computeDiscrepancies({
-      entries: [flwEntry, pskEntry],
-      transfers: [flwTransfer, pskTransfer],
+      entries: [flwEntry, budpayEntry],
+      transfers: [flwTransfer, budpayTransfer],
     })
     expect(result).toEqual([])
   })

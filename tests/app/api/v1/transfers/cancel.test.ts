@@ -53,4 +53,13 @@ describe('POST /api/v1/transfers/[id]/cancel', () => {
     const res = await POST(makeRequest(), { params: Promise.resolve({ id: 't1' }) })
     expect(res.status).toBe(404)
   })
+
+  it('returns 409 when the cancel window has passed', async () => {
+    mockAuth.mockResolvedValueOnce({ userId: 'u1' } as never)
+    const err = new Error('Transfer t1 can no longer be cancelled — already at AUD_RECEIVED')
+    err.name = 'CancelTooLateError'
+    mockCancel.mockRejectedValueOnce(err)
+    const res = await POST(makeRequest(), { params: Promise.resolve({ id: 't1' }) })
+    expect(res.status).toBe(409)
+  })
 })

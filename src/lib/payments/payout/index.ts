@@ -20,7 +20,7 @@ export {
   NG_BANKS_FALLBACK,
 } from './flutterwave'
 export type { BankListEntry } from './flutterwave'
-export { PaystackProvider, validatePaystackConfig } from './paystack'
+export { BudPayProvider, validateBudPayConfig } from './budpay'
 export { PayoutOrchestrator } from './orchestrator'
-export { handleFlutterwaveWebhook, handlePaystackWebhook } from './webhooks'
+export { handleFlutterwaveWebhook, handleBudPayWebhook } from './webhooks'
 export { FloatMonitor } from './float-monitor'

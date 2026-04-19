@@ -204,6 +204,13 @@ describe('Flutterwave webhook handler', () => {
     expect(event).not.toBeNull()
     expect(event!.processed).toBe(true)
   })
+
+  it('rejects webhook with missing data.id (dedup poisoning defense)', async () => {
+    const rawBody = JSON.stringify({ event: 'transfer.completed', data: { status: 'SUCCESSFUL' } })
+    await expect(
+      handleFlutterwaveWebhook(rawBody, FW_WEBHOOK_SECRET, FW_WEBHOOK_SECRET),
+    ).rejects.toThrow(/missing data\.id/)
+  })
 })
 
 describe('BudPay webhook handler', () => {
@@ -285,5 +292,21 @@ describe('BudPay webhook handler', () => {
     })
     expect(event).not.toBeNull()
     expect(event!.processed).toBe(true)
+  })
+
+  it('rejects webhook with missing data.reference (dedup poisoning defense)', async () => {
+    const rawBody = JSON.stringify({ notify: 'transfer', data: { status: 'success' } })
+    const signature = budpaySignature(rawBody, BP_WEBHOOK_SECRET)
+    await expect(
+      handleBudPayWebhook(rawBody, signature, BP_WEBHOOK_SECRET),
+    ).rejects.toThrow(/missing or empty data\.reference/)
+  })
+
+  it('rejects webhook with empty-string data.reference (dedup poisoning defense)', async () => {
+    const rawBody = JSON.stringify(makeBudPayPayload({ reference: '' }))
+    const signature = budpaySignature(rawBody, BP_WEBHOOK_SECRET)
+    await expect(
+      handleBudPayWebhook(rawBody, signature, BP_WEBHOOK_SECRET),
+    ).rejects.toThrow(/missing or empty data\.reference/)
   })
 })

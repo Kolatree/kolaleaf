@@ -14,10 +14,18 @@ import { SimulatePaymentBody } from './_schemas'
 // Exists so local ops can exercise the post-payment half of the
 // transaction flow without a Monoova sandbox webhook round-trip.
 //
-// Prod safety: the route returns 404 (not 403) when we're in
-// production AND the stub flag is off — an accidental Railway deploy
-// can't advertise its existence. Dual-guarded: admin auth is still
-// required even when stub mode is on.
+// Prod safety:
+//   - Returns 404 (not 403) when we're in production AND the stub flag
+//     is off — an accidental Railway deploy can't advertise the route.
+//   - Hard-requires `KOLA_USE_STUB_PROVIDERS=true` even in non-prod
+//     environments. Staging/preview still uses real provider adapters
+//     by default, and simulate-payment against real providers would
+//     drive live transfers to COMPLETED without a real customer
+//     payment. The stub-mode cascade inside handlePaymentReceived
+//     (auto-fire handlePayoutSuccess) is what makes this route safe
+//     to expose at all, and that cascade only runs when the flag is
+//     on.
+//   - Admin auth is still required even when stub mode is on.
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -25,6 +33,20 @@ export async function POST(
   try {
     if (process.env.NODE_ENV === 'production' && !isStubProvidersEnabled()) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
+    // Even in non-prod, refuse to run unless stub mode is explicitly
+    // on. Otherwise a staging admin session could drive a real-provider
+    // transfer to COMPLETED without a real customer payment.
+    if (!isStubProvidersEnabled()) {
+      return NextResponse.json(
+        {
+          error: 'stub_mode_required',
+          message:
+            'simulate-payment requires KOLA_USE_STUB_PROVIDERS=true; ' +
+            'real-provider simulation would drive live transfers.',
+        },
+        { status: 403 },
+      )
     }
 
     const { userId: adminId } = await requireAdmin(request)

@@ -49,6 +49,12 @@ vi.mock('../../payout/flutterwave', () => ({
   FlutterwaveProvider: class {
     constructor(_config: unknown) {}
   },
+  createFlutterwaveProvider: () => ({
+    // Minimal shape the FloatMonitor needs. Actual float checks are
+    // overridden by the FloatMonitor mock above.
+    name: 'FLUTTERWAVE',
+    getWalletBalance: async () => ({ toString: () => '1000000' }),
+  }),
 }))
 
 import { prisma } from '../../../db/client'

@@ -8,18 +8,44 @@ import { FlutterwaveProvider } from './flutterwave'
 import { BudPayProvider } from './budpay'
 
 const MAX_RETRIES = 3
+// Sentinel for the failover retryCount reset. The state machine's
+// NGN_RETRY → PROCESSING_NGN transition increments retryCount, so
+// starting at -1 yields 0 after the transition — i.e., attempt 0 on
+// the new provider. Named to make the arithmetic intent explicit.
+const FAILOVER_RETRY_COUNT_SENTINEL = -1
+
+// Named predicate for the same-provider retry window. `currentCount`
+// is the retryCount read BEFORE the current failure is processed;
+// returns true if another attempt on the same provider is still
+// within the `MAX_RETRIES` budget (attempts 0 and 1 re-try; attempt 2
+// triggers failover).
+function hasSameProviderRetriesRemaining(currentCount: number): boolean {
+  return currentCount < MAX_RETRIES - 1
+}
 
 export class PayoutOrchestrator {
   private readonly primary: PayoutProvider
   private readonly fallback: PayoutProvider
+  private readonly providersByName: Map<PayoutProviderEnum, PayoutProvider>
 
   constructor(primary: PayoutProvider, fallback: PayoutProvider) {
     this.primary = primary
     this.fallback = fallback
+    // Explicit provider map so lookup doesn't implicitly assume
+    // "FLUTTERWAVE === fallback". If the primary/fallback pair ever
+    // swaps (or a third provider is added), this grows without
+    // touching the retry logic.
+    this.providersByName = new Map<PayoutProviderEnum, PayoutProvider>([
+      [primary.name as PayoutProviderEnum, primary],
+      [fallback.name as PayoutProviderEnum, fallback],
+    ])
   }
 
   private getProviderByName(name: PayoutProviderEnum | null): PayoutProvider {
-    return name === PayoutProviderEnum.FLUTTERWAVE ? this.fallback : this.primary
+    // Fallback to primary when name is null (never-attempted transfer)
+    // or when a historical enum value no longer maps to a provider.
+    if (name === null) return this.primary
+    return this.providersByName.get(name) ?? this.primary
   }
 
   private async startPayoutAttempt(
@@ -123,10 +149,10 @@ export class PayoutOrchestrator {
     const currentRetryCount = transfer.retryCount
     const currentProvider = transfer.payoutProvider
 
-    // If retryCount < MAX_RETRIES - 1: re-initiate payout with the same
-    // provider. A pure NGN_RETRY -> PROCESSING_NGN status flip is not a retry;
-    // it just lies about work being in flight.
-    if (currentRetryCount < MAX_RETRIES - 1) {
+    // Same-provider retry window. A pure NGN_RETRY -> PROCESSING_NGN
+    // status flip is not a retry; it just lies about work being in
+    // flight, so we actually re-call the provider's initiatePayout.
+    if (hasSameProviderRetriesRemaining(currentRetryCount)) {
       await transitionTransfer({
         transferId,
         toStatus: TransferStatus.NGN_RETRY,
@@ -154,8 +180,8 @@ export class PayoutOrchestrator {
     }
 
     // retryCount >= MAX_RETRIES - 1 (this retry will make it = MAX_RETRIES).
-    // Primary is BudPay; Flutterwave is the fallback.
-    if (currentProvider === 'BUDPAY') {
+    // Primary (BudPay) exhausted → failover to fallback (Flutterwave).
+    if (currentProvider === PayoutProviderEnum.BUDPAY) {
       // Failover: BudPay → Flutterwave
       // NGN_FAILED -> NGN_RETRY
       await transitionTransfer({
@@ -163,7 +189,11 @@ export class PayoutOrchestrator {
         toStatus: TransferStatus.NGN_RETRY,
         actor: ActorType.SYSTEM,
         expectedStatus: TransferStatus.NGN_FAILED,
-        metadata: { failover: true, fromProvider: 'BUDPAY', toProvider: 'FLUTTERWAVE' },
+        metadata: {
+          failover: true,
+          fromProvider: PayoutProviderEnum.BUDPAY,
+          toProvider: PayoutProviderEnum.FLUTTERWAVE,
+        },
       })
 
       const retryTransfer = await prisma.transfer.findUniqueOrThrow({
@@ -179,10 +209,10 @@ export class PayoutOrchestrator {
         undefined,
         {
           failover: true,
-          fromProvider: 'BUDPAY',
-          toProvider: 'FLUTTERWAVE',
+          fromProvider: PayoutProviderEnum.BUDPAY,
+          toProvider: PayoutProviderEnum.FLUTTERWAVE,
         },
-        { retryCount: -1 },
+        { retryCount: FAILOVER_RETRY_COUNT_SENTINEL },
       )
     }
 
@@ -193,7 +223,10 @@ export class PayoutOrchestrator {
       toStatus: TransferStatus.NEEDS_MANUAL,
       actor: ActorType.SYSTEM,
       expectedStatus: TransferStatus.NGN_FAILED,
-      metadata: { reason, exhaustedProviders: ['BUDPAY', 'FLUTTERWAVE'] },
+      metadata: {
+        reason,
+        exhaustedProviders: [PayoutProviderEnum.BUDPAY, PayoutProviderEnum.FLUTTERWAVE],
+      },
     })
   }
 

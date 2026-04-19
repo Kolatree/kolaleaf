@@ -55,7 +55,10 @@ describe('POST /api/v1/admin/transfers/[id]/simulate-payment', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.unstubAllEnvs()
-    delete process.env.KOLA_USE_STUB_PROVIDERS
+    // Default all tests to stub mode — the route now refuses to run
+    // without it (even outside production). Tests that want to assert
+    // the flag-off behavior explicitly `delete` or override below.
+    process.env.KOLA_USE_STUB_PROVIDERS = 'true'
   })
 
   afterEach(() => {
@@ -65,8 +68,19 @@ describe('POST /api/v1/admin/transfers/[id]/simulate-payment', () => {
 
   it('returns 404 in production when stub flag is off', async () => {
     vi.stubEnv('NODE_ENV', 'production')
+    delete process.env.KOLA_USE_STUB_PROVIDERS
     const res = await POST(req(), { params: Promise.resolve({ id: 't1' }) })
     expect(res.status).toBe(404)
+    expect(mockRequireAdmin).not.toHaveBeenCalled()
+  })
+
+  it('returns 403 in non-prod when stub flag is off (prevents real-provider simulation)', async () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    delete process.env.KOLA_USE_STUB_PROVIDERS
+    const res = await POST(req(), { params: Promise.resolve({ id: 't1' }) })
+    expect(res.status).toBe(403)
+    const body = await res.json()
+    expect(body.error).toBe('stub_mode_required')
     expect(mockRequireAdmin).not.toHaveBeenCalled()
   })
 

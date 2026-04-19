@@ -24,6 +24,13 @@ import Decimal from 'decimal.js'
 let corridorId: string
 
 beforeAll(async () => {
+  // Stub-mode wallet balance used by the Float preflight in
+  // handlePaymentReceived. Without this env var, the stubbed
+  // FlutterwaveProvider reports 0 NGN balance, which trips
+  // MIN_FLOAT_BALANCE_NGN (500000 default) and transitions every
+  // lifecycle transfer straight to FLOAT_INSUFFICIENT. Setting a
+  // generous stub balance keeps the e2e path green.
+  process.env.FLOAT_BALANCE_NGN = '10000000'
   await cleanupTestData()
   corridorId = await getTestCorridorId()
 })

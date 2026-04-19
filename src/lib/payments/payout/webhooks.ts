@@ -52,7 +52,17 @@ export async function handleFlutterwaveWebhook(
   }
 
   const body = JSON.parse(rawBody) as FlutterwaveWebhookPayload
+  // Validate the event key before use. An empty/missing `data.id`
+  // would otherwise poison the (provider, eventId) unique constraint
+  // with a row keyed on `'undefined'` / `''` that would silently
+  // short-circuit every subsequent malformed delivery as "duplicate."
+  if (body.data?.id === undefined || body.data?.id === null) {
+    throw new Error('Flutterwave webhook missing data.id')
+  }
   const eventId = String(body.data.id)
+  if (eventId === '' || eventId === 'undefined' || eventId === 'null') {
+    throw new Error('Flutterwave webhook has empty data.id')
+  }
   const providerRef = eventId
 
   // Atomically claim the event.
@@ -152,7 +162,13 @@ export async function handleBudPayWebhook(
   }
 
   const body = JSON.parse(rawBody) as BudPayWebhookPayload
-  const eventId = body.data.reference
+  // Validate the event key before use. See the matching guard in
+  // handleFlutterwaveWebhook — an empty-string reference would
+  // permanently poison the dedup row for this provider.
+  const eventId = body.data?.reference
+  if (typeof eventId !== 'string' || eventId.trim() === '') {
+    throw new Error('BudPay webhook missing or empty data.reference')
+  }
   const eventType = body.notify ?? body.event ?? 'transfer'
 
   try {

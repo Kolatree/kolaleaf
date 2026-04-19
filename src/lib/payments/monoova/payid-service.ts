@@ -6,13 +6,13 @@ import {
   TransferNotFoundError,
   KycNotVerifiedError,
 } from '../../transfers/errors'
-import { isKycGateDisabled } from '../../kyc/flag'
+import { isKycGateDisabled, assertKycGateSafe } from '../../kyc/flag'
 import { isStubProvidersEnabled } from '../flag'
 import { log } from '../../obs/logger'
 import type { MonoovaClient } from './client'
 import type { Transfer } from '../../../generated/prisma/client'
 import { FloatMonitor } from '../payout/float-monitor'
-import { FlutterwaveProvider } from '../payout/flutterwave'
+import { createFlutterwaveProvider } from '../payout/flutterwave'
 
 const AMOUNT_TOLERANCE = new Decimal('0.01')
 
@@ -33,6 +33,10 @@ export async function generatePayIdForTransfer(
   // transaction-flow testing before Sumsub keys land. Never set
   // this in production.
   const user = await prisma.user.findUniqueOrThrow({ where: { id: transfer.userId } })
+  // Production tripwire — throws if KOLA_DISABLE_KYC_GATE is set in
+  // production, which must never happen. Evaluates before the flag
+  // read so a stray env var cannot disable the AUSTRAC gate.
+  assertKycGateSafe()
   if (!isKycGateDisabled() && user.kycStatus !== 'VERIFIED') {
     throw new KycNotVerifiedError(transfer.userId)
   }
@@ -107,13 +111,23 @@ export async function handlePaymentReceived(
     },
   })
 
+  // Float preflight. Checks Flutterwave's NGN wallet balance as a
+  // proxy for corridor-wide float health — Flutterwave holds the
+  // operational NGN float even though BudPay is the primary
+  // disburser; BudPay draws from the same treasury pool. If BudPay
+  // gets its own independent wallet in the future, extend this
+  // check to include both.
+  //
+  // Policy on preflight failure (network error, stale Flutterwave
+  // creds, transient 5xx): FAIL-OPEN. The transfer is already in
+  // AUD_RECEIVED (we accepted the customer's AUD); blocking payout
+  // on a read-only health check would trap legitimate money in
+  // limbo and break the webhook-ack SLA. If BudPay actually lacks
+  // balance, `initiatePayout` below surfaces `InsufficientBalanceError`
+  // and the orchestrator routes to FLUTTERWAVE → NEEDS_MANUAL. The
+  // reconciliation cron is the backstop for any drift.
   try {
-    const floatMonitor = new FloatMonitor(
-      new FlutterwaveProvider({
-        secretKey: process.env.FLUTTERWAVE_SECRET_KEY ?? '',
-        apiUrl: process.env.FLUTTERWAVE_API_URL ?? 'https://api.flutterwave.com/v3',
-      }),
-    )
+    const floatMonitor = new FloatMonitor(createFlutterwaveProvider())
     const floatStatus = await floatMonitor.checkFloatBalance()
     if (!floatStatus.sufficient) {
       return transitionTransfer({
@@ -130,6 +144,8 @@ export async function handlePaymentReceived(
       })
     }
   } catch (err) {
+    // FAIL-OPEN per the policy comment above. Falls through to the
+    // orchestrator kickoff below.
     log('error', 'float.preflight.failed', {
       transferId,
       error: err instanceof Error ? err.message : String(err),

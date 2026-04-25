@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db/client'
 import { requireAuth, AuthError } from '@/lib/auth/middleware'
 import { normalizePhone, verifySmsCode, InvalidPhoneError } from '@/lib/auth/phone'
 import { parseBody } from '@/lib/http/validate'
+import { log } from '@/lib/obs/logger'
 import { VerifyPhoneBody } from './_schemas'
 
 const MAX_ATTEMPTS = 5
@@ -97,7 +98,7 @@ export async function POST(request: Request) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode })
     }
-    console.error('[account/phone/verify]', error)
+    log('error', 'account.phone.verify.failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'server_error' }, { status: 500 })
   }
 }

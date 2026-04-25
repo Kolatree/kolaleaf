@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { checkAndAlertFloat } from '@/lib/workers/float-alert'
 import { authorizeCron } from '@/lib/auth/cron-auth'
+import { log } from '@/lib/obs/logger'
 
 export async function POST(request: Request) {
   if (!authorizeCron(request)) {
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
       resumedCount: result.resumedCount,
     })
   } catch (err) {
-    console.error('[cron/float]', err)
+    log('error', 'cron.float.failed', { error: err instanceof Error ? err.message : String(err) })
     return NextResponse.json({ error: 'Float check failed' }, { status: 500 })
   }
 }

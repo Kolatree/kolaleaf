@@ -4,10 +4,10 @@ import Decimal from 'decimal.js'
 import {
   BudPayStatementClient,
   createBudPayStatementClient,
-  validateBudPayStatementConfig,
 } from '@/lib/reconciliation/budpay-statement-client'
+import { validateProviderConfig } from '@/lib/reconciliation/base-statement-client'
 
-describe('validateBudPayStatementConfig', () => {
+describe('validateProviderConfig (BudPay)', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
     delete process.env.BUDPAY_API_URL
@@ -19,7 +19,13 @@ describe('validateBudPayStatementConfig', () => {
     delete process.env.BUDPAY_API_URL
     delete process.env.BUDPAY_SECRET_KEY
 
-    expect(() => validateBudPayStatementConfig()).toThrow(/BudPay.*missing/i)
+    expect(() =>
+      validateProviderConfig({
+        urlEnv: 'BUDPAY_API_URL',
+        keyEnv: 'BUDPAY_SECRET_KEY',
+        providerName: 'BudPay',
+      }),
+    ).toThrow(/BudPay.*missing/i)
   })
 
   it('returns isMock=true in dev/test when creds are missing', () => {
@@ -27,7 +33,11 @@ describe('validateBudPayStatementConfig', () => {
     delete process.env.BUDPAY_API_URL
     delete process.env.BUDPAY_SECRET_KEY
 
-    const cfg = validateBudPayStatementConfig()
+    const cfg = validateProviderConfig({
+      urlEnv: 'BUDPAY_API_URL',
+      keyEnv: 'BUDPAY_SECRET_KEY',
+      providerName: 'BudPay',
+    })
     expect(cfg.isMock).toBe(true)
     expect(cfg.apiKey).toBe('')
   })
@@ -37,7 +47,11 @@ describe('validateBudPayStatementConfig', () => {
     process.env.BUDPAY_API_URL = 'https://api.budpay.com'
     process.env.BUDPAY_SECRET_KEY = 'sk_live_xxx'
 
-    const cfg = validateBudPayStatementConfig()
+    const cfg = validateProviderConfig({
+      urlEnv: 'BUDPAY_API_URL',
+      keyEnv: 'BUDPAY_SECRET_KEY',
+      providerName: 'BudPay',
+    })
     expect(cfg.isMock).toBe(false)
     expect(cfg.apiUrl).toBe('https://api.budpay.com')
     expect(cfg.apiKey).toBe('sk_live_xxx')

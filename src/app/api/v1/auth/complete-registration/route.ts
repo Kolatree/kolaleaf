@@ -12,6 +12,7 @@ import { logAuthEvent, logAuthEventsMany } from '@/lib/auth/audit'
 import type { CompleteRegistrationReason } from '@/lib/auth/reasons'
 import { jsonError } from '@/lib/http/json-error'
 import { parseBody } from '@/lib/http/validate'
+import { log } from '@/lib/obs/logger'
 import { extractRequestContext } from '@/lib/security/request-context'
 import { CompleteRegistrationBody } from './_schemas'
 
@@ -243,15 +244,10 @@ export async function POST(request: Request) {
     ) {
       return fail('already_registered', 'Email already registered', 409)
     }
-    console.error(
-      JSON.stringify({
-        level: 'error',
-        route: 'auth/complete-registration',
-        reason: 'unexpected',
-        error: err instanceof Error ? err.message : String(err),
-        ts: new Date().toISOString(),
-      }),
-    )
+    log('error', 'auth.complete-registration.failed', {
+      reason: 'unexpected',
+      error: err instanceof Error ? err.message : String(err),
+    })
     return fail('unexpected', 'Registration failed', 500)
   }
 }

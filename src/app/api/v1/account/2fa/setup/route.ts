@@ -9,6 +9,7 @@ import {
 } from '@/lib/auth/totp'
 import { issueSmsChallenge } from '@/lib/auth/two-factor-challenge'
 import { parseBody } from '@/lib/http/validate'
+import { log } from '@/lib/obs/logger'
 import { Setup2faBody } from './_schemas'
 
 // POST /api/account/2fa/setup
@@ -89,7 +90,7 @@ export async function POST(request: Request) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode })
     }
-    console.error('[account/2fa/setup]', error)
+    log('error', 'account.2fa.setup.failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'server_error' }, { status: 500 })
   }
 }

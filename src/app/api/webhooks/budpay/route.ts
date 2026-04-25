@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { verifyBudPaySignature } from '@/lib/payments/payout/verify-signature'
 import { getWebhookDispatcher } from '@/lib/queue'
+import { log } from '@/lib/obs/logger'
 
 // BudPay payout webhook receiver.
 //
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
   const webhookSecret = process.env.BUDPAY_WEBHOOK_SECRET
 
   if (!webhookSecret) {
-    console.error('[webhooks/budpay] BUDPAY_WEBHOOK_SECRET not configured')
+    log('error', 'webhooks.budpay.secret-not-configured', {})
     return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 })
   }
 
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
     rawBody = await request.text()
     JSON.parse(rawBody)
   } catch (err) {
-    console.error('[webhooks/budpay] invalid payload', err)
+    log('error', 'webhooks.budpay.invalid-payload', { error: err instanceof Error ? err.message : String(err) })
     return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
   }
 
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
     })
     return NextResponse.json({ received: true })
   } catch (error) {
-    console.error('[webhooks/budpay] dispatch failed', error)
+    log('error', 'webhooks.budpay.dispatch.failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 })
   }
 }

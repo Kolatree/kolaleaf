@@ -1,8 +1,33 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('@/lib/auth/admin-middleware', () => ({
-  requireAdmin: vi.fn(),
+const { _requireAdmin } = vi.hoisted(() => ({
+  _requireAdmin: vi.fn(),
 }))
+vi.mock('@/lib/auth/admin-middleware', () => {
+  const { NextResponse } = require('next/server')
+  return {
+    requireAdmin: _requireAdmin,
+    getAdminEmails: () => ['admin@kolaleaf.com'],
+    withAdmin: (handler: Function) => async (request: Request) => {
+      try {
+        const { userId } = await _requireAdmin(request)
+        return await handler(request, userId)
+      } catch (error: any) {
+        if (error?.name === 'AuthError') {
+          return NextResponse.json({ error: error.message, reason: error.message }, { status: error.statusCode })
+        }
+        const msg = error instanceof Error ? error.message : 'Request failed'
+        if (error?.name === 'InvalidTransitionError' || error?.name === 'ConcurrentModificationError') {
+          return NextResponse.json({ error: msg, reason: 'conflict' }, { status: 409 })
+        }
+        if (error?.name === 'TransferNotFoundError') {
+          return NextResponse.json({ error: msg, reason: 'transfer_not_found' }, { status: 404 })
+        }
+        return NextResponse.json({ error: 'Internal server error', reason: 'internal_error' }, { status: 500 })
+      }
+    },
+  }
+})
 
 vi.mock('@/lib/auth/middleware', () => ({
   AuthError: class extends Error {
@@ -28,6 +53,10 @@ vi.mock('@/lib/payments/payout/orchestrator', () => ({
 
 vi.mock('@/lib/auth/audit', () => ({
   logAuthEvent: vi.fn(async () => undefined),
+}))
+
+vi.mock('@/lib/obs/logger', () => ({
+  log: vi.fn(),
 }))
 
 import { POST as REFUND } from '@/app/api/v1/admin/transfers/[id]/refund/route'
@@ -58,7 +87,6 @@ describe('admin/transfers/[id]/{refund,retry}', () => {
     mockRequireAdmin.mockRejectedValueOnce(new AuthError(401, 'Unauthenticated'))
     const res = await REFUND(
       req('http://localhost/api/v1/admin/transfers/t1/refund'),
-      { params: Promise.resolve({ id: 't1' }) },
     )
     expect(res.status).toBe(401)
   })
@@ -70,7 +98,6 @@ describe('admin/transfers/[id]/{refund,retry}', () => {
       req('http://localhost/api/v1/admin/transfers/t1/refund', {
         refundReference: 'bank-receipt-123',
       }),
-      { params: Promise.resolve({ id: 't1' }) },
     )
     expect(res.status).toBe(200)
   })
@@ -79,7 +106,6 @@ describe('admin/transfers/[id]/{refund,retry}', () => {
     mockRequireAdmin.mockResolvedValueOnce({ userId: 'admin' } as never)
     const res = await REFUND(
       req('http://localhost/api/v1/admin/transfers/t1/refund', {}),
-      { params: Promise.resolve({ id: 't1' }) },
     )
     expect(res.status).toBe(400)
   })
@@ -89,7 +115,6 @@ describe('admin/transfers/[id]/{refund,retry}', () => {
     mockHandleManualRetry.mockRejectedValueOnce(new InvalidTransitionError('NEEDS_MANUAL', 'PROCESSING_NGN'))
     const res = await RETRY(
       req('http://localhost/api/v1/admin/transfers/t1/retry'),
-      { params: Promise.resolve({ id: 't1' }) },
     )
     expect(res.status).toBe(409)
   })
@@ -104,7 +129,6 @@ describe('admin/transfers/[id]/{refund,retry}', () => {
     } as never)
     const res = await RETRY(
       req('http://localhost/api/v1/admin/transfers/t1/retry'),
-      { params: Promise.resolve({ id: 't1' }) },
     )
     expect(res.status).toBe(200)
   })

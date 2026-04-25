@@ -4,6 +4,7 @@ import { requireAuth, AuthError } from '@/lib/auth/middleware'
 import { normalizePhone, generateSmsCode, InvalidPhoneError } from '@/lib/auth/phone'
 import { sendSms } from '@/lib/sms'
 import { parseBody } from '@/lib/http/validate'
+import { log } from '@/lib/obs/logger'
 import { AddPhoneBody } from './_schemas'
 
 const CODE_TTL_MS = 10 * 60 * 1000 // 10 minutes
@@ -120,7 +121,7 @@ export async function POST(request: Request) {
     if (!smsResult.ok) {
       // Row is persisted; user can retry via another POST. Do not 5xx — that
       // would imply state corruption. Log for ops visibility.
-      console.error('[phone/add] SMS send failed:', smsResult.error)
+      log('error', 'phone.add.sms-send.failed', { error: smsResult.error })
     }
 
     return NextResponse.json({ sent: true }, { status: 200 })
@@ -128,7 +129,7 @@ export async function POST(request: Request) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode })
     }
-    console.error('[account/phone/add]', error)
+    log('error', 'account.phone.add.failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'server_error' }, { status: 500 })
   }
 }

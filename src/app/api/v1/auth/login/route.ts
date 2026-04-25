@@ -80,7 +80,7 @@ export async function POST(request: Request) {
           recipientName: error.fullName,
         })
       } catch (issueErr) {
-        console.error('[auth/login] verification code issue failed', issueErr)
+        log('error', 'auth.login.verification-code-issue.failed', { error: issueErr instanceof Error ? issueErr.message : String(issueErr) })
         // Continue — surface the verification-required state to the client
         // anyway; the user can hit "resend" from the verify page.
       }
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
     // Never leak the underlying error to the client — a DB error or internal
     // failure would otherwise surface in the HTTP body. Log the raw error so
     // operators can debug, and respond with a uniform "Login failed".
-    console.error('[auth/login]', error)
+    log('error', 'auth.login.failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Login failed' }, { status: 401 })
   }
 }

@@ -1,11 +1,7 @@
 import Decimal from 'decimal.js'
-import {
-  withRetry,
-  errorForStatus,
-  ProviderPermanentError,
-  ProviderTemporaryError,
-} from '@/lib/http/retry'
+import { withRetry } from '@/lib/http/retry'
 import type { StatementClient, StatementEntry } from './types'
+import { BaseStatementClient, validateProviderConfig } from './base-statement-client'
 
 /**
  * BudPay NGN payout statement client (primary provider).
@@ -36,30 +32,6 @@ import type { StatementClient, StatementEntry } from './types'
  * import, so `next build` can traverse importers without creds wired.
  */
 
-export interface BudPayStatementConfig {
-  apiUrl: string
-  apiKey: string
-  isMock: boolean
-}
-
-export function validateBudPayStatementConfig(): BudPayStatementConfig {
-  const apiUrl = process.env.BUDPAY_API_URL
-  const apiKey = process.env.BUDPAY_SECRET_KEY
-  const isProduction = process.env.NODE_ENV === 'production'
-
-  if (isProduction && (!apiUrl || !apiKey)) {
-    throw new Error(
-      'BudPay statement config missing in production: BUDPAY_API_URL, BUDPAY_SECRET_KEY',
-    )
-  }
-
-  return {
-    apiUrl: apiUrl ?? '',
-    apiKey: apiKey ?? '',
-    isMock: !apiUrl || !apiKey,
-  }
-}
-
 interface BudPayTransferRaw {
   reference?: string
   amount?: number | string
@@ -68,13 +40,8 @@ interface BudPayTransferRaw {
   status?: string
 }
 
-export class BudPayStatementClient implements StatementClient {
+export class BudPayStatementClient extends BaseStatementClient {
   public readonly provider = 'budpay' as const
-
-  constructor(
-    private readonly baseUrl: string,
-    private readonly apiKey: string,
-  ) {}
 
   async fetchStatement(from: Date, to: Date): Promise<StatementEntry[]> {
     const qs = new URLSearchParams({
@@ -112,40 +79,6 @@ export class BudPayStatementClient implements StatementClient {
 
     return entries
   }
-
-  private async request<T>(url: string, signal: AbortSignal): Promise<T> {
-    let response: Response
-    try {
-      response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        signal,
-      })
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') throw err
-      throw new ProviderTemporaryError(
-        `BudPay network error: ${String(err)}`,
-      )
-    }
-
-    if (!response.ok) {
-      throw errorForStatus(
-        response.status,
-        `BudPay API error: ${response.status}`,
-      )
-    }
-
-    try {
-      return (await response.json()) as T
-    } catch (err) {
-      throw new ProviderPermanentError(
-        `BudPay response parse error: ${String(err)}`,
-      )
-    }
-  }
 }
 
 /**
@@ -162,7 +95,11 @@ class BudPayStatementMockClient implements StatementClient {
 }
 
 export function createBudPayStatementClient(): StatementClient {
-  const { apiUrl, apiKey, isMock } = validateBudPayStatementConfig()
+  const { apiUrl, apiKey, isMock } = validateProviderConfig({
+    urlEnv: 'BUDPAY_API_URL',
+    keyEnv: 'BUDPAY_SECRET_KEY',
+    providerName: 'BudPay',
+  })
   if (isMock) return new BudPayStatementMockClient()
   return new BudPayStatementClient(apiUrl, apiKey)
 }

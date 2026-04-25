@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { issuePendingEmailCode } from '@/lib/auth/pending-email-verification'
 import { parseBody } from '@/lib/http/validate'
+import { log } from '@/lib/obs/logger'
 import { SendCodeBody } from './_schemas'
 
 // POST /api/v1/auth/send-code
@@ -38,30 +39,19 @@ export async function POST(request: Request) {
   issuePendingEmailCode({ email })
     .then(async (result) => {
       if (!result.ok) {
-        console.error(
-          JSON.stringify({
-            level: 'warn',
-            route: 'auth/send-code',
-            reason: result.reason,
-            emailHash: await sha256Hex(email),
-            ts: new Date().toISOString(),
-            ...('providerError' in result ? { providerError: result.providerError } : {}),
-            ...('retryAfterMs' in result ? { retryAfterMs: result.retryAfterMs } : {}),
-          }),
-        )
+        log('warn', 'auth.send-code.issue.failed', {
+          reason: result.reason,
+          emailHash: await sha256Hex(email),
+          ...('providerError' in result ? { providerError: result.providerError } : {}),
+          ...('retryAfterMs' in result ? { retryAfterMs: result.retryAfterMs } : {}),
+        })
       }
     })
     .catch(async (err) => {
-      console.error(
-        JSON.stringify({
-          level: 'error',
-          route: 'auth/send-code',
-          reason: 'unexpected',
-          emailHash: await sha256Hex(email),
-          error: err instanceof Error ? err.message : String(err),
-          ts: new Date().toISOString(),
-        }),
-      )
+      log('error', 'auth.send-code.unexpected', {
+        emailHash: await sha256Hex(email),
+        error: err instanceof Error ? err.message : String(err),
+      })
     })
 
   return NextResponse.json({ ok: true }, { status: 200 })

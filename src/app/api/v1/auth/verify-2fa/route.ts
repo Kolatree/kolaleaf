@@ -13,6 +13,7 @@ import { createSession } from '@/lib/auth/sessions'
 import { extractRequestContext } from '@/lib/security/request-context'
 import { recordSecurityAnomalyCheck } from '@/lib/security/anomaly'
 import { parseBody } from '@/lib/http/validate'
+import { log } from '@/lib/obs/logger'
 import { Verify2faBody } from './_schemas'
 
 // POST /api/v1/auth/verify-2fa
@@ -174,7 +175,7 @@ export async function POST(request: Request) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode })
     }
-    console.error('[auth/verify-2fa]', error)
+    log('error', 'auth.verify-2fa.failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Verification failed' }, { status: 500 })
   }
 }

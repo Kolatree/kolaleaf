@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { issueVerificationCode } from '@/lib/auth/email-verification'
 import { parseBody } from '@/lib/http/validate'
+import { log } from '@/lib/obs/logger'
 import { ResendVerificationBody } from './_schemas'
 
 // POST /api/v1/auth/resend-verification
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
       recipientName: ident.user.fullName,
     })
   } catch (err) {
-    console.error('[auth/resend-verification] issue failed', err)
+    log('error', 'auth.resend-verification.issue.failed', { error: err instanceof Error ? err.message : String(err) })
     // Still return 200 — see preamble. The failure is captured in logs.
   }
 

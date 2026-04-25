@@ -1,9 +1,37 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import Decimal from 'decimal.js'
 
-vi.mock('@/lib/auth/admin-middleware', () => ({
-  requireAdmin: vi.fn(),
+const { _requireAdmin } = vi.hoisted(() => ({
+  _requireAdmin: vi.fn(),
 }))
+vi.mock('@/lib/auth/admin-middleware', () => {
+  const { NextResponse } = require('next/server')
+  return {
+    requireAdmin: _requireAdmin,
+    getAdminEmails: () => ['admin@kolaleaf.com'],
+    withAdmin: (handler: Function) => async (request: Request) => {
+      try {
+        const { userId } = await _requireAdmin(request)
+        return await handler(request, userId)
+      } catch (error: any) {
+        if (error?.name === 'AuthError') {
+          return NextResponse.json({ error: error.message }, { status: error.statusCode })
+        }
+        const msg = error instanceof Error ? error.message : 'Request failed'
+        if (error?.name === 'InvalidTransitionError' || error?.name === 'ConcurrentModificationError') {
+          return NextResponse.json({ error: msg }, { status: 409 })
+        }
+        if (error?.name === 'TransferNotFoundError') {
+          return NextResponse.json({ error: msg }, { status: 404 })
+        }
+        if (msg.includes('Amount mismatch')) {
+          return NextResponse.json({ error: msg }, { status: 400 })
+        }
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+      }
+    },
+  }
+})
 vi.mock('@/lib/auth/middleware', () => ({
   AuthError: class extends Error {
     statusCode: number
@@ -26,6 +54,9 @@ vi.mock('@/lib/payments/monoova/payid-service', () => ({
 }))
 vi.mock('@/lib/auth/audit', () => ({
   logAuthEvent: vi.fn(async () => undefined),
+}))
+vi.mock('@/lib/obs/logger', () => ({
+  log: vi.fn(),
 }))
 
 import { POST } from '@/app/api/v1/admin/transfers/[id]/simulate-payment/route'
@@ -69,19 +100,21 @@ describe('POST /api/v1/admin/transfers/[id]/simulate-payment', () => {
   it('returns 404 in production when stub flag is off', async () => {
     vi.stubEnv('NODE_ENV', 'production')
     delete process.env.KOLA_USE_STUB_PROVIDERS
-    const res = await POST(req(), { params: Promise.resolve({ id: 't1' }) })
+    // Auth runs first via withAdmin; stub check runs inside handler.
+    mockRequireAdmin.mockResolvedValueOnce({ userId: 'admin' } as never)
+    const res = await POST(req())
     expect(res.status).toBe(404)
-    expect(mockRequireAdmin).not.toHaveBeenCalled()
   })
 
   it('returns 403 in non-prod when stub flag is off (prevents real-provider simulation)', async () => {
     vi.stubEnv('NODE_ENV', 'development')
     delete process.env.KOLA_USE_STUB_PROVIDERS
-    const res = await POST(req(), { params: Promise.resolve({ id: 't1' }) })
+    // Auth runs first via withAdmin; stub check runs inside handler.
+    mockRequireAdmin.mockResolvedValueOnce({ userId: 'admin' } as never)
+    const res = await POST(req())
     expect(res.status).toBe(403)
     const body = await res.json()
     expect(body.error).toBe('stub_mode_required')
-    expect(mockRequireAdmin).not.toHaveBeenCalled()
   })
 
   it('allows access in production when stub flag is on', async () => {
@@ -91,14 +124,14 @@ describe('POST /api/v1/admin/transfers/[id]/simulate-payment', () => {
     mockFindUnique.mockResolvedValueOnce({ sendAmount: new Decimal('250') } as never)
     mockHandlePayment.mockResolvedValueOnce({ id: 't1', status: 'COMPLETED' } as never)
 
-    const res = await POST(req(), { params: Promise.resolve({ id: 't1' }) })
+    const res = await POST(req())
     expect(res.status).toBe(200)
   })
 
   it('returns 403 when caller is not an admin', async () => {
     vi.stubEnv('NODE_ENV', 'test')
     mockRequireAdmin.mockRejectedValueOnce(new AuthError(403, 'Admin required'))
-    const res = await POST(req(), { params: Promise.resolve({ id: 't1' }) })
+    const res = await POST(req())
     expect(res.status).toBe(403)
     expect(mockHandlePayment).not.toHaveBeenCalled()
   })
@@ -109,7 +142,7 @@ describe('POST /api/v1/admin/transfers/[id]/simulate-payment', () => {
     mockFindUnique.mockResolvedValueOnce({ sendAmount: new Decimal('1234.50') } as never)
     mockHandlePayment.mockResolvedValueOnce({ id: 't1', status: 'AUD_RECEIVED' } as never)
 
-    const res = await POST(req(), { params: Promise.resolve({ id: 't1' }) })
+    const res = await POST(req())
 
     expect(res.status).toBe(200)
     const [callTransferId, callAmount] = mockHandlePayment.mock.calls[0]
@@ -125,7 +158,6 @@ describe('POST /api/v1/admin/transfers/[id]/simulate-payment', () => {
 
     const res = await POST(
       req({ amount: '1000.00' }),
-      { params: Promise.resolve({ id: 't1' }) },
     )
 
     expect(res.status).toBe(200)
@@ -136,7 +168,7 @@ describe('POST /api/v1/admin/transfers/[id]/simulate-payment', () => {
     vi.stubEnv('NODE_ENV', 'test')
     mockRequireAdmin.mockResolvedValueOnce({ userId: 'admin' } as never)
     mockFindUnique.mockResolvedValueOnce(null)
-    const res = await POST(req(), { params: Promise.resolve({ id: 't1' }) })
+    const res = await POST(req())
     expect(res.status).toBe(404)
     expect(mockHandlePayment).not.toHaveBeenCalled()
   })
@@ -150,7 +182,6 @@ describe('POST /api/v1/admin/transfers/[id]/simulate-payment', () => {
     )
     const res = await POST(
       req({ amount: '249.00' }),
-      { params: Promise.resolve({ id: 't1' }) },
     )
     expect(res.status).toBe(400)
   })
@@ -161,7 +192,7 @@ describe('POST /api/v1/admin/transfers/[id]/simulate-payment', () => {
     mockFindUnique.mockResolvedValueOnce({ sendAmount: new Decimal('500') } as never)
     mockHandlePayment.mockResolvedValueOnce({ id: 't1', status: 'COMPLETED' } as never)
 
-    await POST(req(), { params: Promise.resolve({ id: 't1' }) })
+    await POST(req())
 
     expect(mockLogAuthEvent).toHaveBeenCalledWith(
       expect.objectContaining({

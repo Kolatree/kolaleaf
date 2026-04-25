@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { checkAndAlertStaleness } from '@/lib/workers/staleness-alert'
 import { authorizeCron } from '@/lib/auth/cron-auth'
+import { log } from '@/lib/obs/logger'
 
 export async function POST(request: Request) {
   if (!authorizeCron(request)) {
@@ -11,7 +12,7 @@ export async function POST(request: Request) {
     const result = await checkAndAlertStaleness()
     return NextResponse.json(result)
   } catch (err) {
-    console.error('[cron/staleness]', err)
+    log('error', 'cron.staleness.failed', { error: err instanceof Error ? err.message : String(err) })
     return NextResponse.json({ error: 'Staleness check failed' }, { status: 500 })
   }
 }

@@ -72,6 +72,29 @@ export class PermanentPaymentError extends Error {
   }
 }
 
+/**
+ * Map well-known transfer domain errors to HTTP status codes.
+ *
+ * Returns `{ status, reason }` for recognised errors, or `null` for
+ * anything unrecognised so callers can fall through to a generic 500.
+ * Used by the `withAdmin` HOF (and any future route-level catch block)
+ * to avoid repeating the same instanceof chain in every admin route.
+ */
+export function classifyTransferError(
+  error: unknown,
+): { status: number; reason: string } | null {
+  if (
+    error instanceof InvalidTransitionError ||
+    error instanceof ConcurrentModificationError
+  ) {
+    return { status: 409, reason: 'conflict' }
+  }
+  if (error instanceof TransferNotFoundError) {
+    return { status: 404, reason: 'transfer_not_found' }
+  }
+  return null
+}
+
 // User-friendly error raised when a cancel is attempted against a
 // transfer that has already progressed past AWAITING_AUD. Distinct
 // from InvalidTransitionError so route handlers can surface a

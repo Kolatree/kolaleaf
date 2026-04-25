@@ -7,6 +7,7 @@ import {
 } from '@/lib/auth/password'
 import { requireAuth, AuthError } from '@/lib/auth/middleware'
 import { parseBody } from '@/lib/http/validate'
+import { log } from '@/lib/obs/logger'
 import { ChangePasswordBody } from './_schemas'
 
 // POST /api/account/change-password { currentPassword, newPassword }
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode })
     }
-    console.error('[account/change-password]', error)
+    log('error', 'account.change-password.failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json(
       { error: 'Unable to change password' },
       { status: 500 },

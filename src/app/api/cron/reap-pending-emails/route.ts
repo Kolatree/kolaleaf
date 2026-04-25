@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { authorizeCron } from '@/lib/auth/cron-auth'
+import { log } from '@/lib/obs/logger'
 
 // POST /api/cron/reap-pending-emails
 //
@@ -55,17 +56,13 @@ export async function POST(request: Request) {
       ts: now.toISOString(),
     }
 
-    console.log(JSON.stringify({ level: 'info', route: 'cron/reap-pending-emails', ...out }))
+    log('info', 'cron.reap-pending-emails.completed', out)
     return NextResponse.json(out)
   } catch (err) {
-    console.error(
-      JSON.stringify({
-        level: 'error',
-        route: 'cron/reap-pending-emails',
-        error: err instanceof Error ? err.message : String(err),
-        ts: now.toISOString(),
-      }),
-    )
+    log('error', 'cron.reap-pending-emails.failed', {
+      error: err instanceof Error ? err.message : String(err),
+      ts: now.toISOString(),
+    })
     return NextResponse.json(
       { error: 'Janitor sweep failed' },
       { status: 500 },

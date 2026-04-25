@@ -3,6 +3,7 @@ import { Prisma } from '@/generated/prisma/client'
 import { requireAdmin } from '@/lib/auth/admin-middleware'
 import { AuthError } from '@/lib/auth/middleware'
 import { prisma } from '@/lib/db/client'
+import { log } from '@/lib/obs/logger'
 
 export async function GET(
   request: Request,
@@ -33,7 +34,7 @@ export async function GET(
     ) {
       return NextResponse.json({ error: 'not_found' }, { status: 404 })
     }
-    console.error('[admin/transfers/[id]]', error)
+    log('error', 'admin.transfers.detail.failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Failed to fetch transfer' }, { status: 500 })
   }
 }

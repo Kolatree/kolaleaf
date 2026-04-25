@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getCurrentRateByPair } from '@/lib/rates'
+import { log } from '@/lib/obs/logger'
 
 // Public read-only rate endpoint.
 //
@@ -53,7 +54,7 @@ export async function GET(request: Request) {
       },
     )
   } catch (err) {
-    console.error('[api/rates/public]', err)
+    log('error', 'rates.public.failed', { error: err instanceof Error ? err.message : String(err) })
     return NextResponse.json({ error: 'Failed to get rate' }, { status: 500 })
   }
 }

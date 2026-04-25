@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server'
 import { RateService } from '@/lib/rates'
 import { DefaultFxRateProvider } from '@/lib/rates'
+import { log } from '@/lib/obs/logger'
 
 const rateService = new RateService(new DefaultFxRateProvider())
 
@@ -24,7 +25,7 @@ export async function GET(
       effectiveAt: rate.effectiveAt.toISOString(),
     })
   } catch (err) {
-    console.error('[api/rates/[corridorId]]', err)
+    log('error', 'rates.corridor.failed', { error: err instanceof Error ? err.message : String(err) })
     return NextResponse.json({ error: 'Failed to get rate' }, { status: 500 })
   }
 }

@@ -5,6 +5,7 @@ import { requireAuth, AuthError } from '@/lib/auth/middleware'
 import { verifyTotpCodeWithReplay, verifyBackupCode, generateBackupCodes } from '@/lib/auth/totp'
 import { verifyChallenge } from '@/lib/auth/two-factor-challenge'
 import { parseBody } from '@/lib/http/validate'
+import { log } from '@/lib/obs/logger'
 import { RegenerateBackupCodesBody } from './_schemas'
 
 // POST /api/account/2fa/regenerate-backup-codes
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode })
     }
-    console.error('[account/2fa/regenerate-backup-codes]', error)
+    log('error', 'account.2fa.regenerate-backup-codes.failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'server_error' }, { status: 500 })
   }
 }

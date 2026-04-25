@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { requireAuth, AuthError } from '@/lib/auth/middleware'
+import { log } from '@/lib/obs/logger'
 
 // DELETE /api/account/email/[id]
 //
@@ -60,7 +61,7 @@ export async function DELETE(
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode })
     }
-    console.error('[account/email/remove]', error)
+    log('error', 'account.email.remove.failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json(
       { error: 'Unable to remove email' },
       { status: 500 },

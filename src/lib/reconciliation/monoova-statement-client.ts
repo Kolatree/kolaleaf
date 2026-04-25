@@ -1,11 +1,7 @@
 import Decimal from 'decimal.js'
-import {
-  withRetry,
-  errorForStatus,
-  ProviderPermanentError,
-  ProviderTemporaryError,
-} from '../http/retry'
+import { withRetry } from '@/lib/http/retry'
 import type { StatementClient, StatementEntry } from './types'
+import { BaseStatementClient, validateProviderConfig } from './base-statement-client'
 
 /**
  * Monoova statement (reconciliation) client.
@@ -28,10 +24,10 @@ import type { StatementClient, StatementEntry } from './types'
  *     ] }
  *
  * Config: `MONOOVA_STATEMENT_API_URL` and `MONOOVA_API_KEY` are required in
- * production; missing either throws at `validateMonoovaStatementConfig()`
- * time. Dev/test without creds returns an empty `StatementEntry[]` rather
- * than silently fabricating data — a reconciliation gap must surface to
- * operators, not be masked by fake fixtures.
+ * production; missing either throws at factory time. Dev/test without creds
+ * returns an empty `StatementEntry[]` rather than silently fabricating data —
+ * a reconciliation gap must surface to operators, not be masked by fake
+ * fixtures.
  *
  * Validation is LAZY (first-use, not module-load) so `next build` can
  * evaluate modules that transitively import this file before env is wired.
@@ -40,35 +36,6 @@ import type { StatementClient, StatementEntry } from './types'
  * PayID). The diff engine uses `direction === 'credit'` to match against
  * `Transfer.payidProviderRef`.
  */
-
-export interface MonoovaStatementConfig {
-  apiUrl: string
-  apiKey: string
-  isMock: boolean
-}
-
-export function validateMonoovaStatementConfig(): MonoovaStatementConfig {
-  const apiUrl = process.env.MONOOVA_STATEMENT_API_URL
-  const apiKey = process.env.MONOOVA_API_KEY
-  const isProduction = process.env.NODE_ENV === 'production'
-
-  if (isProduction) {
-    const missing: string[] = []
-    if (!apiUrl) missing.push('MONOOVA_STATEMENT_API_URL')
-    if (!apiKey) missing.push('MONOOVA_API_KEY')
-    if (missing.length > 0) {
-      throw new Error(
-        `Monoova statement config missing in production: ${missing.join(', ')}`,
-      )
-    }
-  }
-
-  return {
-    apiUrl: apiUrl ?? '',
-    apiKey: apiKey ?? '',
-    isMock: !apiUrl || !apiKey,
-  }
-}
 
 // Raw entry shape as it appears on the wire. Kept narrow on purpose —
 // anything outside this contract is preserved verbatim on `raw` so
@@ -108,12 +75,8 @@ function normaliseEntry(raw: RawMonoovaStatementEntry): StatementEntry {
   }
 }
 
-export class MonoovaStatementClient implements StatementClient {
+export class MonoovaStatementClient extends BaseStatementClient {
   public readonly provider = 'monoova' as const
-
-  constructor(
-    private readonly config: { apiUrl: string; apiKey: string },
-  ) {}
 
   /**
    * Factory that reads env vars and returns either a live client or a
@@ -122,23 +85,24 @@ export class MonoovaStatementClient implements StatementClient {
    * directly only in tests with explicit creds.
    */
   static fromEnv(): MonoovaStatementClient {
-    const cfg = validateMonoovaStatementConfig()
-    return new MonoovaStatementClient({
-      apiUrl: cfg.apiUrl,
-      apiKey: cfg.apiKey,
+    const cfg = validateProviderConfig({
+      urlEnv: 'MONOOVA_STATEMENT_API_URL',
+      keyEnv: 'MONOOVA_API_KEY',
+      providerName: 'Monoova',
     })
+    return new MonoovaStatementClient(cfg.apiUrl, cfg.apiKey)
   }
 
   async fetchStatement(from: Date, to: Date): Promise<StatementEntry[]> {
     // Dev/test without creds: return empty rather than hit the network.
-    // In production validateMonoovaStatementConfig() would have thrown
+    // In production validateProviderConfig() would have thrown
     // before we ever constructed with empty strings (via fromEnv).
-    if (!this.config.apiUrl || !this.config.apiKey) {
+    if (!this.baseUrl || !this.apiKey) {
       return []
     }
 
     const url =
-      `${this.config.apiUrl}/statements` +
+      `${this.baseUrl}/statements` +
       `?from=${encodeURIComponent(from.toISOString())}` +
       `&to=${encodeURIComponent(to.toISOString())}`
 
@@ -148,42 +112,5 @@ export class MonoovaStatementClient implements StatementClient {
 
     const rawEntries = Array.isArray(data.entries) ? data.entries : []
     return rawEntries.map(normaliseEntry)
-  }
-
-  private async request(
-    url: string,
-    signal: AbortSignal,
-  ): Promise<RawMonoovaStatementResponse> {
-    let response: Response
-    try {
-      response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${this.config.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        signal,
-      })
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') throw err
-      throw new ProviderTemporaryError(
-        `Monoova statement network error: ${String(err)}`,
-      )
-    }
-
-    if (!response.ok) {
-      throw errorForStatus(
-        response.status,
-        `Monoova statement API error: ${response.status}`,
-      )
-    }
-
-    try {
-      return (await response.json()) as RawMonoovaStatementResponse
-    } catch (err) {
-      throw new ProviderPermanentError(
-        `Monoova statement response parse error: ${String(err)}`,
-      )
-    }
   }
 }

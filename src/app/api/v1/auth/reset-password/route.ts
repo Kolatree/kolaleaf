@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db/client'
 import { hashPassword, validatePasswordComplexity } from '@/lib/auth/password'
 import { hashToken } from '@/lib/auth/tokens'
 import { parseBody } from '@/lib/http/validate'
+import { log } from '@/lib/obs/logger'
 import { ResetPasswordBody } from './_schemas'
 
 const GENERIC_INVALID = 'Invalid or expired reset link.'
@@ -67,7 +68,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true }, { status: 200 })
   } catch (error) {
-    console.error('[auth/reset-password]', error)
+    log('error', 'auth.reset-password.failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Unable to reset password' }, { status: 500 })
   }
 }

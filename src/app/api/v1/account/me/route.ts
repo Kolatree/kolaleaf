@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { requireAuth, AuthError } from '@/lib/auth/middleware'
+import { log } from '@/lib/obs/logger'
 
 // GET /api/account/me
 //
@@ -57,7 +58,7 @@ export async function GET(request: Request) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode })
     }
-    console.error('[account/me]', error)
+    log('error', 'account.me.failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'server_error' }, { status: 500 })
   }
 }

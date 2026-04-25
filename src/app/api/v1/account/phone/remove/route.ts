@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db/client'
 import { requireAuth, AuthError } from '@/lib/auth/middleware'
 import { normalizePhone, InvalidPhoneError } from '@/lib/auth/phone'
 import { parseBody } from '@/lib/http/validate'
+import { log } from '@/lib/obs/logger'
 import { RemovePhoneBody } from './_schemas'
 
 /**
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode })
     }
-    console.error('[account/phone/remove]', error)
+    log('error', 'account.phone.remove.failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'server_error' }, { status: 500 })
   }
 }

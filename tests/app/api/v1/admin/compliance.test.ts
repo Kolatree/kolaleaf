@@ -1,8 +1,33 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('@/lib/auth/admin-middleware', () => ({
-  requireAdmin: vi.fn(),
+const { _requireAdmin } = vi.hoisted(() => ({
+  _requireAdmin: vi.fn(),
 }))
+
+vi.mock('@/lib/auth/admin-middleware', () => {
+  const { NextResponse } = require('next/server')
+  class AuthError extends Error {
+    statusCode: number
+    constructor(statusCode: number, msg: string) {
+      super(msg); this.name = 'AuthError'; this.statusCode = statusCode
+    }
+  }
+  return {
+    requireAdmin: _requireAdmin,
+    getAdminEmails: () => ['admin@kolaleaf.com'],
+    withAdmin: (handler: Function) => async (request: Request) => {
+      try {
+        const { userId } = await _requireAdmin(request)
+        return await handler(request, userId)
+      } catch (error: any) {
+        if (error instanceof AuthError || error?.name === 'AuthError') {
+          return NextResponse.json({ error: error.message }, { status: error.statusCode })
+        }
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+      }
+    },
+  }
+})
 
 vi.mock('@/lib/auth/middleware', () => ({
   AuthError: class extends Error {
@@ -15,6 +40,10 @@ vi.mock('@/lib/auth/middleware', () => ({
   },
 }))
 
+vi.mock('@/lib/obs/logger', () => ({
+  log: vi.fn(),
+}))
+
 vi.mock('@/lib/db/client', () => ({
   prisma: {
     complianceReport: {
@@ -24,11 +53,10 @@ vi.mock('@/lib/db/client', () => ({
 }))
 
 import { GET } from '@/app/api/v1/admin/compliance/route'
-import { requireAdmin } from '@/lib/auth/admin-middleware'
 import { AuthError } from '@/lib/auth/middleware'
 import { prisma } from '@/lib/db/client'
 
-const mockRequireAdmin = vi.mocked(requireAdmin)
+const mockRequireAdmin = _requireAdmin
 const mockFindMany = vi.mocked(prisma.complianceReport.findMany)
 
 function req(): Request {
@@ -64,6 +92,7 @@ describe('GET /api/v1/admin/compliance', () => {
     )
 
     mockFindMany.mockClear()
+    mockRequireAdmin.mockResolvedValueOnce({ userId: 'admin' } as never)
     await GET(new Request('http://localhost/api/v1/admin/compliance?status=REPORTED'))
     expect(mockFindMany).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { verifySumsubSignature } from '@/lib/kyc/sumsub/verify-signature'
 import { getWebhookDispatcher } from '@/lib/queue'
+import { log } from '@/lib/obs/logger'
 
 export async function POST(request: Request) {
   const signature = request.headers.get('x-payload-digest') ?? ''
@@ -10,13 +11,13 @@ export async function POST(request: Request) {
     rawBody = await request.text()
     JSON.parse(rawBody)
   } catch (err) {
-    console.error('[webhooks/sumsub] invalid payload', err)
+    log('error', 'webhooks.sumsub.invalid-payload', { error: err instanceof Error ? err.message : String(err) })
     return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
   }
 
   const secret = process.env.SUMSUB_WEBHOOK_SECRET
   if (!secret) {
-    console.error('[webhooks/sumsub] SUMSUB_WEBHOOK_SECRET not configured')
+    log('error', 'webhooks.sumsub.secret-not-configured', {})
     return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 })
   }
 
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
     })
     return NextResponse.json({ received: true })
   } catch (error) {
-    console.error('[webhooks/sumsub] dispatch failed', error)
+    log('error', 'webhooks.sumsub.dispatch.failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 })
   }
 }

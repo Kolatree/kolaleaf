@@ -4,6 +4,7 @@ import { verifyPassword } from '@/lib/auth/password'
 import { issueVerificationCode } from '@/lib/auth/email-verification'
 import { requireAuth, AuthError } from '@/lib/auth/middleware'
 import { parseBody } from '@/lib/http/validate'
+import { log } from '@/lib/obs/logger'
 import { ChangeEmailBody } from './_schemas'
 
 // POST /api/account/change-email { currentPassword, newEmail }
@@ -96,7 +97,7 @@ export async function POST(request: Request) {
       email: newEmail,
       recipientName: user.fullName,
     }).catch((err) => {
-      console.error('[account/change-email] code dispatch failed', err)
+      log('error', 'account.change-email.code-dispatch.failed', { error: err instanceof Error ? err.message : String(err) })
     })
 
     await prisma.authEvent.create({
@@ -112,7 +113,7 @@ export async function POST(request: Request) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode })
     }
-    console.error('[account/change-email]', error)
+    log('error', 'account.change-email.failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json(
       { error: 'Unable to start email change' },
       { status: 500 },

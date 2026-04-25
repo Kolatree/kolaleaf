@@ -4,6 +4,7 @@ import { generateVerificationToken } from '@/lib/auth/tokens'
 import { enqueueEmail } from '@/lib/queue/email-dispatcher'
 import { getClientIp } from '@/lib/http/ip'
 import { parseBody } from '@/lib/http/validate'
+import { log } from '@/lib/obs/logger'
 import { RequestPasswordResetBody } from './_schemas'
 
 const RESET_TTL_MINUTES = 60
@@ -85,7 +86,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ message: GENERIC_MESSAGE }, { status: 200 })
   } catch (error) {
-    console.error('[auth/request-password-reset]', error)
+    log('error', 'auth.request-password-reset.failed', { error: error instanceof Error ? error.message : String(error) })
     // Even on internal error, keep the response shape identical. Surfacing a
     // different error here would let an attacker probe for specific accounts.
     return NextResponse.json({ message: GENERIC_MESSAGE }, { status: 200 })

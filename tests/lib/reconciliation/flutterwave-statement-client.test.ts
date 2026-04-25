@@ -4,10 +4,10 @@ import Decimal from 'decimal.js'
 import {
   FlutterwaveStatementClient,
   createFlutterwaveStatementClient,
-  validateFlutterwaveStatementConfig,
 } from '@/lib/reconciliation/flutterwave-statement-client'
+import { validateProviderConfig } from '@/lib/reconciliation/base-statement-client'
 
-describe('validateFlutterwaveStatementConfig', () => {
+describe('validateProviderConfig (Flutterwave)', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
     delete process.env.FLUTTERWAVE_API_URL
@@ -19,9 +19,13 @@ describe('validateFlutterwaveStatementConfig', () => {
     delete process.env.FLUTTERWAVE_API_URL
     delete process.env.FLUTTERWAVE_SECRET_KEY
 
-    expect(() => validateFlutterwaveStatementConfig()).toThrow(
-      /Flutterwave.*missing/i,
-    )
+    expect(() =>
+      validateProviderConfig({
+        urlEnv: 'FLUTTERWAVE_API_URL',
+        keyEnv: 'FLUTTERWAVE_SECRET_KEY',
+        providerName: 'Flutterwave',
+      }),
+    ).toThrow(/Flutterwave.*missing/i)
   })
 
   it('returns isMock=true in dev/test when creds are missing', () => {
@@ -29,7 +33,11 @@ describe('validateFlutterwaveStatementConfig', () => {
     delete process.env.FLUTTERWAVE_API_URL
     delete process.env.FLUTTERWAVE_SECRET_KEY
 
-    const cfg = validateFlutterwaveStatementConfig()
+    const cfg = validateProviderConfig({
+      urlEnv: 'FLUTTERWAVE_API_URL',
+      keyEnv: 'FLUTTERWAVE_SECRET_KEY',
+      providerName: 'Flutterwave',
+    })
     expect(cfg.isMock).toBe(true)
     expect(cfg.apiKey).toBe('')
   })
@@ -39,7 +47,11 @@ describe('validateFlutterwaveStatementConfig', () => {
     process.env.FLUTTERWAVE_API_URL = 'https://api.flutterwave.com/v3'
     process.env.FLUTTERWAVE_SECRET_KEY = 'flw-live-key'
 
-    const cfg = validateFlutterwaveStatementConfig()
+    const cfg = validateProviderConfig({
+      urlEnv: 'FLUTTERWAVE_API_URL',
+      keyEnv: 'FLUTTERWAVE_SECRET_KEY',
+      providerName: 'Flutterwave',
+    })
     expect(cfg.isMock).toBe(false)
     expect(cfg.apiUrl).toBe('https://api.flutterwave.com/v3')
     expect(cfg.apiKey).toBe('flw-live-key')

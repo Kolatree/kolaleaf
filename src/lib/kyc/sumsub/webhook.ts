@@ -1,8 +1,8 @@
-import { Prisma } from '../../../generated/prisma/client'
-import { prisma } from '../../db/client'
 import { verifySumsubSignature } from './verify-signature'
 import { handleKycApproved, handleKycRejected } from './kyc-service'
 import { log } from '@/lib/obs/logger'
+import { processWebhookEvent } from '../../webhooks/idempotent-handler'
+import { prisma } from '../../db/client'
 
 interface SumsubWebhookPayload {
   applicantId: string
@@ -22,8 +22,8 @@ interface SumsubWebhookPayload {
 // payload can differ in whitespace and key order, breaking signature
 // verification, so we verify against `rawBody`.
 //
-// Idempotency: uses the same create-as-lock pattern as the payment
-// webhooks — see `src/lib/payments/monoova/webhook.ts` for the rationale.
+// Idempotency: delegated to `processWebhookEvent` — see
+// `src/lib/webhooks/idempotent-handler.ts` for the create-as-lock rationale.
 export async function handleSumsubWebhook(
   rawBody: string,
   signature: string
@@ -48,84 +48,54 @@ export async function handleSumsubWebhook(
     : `${data.applicantId}:${data.type}:${reviewAnswer}`
   const eventId = data.correlationId ?? fallbackKey
 
-  // 2. Atomically claim the event.
-  try {
-    await prisma.webhookEvent.create({
-      data: {
-        provider: 'SUMSUB',
-        eventId,
-        eventType: data.type,
-        payload: data as unknown as object,
-        processed: false,
-      },
-    })
-  } catch (err) {
-    if (
-      err instanceof Prisma.PrismaClientKnownRequestError &&
-      err.code === 'P2002'
-    ) {
-      return
-    }
-    throw err
-  }
+  await processWebhookEvent({
+    provider: 'SUMSUB',
+    eventId,
+    eventType: data.type,
+    payload: data,
+    async process() {
+      // Find user by kycProviderId (applicantId).
+      const user = await prisma.user.findFirst({
+        where: { kycProviderId: data.applicantId },
+      })
 
-  // 3. Find user by kycProviderId (applicantId).
-  const user = await prisma.user.findFirst({
-    where: { kycProviderId: data.applicantId },
-  })
+      if (!user) {
+        // Unknown applicant: keep the audit row, processWebhookEvent
+        // will mark processed so we don't retry.
+        return
+      }
 
-  if (!user) {
-    // Unknown applicant: keep the audit row, mark processed so we don't
-    // retry; payload is preserved for investigation.
-    await prisma.webhookEvent.update({
-      where: { provider_eventId: { provider: 'SUMSUB', eventId } },
-      data: { processed: true, processedAt: new Date() },
-    })
-    return
-  }
-
-  // 4. Route based on event type. Release the claim on failure so the
-  //    provider's retry can re-enter. Non-terminal event types (pending,
-  //    created, reviewed/YELLOW = manual checks required) produce a log
-  //    line so ops has visibility without clobbering kycStatus — status
-  //    only flips on GREEN or RED.
-  try {
-    if (data.type === 'applicantReviewed' && data.reviewResult) {
-      if (data.reviewResult.reviewAnswer === 'GREEN') {
-        await handleKycApproved(user.id)
-      } else if (data.reviewResult.reviewAnswer === 'RED') {
-        await handleKycRejected(user.id, data.reviewResult.rejectLabels ?? [])
+      // Route based on event type. Non-terminal event types (pending,
+      // created, reviewed/YELLOW = manual checks required) produce a log
+      // line so ops has visibility without clobbering kycStatus -- status
+      // only flips on GREEN or RED.
+      if (data.type === 'applicantReviewed' && data.reviewResult) {
+        if (data.reviewResult.reviewAnswer === 'GREEN') {
+          await handleKycApproved(user.id)
+        } else if (data.reviewResult.reviewAnswer === 'RED') {
+          await handleKycRejected(user.id, data.reviewResult.rejectLabels ?? [])
+        } else {
+          // YELLOW + any other non-terminal answer: Sumsub signalling
+          // "additional checks required" or similar. Leave kycStatus alone
+          // (user stays IN_REVIEW); surface to ops via log.
+          log('warn', 'kyc.needs_additional_checks', {
+            userId: user.id,
+            applicantId: data.applicantId,
+            reviewAnswer: data.reviewResult.reviewAnswer,
+            rejectLabels: data.reviewResult.rejectLabels ?? [],
+          })
+        }
+      } else if (data.type === 'applicantPending') {
+        log('info', 'kyc.pending', { userId: user.id, applicantId: data.applicantId })
+      } else if (data.type === 'applicantCreated') {
+        log('info', 'kyc.applicant_created', { userId: user.id, applicantId: data.applicantId })
       } else {
-        // YELLOW + any other non-terminal answer: Sumsub signalling
-        // "additional checks required" or similar. Leave kycStatus alone
-        // (user stays IN_REVIEW); surface to ops via log.
-        log('warn', 'kyc.needs_additional_checks', {
+        log('info', 'kyc.event.unhandled', {
           userId: user.id,
           applicantId: data.applicantId,
-          reviewAnswer: data.reviewResult.reviewAnswer,
-          rejectLabels: data.reviewResult.rejectLabels ?? [],
+          eventType: data.type,
         })
       }
-    } else if (data.type === 'applicantPending') {
-      log('info', 'kyc.pending', { userId: user.id, applicantId: data.applicantId })
-    } else if (data.type === 'applicantCreated') {
-      log('info', 'kyc.applicant_created', { userId: user.id, applicantId: data.applicantId })
-    } else {
-      log('info', 'kyc.event.unhandled', {
-        userId: user.id,
-        applicantId: data.applicantId,
-        eventType: data.type,
-      })
-    }
-  } catch (err) {
-    await prisma.webhookEvent.delete({
-      where: { provider_eventId: { provider: 'SUMSUB', eventId } },
-    })
-    throw err
-  }
-
-  await prisma.webhookEvent.update({
-    where: { provider_eventId: { provider: 'SUMSUB', eventId } },
-    data: { processed: true, processedAt: new Date() },
+    },
   })
 }

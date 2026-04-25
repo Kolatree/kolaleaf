@@ -1,9 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import Decimal from 'decimal.js'
-import {
-  MonoovaStatementClient,
-  validateMonoovaStatementConfig,
-} from '@/lib/reconciliation/monoova-statement-client'
+import { MonoovaStatementClient } from '@/lib/reconciliation/monoova-statement-client'
+import { validateProviderConfig } from '@/lib/reconciliation/base-statement-client'
 
 const mockFetch = vi.fn()
 global.fetch = mockFetch as unknown as typeof fetch
@@ -22,11 +20,17 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 
-describe('validateMonoovaStatementConfig', () => {
+const monoovaConfigOpts = {
+  urlEnv: 'MONOOVA_STATEMENT_API_URL',
+  keyEnv: 'MONOOVA_API_KEY',
+  providerName: 'Monoova',
+}
+
+describe('validateProviderConfig (Monoova)', () => {
   it('throws in production when MONOOVA_STATEMENT_API_URL is missing', () => {
     vi.stubEnv('NODE_ENV', 'production')
     vi.stubEnv('MONOOVA_API_KEY', 'key')
-    expect(() => validateMonoovaStatementConfig()).toThrow(
+    expect(() => validateProviderConfig(monoovaConfigOpts)).toThrow(
       /MONOOVA_STATEMENT_API_URL/,
     )
   })
@@ -34,12 +38,12 @@ describe('validateMonoovaStatementConfig', () => {
   it('throws in production when MONOOVA_API_KEY is missing', () => {
     vi.stubEnv('NODE_ENV', 'production')
     vi.stubEnv('MONOOVA_STATEMENT_API_URL', 'https://example.test/api')
-    expect(() => validateMonoovaStatementConfig()).toThrow(/MONOOVA_API_KEY/)
+    expect(() => validateProviderConfig(monoovaConfigOpts)).toThrow(/MONOOVA_API_KEY/)
   })
 
   it('returns isMock=true in dev/test when creds are missing', () => {
     vi.stubEnv('NODE_ENV', 'test')
-    const cfg = validateMonoovaStatementConfig()
+    const cfg = validateProviderConfig(monoovaConfigOpts)
     expect(cfg.isMock).toBe(true)
   })
 
@@ -47,7 +51,7 @@ describe('validateMonoovaStatementConfig', () => {
     vi.stubEnv('NODE_ENV', 'test')
     vi.stubEnv('MONOOVA_STATEMENT_API_URL', 'https://example.test/api')
     vi.stubEnv('MONOOVA_API_KEY', 'secret-key')
-    const cfg = validateMonoovaStatementConfig()
+    const cfg = validateProviderConfig(monoovaConfigOpts)
     expect(cfg.isMock).toBe(false)
     expect(cfg.apiUrl).toBe('https://example.test/api')
     expect(cfg.apiKey).toBe('secret-key')
@@ -56,10 +60,7 @@ describe('validateMonoovaStatementConfig', () => {
 
 describe('MonoovaStatementClient', () => {
   it('has provider=monoova', () => {
-    const client = new MonoovaStatementClient({
-      apiUrl: 'https://example.test/api',
-      apiKey: 'k',
-    })
+    const client = new MonoovaStatementClient('https://example.test/api', 'k')
     expect(client.provider).toBe('monoova')
   })
 
@@ -96,10 +97,7 @@ describe('MonoovaStatementClient', () => {
       }),
     })
 
-    const client = new MonoovaStatementClient({
-      apiUrl: 'https://example.test/api',
-      apiKey: 'secret',
-    })
+    const client = new MonoovaStatementClient('https://example.test/api', 'secret')
 
     const entries = await client.fetchStatement(
       new Date('2026-04-18T00:00:00Z'),
@@ -128,10 +126,7 @@ describe('MonoovaStatementClient', () => {
       json: async () => ({ entries: [] }),
     })
 
-    const client = new MonoovaStatementClient({
-      apiUrl: 'https://example.test/api',
-      apiKey: 'secret',
-    })
+    const client = new MonoovaStatementClient('https://example.test/api', 'secret')
 
     const from = new Date('2026-04-01T00:00:00Z')
     const to = new Date('2026-04-02T00:00:00Z')

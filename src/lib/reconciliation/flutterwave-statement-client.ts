@@ -1,11 +1,7 @@
 import Decimal from 'decimal.js'
-import {
-  withRetry,
-  errorForStatus,
-  ProviderPermanentError,
-  ProviderTemporaryError,
-} from '@/lib/http/retry'
+import { withRetry } from '@/lib/http/retry'
 import type { StatementClient, StatementEntry } from './types'
+import { BaseStatementClient, validateProviderConfig } from './base-statement-client'
 
 /**
  * Flutterwave NGN payout statement client.
@@ -38,30 +34,6 @@ import type { StatementClient, StatementEntry } from './types'
  * this module before Railway env vars are wired.
  */
 
-export interface FlutterwaveStatementConfig {
-  apiUrl: string
-  apiKey: string
-  isMock: boolean
-}
-
-export function validateFlutterwaveStatementConfig(): FlutterwaveStatementConfig {
-  const apiUrl = process.env.FLUTTERWAVE_API_URL
-  const apiKey = process.env.FLUTTERWAVE_SECRET_KEY
-  const isProduction = process.env.NODE_ENV === 'production'
-
-  if (isProduction && (!apiUrl || !apiKey)) {
-    throw new Error(
-      'Flutterwave statement config missing in production: FLUTTERWAVE_API_URL, FLUTTERWAVE_SECRET_KEY',
-    )
-  }
-
-  return {
-    apiUrl: apiUrl ?? '',
-    apiKey: apiKey ?? '',
-    isMock: !apiUrl || !apiKey,
-  }
-}
-
 interface FlutterwaveTransferRaw {
   reference?: string
   amount?: number | string
@@ -70,13 +42,8 @@ interface FlutterwaveTransferRaw {
   status?: string
 }
 
-export class FlutterwaveStatementClient implements StatementClient {
+export class FlutterwaveStatementClient extends BaseStatementClient {
   public readonly provider = 'flutterwave' as const
-
-  constructor(
-    private readonly baseUrl: string,
-    private readonly apiKey: string,
-  ) {}
 
   async fetchStatement(from: Date, to: Date): Promise<StatementEntry[]> {
     const qs = new URLSearchParams({
@@ -109,40 +76,6 @@ export class FlutterwaveStatementClient implements StatementClient {
 
     return entries
   }
-
-  private async request<T>(url: string, signal: AbortSignal): Promise<T> {
-    let response: Response
-    try {
-      response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        signal,
-      })
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') throw err
-      throw new ProviderTemporaryError(
-        `Flutterwave network error: ${String(err)}`,
-      )
-    }
-
-    if (!response.ok) {
-      throw errorForStatus(
-        response.status,
-        `Flutterwave API error: ${response.status}`,
-      )
-    }
-
-    try {
-      return (await response.json()) as T
-    } catch (err) {
-      throw new ProviderPermanentError(
-        `Flutterwave response parse error: ${String(err)}`,
-      )
-    }
-  }
 }
 
 /**
@@ -160,7 +93,11 @@ class FlutterwaveStatementMockClient implements StatementClient {
 }
 
 export function createFlutterwaveStatementClient(): StatementClient {
-  const { apiUrl, apiKey, isMock } = validateFlutterwaveStatementConfig()
+  const { apiUrl, apiKey, isMock } = validateProviderConfig({
+    urlEnv: 'FLUTTERWAVE_API_URL',
+    keyEnv: 'FLUTTERWAVE_SECRET_KEY',
+    providerName: 'Flutterwave',
+  })
   if (isMock) return new FlutterwaveStatementMockClient()
   return new FlutterwaveStatementClient(apiUrl, apiKey)
 }

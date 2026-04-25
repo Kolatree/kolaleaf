@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { SumsubHttpClient, validateSumsubConfig } from '../client'
+import { SumsubHttpClient, createSumsubClient, validateSumsubConfig } from '../client'
 import type { SumsubClient } from '../client'
 import {
   ProviderPermanentError,
@@ -309,5 +309,45 @@ describe('validateSumsubConfig', () => {
     const cfg = validateSumsubConfig()
     expect(cfg.isMock).toBe(false)
     expect(cfg.levelName).toBe('basic-kyc-level')
+  })
+})
+
+describe('createSumsubClient', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    delete process.env.SUMSUB_API_URL
+    delete process.env.SUMSUB_APP_TOKEN
+    delete process.env.SUMSUB_SECRET_KEY
+    delete process.env.SUMSUB_LEVEL_NAME
+    delete process.env.APP_URL
+  })
+
+  it('returns a mock client in dev when creds are missing', async () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    process.env.APP_URL = 'http://localhost:3000'
+
+    const client = createSumsubClient()
+    const applicant = await client.createApplicant({
+      userId: 'user-123',
+      email: 'demo@example.com',
+      fullName: 'Demo User',
+    })
+    const access = await client.getAccessToken(applicant.applicantId)
+
+    expect(applicant.applicantId).toBe('mock-sumsub-user-123')
+    expect(access.url).toBe(
+      'http://localhost:3000/kyc/mock?applicantId=mock-sumsub-user-123',
+    )
+  })
+
+  it('returns the HTTP client when creds are present', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    process.env.SUMSUB_API_URL = 'https://api.sumsub.com'
+    process.env.SUMSUB_APP_TOKEN = 'app-token'
+    process.env.SUMSUB_SECRET_KEY = 'secret'
+    process.env.SUMSUB_LEVEL_NAME = 'basic-kyc-level'
+
+    const client = createSumsubClient()
+    expect(client).toBeInstanceOf(SumsubHttpClient)
   })
 })

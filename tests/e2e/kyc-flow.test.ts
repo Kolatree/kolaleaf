@@ -69,7 +69,7 @@ describe('KYC Flow E2E', () => {
 
     // Webhook event stored
     const webhookEvent = await prisma.webhookEvent.findFirst({
-      where: { provider: 'sumsub' },
+      where: { provider: 'SUMSUB' },
     })
     expect(webhookEvent).not.toBeNull()
     expect(webhookEvent!.processed).toBe(true)
@@ -207,7 +207,7 @@ describe('KYC Flow E2E', () => {
 
     // Only one webhook event stored
     const events = await prisma.webhookEvent.findMany({
-      where: { provider: 'sumsub' },
+      where: { provider: 'SUMSUB' },
     })
     expect(events).toHaveLength(1)
   })

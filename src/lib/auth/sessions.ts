@@ -40,15 +40,21 @@ export async function validateSession(token: string) {
   if (!session) return null
   if (session.expiresAt < new Date()) return null
 
-  // Sliding window: extend the session TTL on every valid access so
-  // active users aren't forced to re-authenticate every 15 minutes.
-  const newExpiresAt = new Date(Date.now() + SESSION_EXPIRY_MINUTES * 60 * 1000)
-  await prisma.session.update({
-    where: { id: session.id },
-    data: { expiresAt: newExpiresAt },
-  })
+  // Sliding window: extend the session TTL on valid access. Throttled
+  // to avoid a DB write on every single authenticated request — only
+  // update when less than 2 minutes of headroom remain.
+  const REFRESH_THRESHOLD_MS = 2 * 60 * 1000
+  const remainingMs = session.expiresAt.getTime() - Date.now()
+  if (remainingMs < REFRESH_THRESHOLD_MS) {
+    const newExpiresAt = new Date(Date.now() + SESSION_EXPIRY_MINUTES * 60 * 1000)
+    await prisma.session.update({
+      where: { id: session.id },
+      data: { expiresAt: newExpiresAt },
+    })
+    return { ...session, expiresAt: newExpiresAt }
+  }
 
-  return { ...session, expiresAt: newExpiresAt }
+  return session
 }
 
 export async function revokeSession(sessionId: string): Promise<void> {

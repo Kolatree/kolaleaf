@@ -7,6 +7,7 @@ import {
   RecipientNotOwnedError,
 } from './errors'
 import type { Transfer } from '../../generated/prisma/client'
+import { FUNDS_COMMITTED_STATUSES } from './state-machine'
 import { recordVelocityCheck } from '../compliance/velocity'
 import { recordAustracReports } from '../compliance/austrac-reports'
 import { recordSecurityAnomalyCheck } from '../security/anomaly'
@@ -80,7 +81,7 @@ export async function createTransfer(params: CreateTransferParams): Promise<Tran
         // Only count transfers where AUD has actually been received.
         // Drafts (CREATED, AWAITING_AUD) should not consume the daily
         // limit — users can abandon them without funds moving.
-        status: { in: ['AUD_RECEIVED', 'PROCESSING_NGN', 'NGN_SENT', 'NGN_FAILED', 'NGN_RETRY', 'NEEDS_MANUAL', 'COMPLETED', 'FLOAT_INSUFFICIENT', 'REFUNDED'] },
+        status: { in: FUNDS_COMMITTED_STATUSES },
       },
       select: { sendAmount: true },
     })

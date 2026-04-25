@@ -6,6 +6,11 @@ import { prisma } from '@/lib/db/client'
 import { handlePaymentReceived } from '@/lib/payments/monoova/payid-service'
 import { isStubProvidersEnabled } from '@/lib/payments/flag'
 import { logAuthEvent } from '@/lib/auth/audit'
+import {
+  TransferNotFoundError,
+  InvalidTransitionError,
+  ConcurrentModificationError,
+} from '@/lib/transfers/errors'
 import { SimulatePaymentBody } from './_schemas'
 
 // POST /api/v1/admin/transfers/:id/simulate-payment
@@ -107,15 +112,13 @@ export async function POST(
       return NextResponse.json({ error: error.message }, { status: error.statusCode })
     }
 
+    if (error instanceof TransferNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 404 })
+    }
+    if (error instanceof InvalidTransitionError || error instanceof ConcurrentModificationError) {
+      return NextResponse.json({ error: error.message }, { status: 409 })
+    }
     const message = error instanceof Error ? error.message : 'Simulate payment failed'
-    const name = error instanceof Error ? error.name : ''
-
-    if (name === 'TransferNotFoundError') {
-      return NextResponse.json({ error: message }, { status: 404 })
-    }
-    if (name === 'InvalidTransitionError' || name === 'ConcurrentModificationError') {
-      return NextResponse.json({ error: message }, { status: 409 })
-    }
     if (/Amount mismatch/.test(message)) {
       return NextResponse.json({ error: message }, { status: 400 })
     }

@@ -87,7 +87,7 @@ describe('handleMonoovaWebhook', () => {
     // Claim-row insert
     expect(prisma.webhookEvent.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        provider: 'monoova',
+        provider: 'MONOOVA',
         eventId: 'evt-001',
         eventType: 'payment.received',
         processed: false,
@@ -104,7 +104,7 @@ describe('handleMonoovaWebhook', () => {
 
     // Marked processed on success
     expect(prisma.webhookEvent.update).toHaveBeenCalledWith({
-      where: { provider_eventId: { provider: 'monoova', eventId: 'evt-001' } },
+      where: { provider_eventId: { provider: 'MONOOVA', eventId: 'evt-001' } },
       data: expect.objectContaining({ processed: true }),
     })
 
@@ -159,7 +159,7 @@ describe('handleMonoovaWebhook', () => {
 
     // Audit row marked processed so we don't retry it
     expect(prisma.webhookEvent.update).toHaveBeenCalledWith({
-      where: { provider_eventId: { provider: 'monoova', eventId: 'evt-001' } },
+      where: { provider_eventId: { provider: 'MONOOVA', eventId: 'evt-001' } },
       data: expect.objectContaining({ processed: true }),
     })
     expect(prisma.webhookEvent.delete).not.toHaveBeenCalled()
@@ -186,7 +186,7 @@ describe('handleMonoovaWebhook', () => {
 
     // Permanent failure: mark processed with error, don't delete
     expect(prisma.webhookEvent.update).toHaveBeenCalledWith({
-      where: { provider_eventId: { provider: 'monoova', eventId: 'evt-001' } },
+      where: { provider_eventId: { provider: 'MONOOVA', eventId: 'evt-001' } },
       data: expect.objectContaining({ processed: true }),
     })
     expect(prisma.webhookEvent.delete).not.toHaveBeenCalled()
@@ -213,7 +213,7 @@ describe('handleMonoovaWebhook', () => {
 
     // Transient failure: release lock for provider retry
     expect(prisma.webhookEvent.delete).toHaveBeenCalledWith({
-      where: { provider_eventId: { provider: 'monoova', eventId: 'evt-001' } },
+      where: { provider_eventId: { provider: 'MONOOVA', eventId: 'evt-001' } },
     })
   })
 })

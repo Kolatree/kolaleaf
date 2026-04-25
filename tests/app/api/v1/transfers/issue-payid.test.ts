@@ -33,6 +33,7 @@ import { POST } from '@/app/api/v1/transfers/[id]/issue-payid/route'
 import { requireAuth, requireEmailVerified, AuthError } from '@/lib/auth/middleware'
 import { prisma } from '@/lib/db/client'
 import { generatePayIdForTransfer } from '@/lib/payments/monoova'
+import { KycNotVerifiedError, ConcurrentModificationError } from '@/lib/transfers/errors'
 
 const mockRequireAuth = vi.mocked(requireAuth)
 const mockRequireEmail = vi.mocked(requireEmailVerified)
@@ -114,9 +115,7 @@ describe('POST /api/v1/transfers/[id]/issue-payid', () => {
     mockRequireEmail.mockResolvedValueOnce({ userId: 'u1' })
     mockRequireAuth.mockResolvedValueOnce({ userId: 'u1' } as never)
     mockFindUnique.mockResolvedValueOnce({ userId: 'u1' } as never)
-    const err = new Error('KYC is not verified for user u1')
-    err.name = 'KycNotVerifiedError'
-    mockGenerate.mockRejectedValueOnce(err)
+    mockGenerate.mockRejectedValueOnce(new KycNotVerifiedError('u1'))
     const res = await POST(req(), { params: Promise.resolve({ id: 't1' }) })
     expect(res.status).toBe(403)
   })
@@ -125,9 +124,7 @@ describe('POST /api/v1/transfers/[id]/issue-payid', () => {
     mockRequireEmail.mockResolvedValueOnce({ userId: 'u1' })
     mockRequireAuth.mockResolvedValueOnce({ userId: 'u1' } as never)
     mockFindUnique.mockResolvedValueOnce({ userId: 'u1' } as never)
-    const err = new Error('Transfer t1 was modified concurrently')
-    err.name = 'ConcurrentModificationError'
-    mockGenerate.mockRejectedValueOnce(err)
+    mockGenerate.mockRejectedValueOnce(new ConcurrentModificationError('t1'))
     const res = await POST(req(), { params: Promise.resolve({ id: 't1' }) })
     expect(res.status).toBe(409)
   })

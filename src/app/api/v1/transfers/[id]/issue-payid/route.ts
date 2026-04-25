@@ -3,6 +3,11 @@ import { prisma } from '@/lib/db/client'
 import { requireEmailVerified, AuthError } from '@/lib/auth/middleware'
 import { generatePayIdForTransfer } from '@/lib/payments/monoova'
 import { createMonoovaClient } from '@/lib/payments/monoova/client'
+import {
+  TransferNotFoundError,
+  KycNotVerifiedError,
+  ConcurrentModificationError,
+} from '@/lib/transfers/errors'
 import './_schemas'
 
 // POST /api/v1/transfers/:id/issue-payid
@@ -58,19 +63,17 @@ export async function POST(
       return NextResponse.json({ error: error.message }, { status: error.statusCode })
     }
 
-    const message = error instanceof Error ? error.message : 'PayID issuance failed'
-    const name = error instanceof Error ? error.name : ''
-
-    if (name === 'TransferNotFoundError') {
-      return NextResponse.json({ error: message }, { status: 404 })
+    if (error instanceof TransferNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 404 })
     }
-    if (name === 'KycNotVerifiedError') {
-      return NextResponse.json({ error: message }, { status: 403 })
+    if (error instanceof KycNotVerifiedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
     }
-    if (name === 'ConcurrentModificationError') {
-      return NextResponse.json({ error: message }, { status: 409 })
+    if (error instanceof ConcurrentModificationError) {
+      return NextResponse.json({ error: error.message }, { status: 409 })
     }
     // "Transfer <id> is not in CREATED state" — state mismatch
+    const message = error instanceof Error ? error.message : 'PayID issuance failed'
     if (/is not in CREATED state/.test(message)) {
       return NextResponse.json({ error: message }, { status: 409 })
     }

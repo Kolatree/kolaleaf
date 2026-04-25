@@ -1,6 +1,14 @@
 import { NextResponse } from 'next/server'
 import Decimal from 'decimal.js'
-import { createTransfer, listTransfers } from '@/lib/transfers'
+import {
+  createTransfer,
+  listTransfers,
+  KycNotVerifiedError,
+  RecipientNotOwnedError,
+  InvalidCorridorError,
+  AmountOutOfRangeError,
+  DailyLimitExceededError,
+} from '@/lib/transfers'
 import { requireAuth, requireEmailVerified, AuthError } from '@/lib/auth/middleware'
 import { parseBody } from '@/lib/http/validate'
 import { jsonError } from '@/lib/http/json-error'
@@ -42,13 +50,12 @@ export async function POST(request: Request) {
       return jsonError('unauthenticated', error.message, error.statusCode)
     }
     const message = error instanceof Error ? error.message : 'Transfer creation failed'
-    const name = error instanceof Error ? error.name : ''
 
-    if (name === 'KycNotVerifiedError') return jsonError('kyc_not_verified', message, 403)
-    if (name === 'RecipientNotOwnedError') return jsonError('recipient_not_owned', message, 403)
-    if (name === 'InvalidCorridorError') return jsonError('invalid_corridor', message, 400)
-    if (name === 'AmountOutOfRangeError') return jsonError('amount_out_of_range', message, 400)
-    if (name === 'DailyLimitExceededError') return jsonError('daily_limit_exceeded', message, 400)
+    if (error instanceof KycNotVerifiedError) return jsonError('kyc_not_verified', message, 403)
+    if (error instanceof RecipientNotOwnedError) return jsonError('recipient_not_owned', message, 403)
+    if (error instanceof InvalidCorridorError) return jsonError('invalid_corridor', message, 400)
+    if (error instanceof AmountOutOfRangeError) return jsonError('amount_out_of_range', message, 400)
+    if (error instanceof DailyLimitExceededError) return jsonError('daily_limit_exceeded', message, 400)
 
     return jsonError('transfer_creation_failed', message, 500)
   }

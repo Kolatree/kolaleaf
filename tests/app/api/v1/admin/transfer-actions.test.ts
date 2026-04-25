@@ -35,6 +35,7 @@ import { POST as RETRY } from '@/app/api/v1/admin/transfers/[id]/retry/route'
 import { requireAdmin } from '@/lib/auth/admin-middleware'
 import { AuthError } from '@/lib/auth/middleware'
 import { transitionTransfer } from '@/lib/transfers/state-machine'
+import { InvalidTransitionError } from '@/lib/transfers/errors'
 
 const mockRequireAdmin = vi.mocked(requireAdmin)
 const mockTransition = vi.mocked(transitionTransfer)
@@ -85,9 +86,7 @@ describe('admin/transfers/[id]/{refund,retry}', () => {
 
   it('retry returns 409 on InvalidTransitionError', async () => {
     mockRequireAdmin.mockResolvedValueOnce({ userId: 'admin' } as never)
-    const err = new Error('invalid')
-    err.name = 'InvalidTransitionError'
-    mockHandleManualRetry.mockRejectedValueOnce(err)
+    mockHandleManualRetry.mockRejectedValueOnce(new InvalidTransitionError('NEEDS_MANUAL', 'PROCESSING_NGN'))
     const res = await RETRY(
       req('http://localhost/api/v1/admin/transfers/t1/retry'),
       { params: Promise.resolve({ id: 't1' }) },

@@ -16,21 +16,22 @@ import { requireAuth, AuthError } from '@/lib/auth/middleware'
 export async function GET(request: Request) {
   try {
     const { userId } = await requireAuth(request)
-    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } })
-
-    const phone = await prisma.userIdentifier.findFirst({
-      where: { userId, type: 'PHONE', verified: true },
-      orderBy: { createdAt: 'asc' },
-    })
-
-    // All EMAIL identifiers for this user, oldest first. Primary = first
-    // verified; if none is verified (edge case: pre-verification account)
-    // fall back to first unverified. The rest are rendered as secondary with
-    // Remove controls.
-    const emails = await prisma.userIdentifier.findMany({
-      where: { userId, type: 'EMAIL' },
-      orderBy: { createdAt: 'asc' },
-    })
+    // All three queries are independent — run in parallel.
+    const [user, phone, emails] = await Promise.all([
+      prisma.user.findUniqueOrThrow({ where: { id: userId } }),
+      prisma.userIdentifier.findFirst({
+        where: { userId, type: 'PHONE', verified: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+      // All EMAIL identifiers for this user, oldest first. Primary = first
+      // verified; if none is verified (edge case: pre-verification account)
+      // fall back to first unverified. The rest are rendered as secondary with
+      // Remove controls.
+      prisma.userIdentifier.findMany({
+        where: { userId, type: 'EMAIL' },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ])
     const primary = emails.find((e) => e.verified) ?? emails[0] ?? null
     const secondary = emails.filter((e) => e.id !== primary?.id)
 

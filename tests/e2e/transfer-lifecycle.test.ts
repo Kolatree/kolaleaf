@@ -211,7 +211,7 @@ describe('Transfer Lifecycle E2E — Golden Path', () => {
 
     // Verify webhook event recorded
     const webhookEvent = await prisma.webhookEvent.findFirst({
-      where: { provider: 'monoova', eventId: payload.eventId },
+      where: { provider: 'MONOOVA', eventId: payload.eventId },
     })
     expect(webhookEvent).not.toBeNull()
     expect(webhookEvent!.processed).toBe(true)

@@ -8,6 +8,22 @@ import {
 } from './errors'
 import type { Transfer } from '../../generated/prisma/client'
 
+/**
+ * Statuses where AUD has been received and real funds are committed.
+ * Used for daily limit checks, velocity monitoring, and reconciliation.
+ */
+export const FUNDS_COMMITTED_STATUSES: TransferStatus[] = [
+  TransferStatus.AUD_RECEIVED,
+  TransferStatus.PROCESSING_NGN,
+  TransferStatus.NGN_SENT,
+  TransferStatus.NGN_FAILED,
+  TransferStatus.NGN_RETRY,
+  TransferStatus.NEEDS_MANUAL,
+  TransferStatus.COMPLETED,
+  TransferStatus.FLOAT_INSUFFICIENT,
+  TransferStatus.REFUNDED,
+]
+
 /** The subset of the Prisma client that transitionTransfer needs. */
 export type TransactionClient = {
   transfer: Pick<typeof prisma.transfer, 'findUnique' | 'findUniqueOrThrow' | 'updateMany'>

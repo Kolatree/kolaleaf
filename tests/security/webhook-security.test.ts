@@ -171,7 +171,7 @@ describe('Webhook Security', () => {
 
       // Only 1 webhook event stored
       const events = await prisma.webhookEvent.findMany({
-        where: { provider: 'monoova', eventId: 'evt-idempotent-1' },
+        where: { provider: 'MONOOVA', eventId: 'evt-idempotent-1' },
       })
       expect(events).toHaveLength(1)
     })

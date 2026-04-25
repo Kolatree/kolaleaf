@@ -52,7 +52,7 @@ export async function handleSumsubWebhook(
   try {
     await prisma.webhookEvent.create({
       data: {
-        provider: 'sumsub',
+        provider: 'SUMSUB',
         eventId,
         eventType: data.type,
         payload: data as unknown as object,
@@ -78,7 +78,7 @@ export async function handleSumsubWebhook(
     // Unknown applicant: keep the audit row, mark processed so we don't
     // retry; payload is preserved for investigation.
     await prisma.webhookEvent.update({
-      where: { provider_eventId: { provider: 'sumsub', eventId } },
+      where: { provider_eventId: { provider: 'SUMSUB', eventId } },
       data: { processed: true, processedAt: new Date() },
     })
     return
@@ -119,13 +119,13 @@ export async function handleSumsubWebhook(
     }
   } catch (err) {
     await prisma.webhookEvent.delete({
-      where: { provider_eventId: { provider: 'sumsub', eventId } },
+      where: { provider_eventId: { provider: 'SUMSUB', eventId } },
     })
     throw err
   }
 
   await prisma.webhookEvent.update({
-    where: { provider_eventId: { provider: 'sumsub', eventId } },
+    where: { provider_eventId: { provider: 'SUMSUB', eventId } },
     data: { processed: true, processedAt: new Date() },
   })
 }

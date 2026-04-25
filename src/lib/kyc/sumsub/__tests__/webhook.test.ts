@@ -100,7 +100,7 @@ describe('handleSumsubWebhook', () => {
     // Claim-row insert
     expect(prisma.webhookEvent.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        provider: 'sumsub',
+        provider: 'SUMSUB',
         eventId: 'corr-001',
         eventType: 'applicantReviewed',
         processed: false,
@@ -118,7 +118,7 @@ describe('handleSumsubWebhook', () => {
 
     // Marked processed
     expect(prisma.webhookEvent.update).toHaveBeenCalledWith({
-      where: { provider_eventId: { provider: 'sumsub', eventId: 'corr-001' } },
+      where: { provider_eventId: { provider: 'SUMSUB', eventId: 'corr-001' } },
       data: expect.objectContaining({ processed: true }),
     })
     expect(prisma.webhookEvent.delete).not.toHaveBeenCalled()
@@ -185,7 +185,7 @@ describe('handleSumsubWebhook', () => {
 
     // Audit row marked processed
     expect(prisma.webhookEvent.update).toHaveBeenCalledWith({
-      where: { provider_eventId: { provider: 'sumsub', eventId: 'corr-001' } },
+      where: { provider_eventId: { provider: 'SUMSUB', eventId: 'corr-001' } },
       data: expect.objectContaining({ processed: true }),
     })
   })
@@ -207,7 +207,7 @@ describe('handleSumsubWebhook', () => {
     ).rejects.toThrow('boom')
 
     expect(prisma.webhookEvent.delete).toHaveBeenCalledWith({
-      where: { provider_eventId: { provider: 'sumsub', eventId: 'corr-001' } },
+      where: { provider_eventId: { provider: 'SUMSUB', eventId: 'corr-001' } },
     })
     expect(prisma.webhookEvent.update).not.toHaveBeenCalled()
   })

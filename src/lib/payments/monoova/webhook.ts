@@ -42,7 +42,7 @@ export async function handleMonoovaWebhook(
   try {
     await prisma.webhookEvent.create({
       data: {
-        provider: 'monoova',
+        provider: 'MONOOVA',
         eventId: data.eventId,
         eventType: data.eventType,
         payload: data as unknown as object,
@@ -70,7 +70,7 @@ export async function handleMonoovaWebhook(
     // processed=true so the reconciliation worker doesn't retry it; the
     // payload is preserved for manual investigation.
     await prisma.webhookEvent.update({
-      where: { provider_eventId: { provider: 'monoova', eventId: data.eventId } },
+      where: { provider_eventId: { provider: 'MONOOVA', eventId: data.eventId } },
       data: { processed: true, processedAt: new Date() },
     })
     return
@@ -90,7 +90,7 @@ export async function handleMonoovaWebhook(
       // Keep the webhook event as a processed-with-error record so
       // retries are blocked and the issue surfaces in reconciliation.
       await prisma.webhookEvent.update({
-        where: { provider_eventId: { provider: 'monoova', eventId: data.eventId } },
+        where: { provider_eventId: { provider: 'MONOOVA', eventId: data.eventId } },
         data: {
           processed: true,
           processedAt: new Date(),
@@ -102,13 +102,13 @@ export async function handleMonoovaWebhook(
 
     // Transient: release the lock for provider retry.
     await prisma.webhookEvent.delete({
-      where: { provider_eventId: { provider: 'monoova', eventId: data.eventId } },
+      where: { provider_eventId: { provider: 'MONOOVA', eventId: data.eventId } },
     })
     throw err
   }
 
   await prisma.webhookEvent.update({
-    where: { provider_eventId: { provider: 'monoova', eventId: data.eventId } },
+    where: { provider_eventId: { provider: 'MONOOVA', eventId: data.eventId } },
     data: { processed: true, processedAt: new Date() },
   })
 }

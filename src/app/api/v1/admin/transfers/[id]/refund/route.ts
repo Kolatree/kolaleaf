@@ -6,6 +6,11 @@ import { jsonError } from '@/lib/http/json-error'
 import { transitionTransfer } from '@/lib/transfers/state-machine'
 import { TransferStatus, ActorType } from '@/generated/prisma/enums'
 import { logAuthEvent } from '@/lib/auth/audit'
+import {
+  InvalidTransitionError,
+  ConcurrentModificationError,
+  TransferNotFoundError,
+} from '@/lib/transfers/errors'
 import { AdminRefundRequest } from './_schemas'
 
 export async function POST(
@@ -50,14 +55,13 @@ export async function POST(
     if (error instanceof ZodError) {
       return jsonError('invalid_refund_request', 'Invalid refund request', 400)
     }
+    if (error instanceof InvalidTransitionError || error instanceof ConcurrentModificationError) {
+      return jsonError('conflict', error.message, 409)
+    }
+    if (error instanceof TransferNotFoundError) {
+      return jsonError('transfer_not_found', error.message, 404)
+    }
     const message = error instanceof Error ? error.message : 'Refund failed'
-    const name = error instanceof Error ? error.name : ''
-    if (name === 'InvalidTransitionError' || name === 'ConcurrentModificationError') {
-      return jsonError('conflict', message, 409)
-    }
-    if (name === 'TransferNotFoundError') {
-      return jsonError('transfer_not_found', message, 404)
-    }
     return jsonError('refund_failed', message, 500)
   }
 }

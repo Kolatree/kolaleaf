@@ -19,6 +19,7 @@ vi.mock('@/lib/transfers', () => ({
 import { POST } from '@/app/api/v1/transfers/[id]/cancel/route'
 import { requireAuth, AuthError } from '@/lib/auth/middleware'
 import { cancelTransfer } from '@/lib/transfers'
+import { TransferNotFoundError, CancelTooLateError } from '@/lib/transfers/errors'
 
 const mockAuth = vi.mocked(requireAuth)
 const mockCancel = vi.mocked(cancelTransfer)
@@ -47,18 +48,14 @@ describe('POST /api/v1/transfers/[id]/cancel', () => {
 
   it('returns 404 when the transfer is not found', async () => {
     mockAuth.mockResolvedValueOnce({ userId: 'u1' } as never)
-    const err = new Error('Not found')
-    err.name = 'TransferNotFoundError'
-    mockCancel.mockRejectedValueOnce(err)
+    mockCancel.mockRejectedValueOnce(new TransferNotFoundError('t1'))
     const res = await POST(makeRequest(), { params: Promise.resolve({ id: 't1' }) })
     expect(res.status).toBe(404)
   })
 
   it('returns 409 when the cancel window has passed', async () => {
     mockAuth.mockResolvedValueOnce({ userId: 'u1' } as never)
-    const err = new Error('Transfer t1 can no longer be cancelled — already at AUD_RECEIVED')
-    err.name = 'CancelTooLateError'
-    mockCancel.mockRejectedValueOnce(err)
+    mockCancel.mockRejectedValueOnce(new CancelTooLateError('t1', 'AUD_RECEIVED'))
     const res = await POST(makeRequest(), { params: Promise.resolve({ id: 't1' }) })
     expect(res.status).toBe(409)
   })

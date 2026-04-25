@@ -4,6 +4,11 @@ import { AuthError } from '@/lib/auth/middleware'
 import { jsonError } from '@/lib/http/json-error'
 import { logAuthEvent } from '@/lib/auth/audit'
 import { getOrchestrator } from '@/lib/payments/payout/orchestrator'
+import {
+  InvalidTransitionError,
+  ConcurrentModificationError,
+  TransferNotFoundError,
+} from '@/lib/transfers/errors'
 
 export async function POST(
   request: Request,
@@ -32,14 +37,13 @@ export async function POST(
     if (error instanceof AuthError) {
       return jsonError(error.message, error.message, error.statusCode)
     }
+    if (error instanceof InvalidTransitionError || error instanceof ConcurrentModificationError) {
+      return jsonError('conflict', error.message, 409)
+    }
+    if (error instanceof TransferNotFoundError) {
+      return jsonError('transfer_not_found', error.message, 404)
+    }
     const message = error instanceof Error ? error.message : 'Retry failed'
-    const name = error instanceof Error ? error.name : ''
-    if (name === 'InvalidTransitionError' || name === 'ConcurrentModificationError') {
-      return jsonError('conflict', message, 409)
-    }
-    if (name === 'TransferNotFoundError') {
-      return jsonError('transfer_not_found', message, 404)
-    }
     return jsonError('retry_failed', message, 500)
   }
 }

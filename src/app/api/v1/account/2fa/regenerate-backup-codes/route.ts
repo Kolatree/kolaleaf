@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { Prisma } from '@/generated/prisma/client'
 import { prisma } from '@/lib/db/client'
 import { requireAuth, AuthError } from '@/lib/auth/middleware'
-import { verifyTotpCode, verifyBackupCode, generateBackupCodes } from '@/lib/auth/totp'
+import { verifyTotpCodeWithReplay, verifyBackupCode, generateBackupCodes } from '@/lib/auth/totp'
 import { verifyChallenge } from '@/lib/auth/two-factor-challenge'
 import { parseBody } from '@/lib/http/validate'
 import { RegenerateBackupCodesBody } from './_schemas'
@@ -30,15 +30,19 @@ export async function POST(request: Request) {
     let verified = false
 
     if (user.twoFactorMethod === 'TOTP' && user.twoFactorSecret) {
-      verified = verifyTotpCode(user.twoFactorSecret, code)
+      verified = await verifyTotpCodeWithReplay(user.twoFactorSecret, code, user.id)
     } else if (user.twoFactorMethod === 'SMS' && challengeId) {
       verified = await verifyChallenge(userId, challengeId, code)
     }
 
+    // Track remaining hashes when a backup code is used, so the consumed
+    // code is removed in the same transaction that generates new ones.
+    let backupRemainingHashes: string[] | null = null
     if (!verified) {
       const result = await verifyBackupCode(code, user.twoFactorBackupCodes)
       if (result.valid) {
         verified = true
+        backupRemainingHashes = result.remainingHashes
       }
     }
 
@@ -48,6 +52,11 @@ export async function POST(request: Request) {
 
     const { codes, hashes } = generateBackupCodes()
 
+    // When verified via backup code, the consumed code's hash must be
+    // removed. We write `backupRemainingHashes` (minus the used code)
+    // merged with the fresh hashes — but since we're regenerating ALL
+    // codes, the new `hashes` fully replace the old set regardless.
+    // The key point: the old consumed code is no longer in the DB.
     await prisma.$transaction([
       prisma.user.update({
         where: { id: userId },
@@ -59,6 +68,7 @@ export async function POST(request: Request) {
           event: 'TWO_FACTOR_BACKUP_CODES_REGENERATED',
           metadata: {
             method: user.twoFactorMethod,
+            ...(backupRemainingHashes !== null ? { viaBackupCode: true } : {}),
           } as Prisma.InputJsonValue,
         },
       }),

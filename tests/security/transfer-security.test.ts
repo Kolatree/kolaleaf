@@ -195,7 +195,8 @@ describe('Transfer Security', () => {
     const { user } = await registerTestUser({ kycStatus: 'VERIFIED', dailyLimit: 1000 })
     const recipient = await createTestRecipient(user.id)
 
-    // First transfer of 600 succeeds
+    // First transfer of 600 succeeds — advance to AUD_RECEIVED so it
+    // counts toward the daily limit (CREATED drafts are excluded).
     const t1 = await createTransfer({
       userId: user.id,
       recipientId: recipient.id,
@@ -204,7 +205,10 @@ describe('Transfer Security', () => {
       exchangeRate: new Decimal(1042.65),
       fee: new Decimal(5),
     })
-    expect(t1.status).toBe('CREATED')
+    await prisma.transfer.update({
+      where: { id: t1.id },
+      data: { status: 'AUD_RECEIVED' },
+    })
 
     // Second transfer of 600 would total 1200, exceeding 1000 daily limit
     await expect(

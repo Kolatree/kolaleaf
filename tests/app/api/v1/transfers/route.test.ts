@@ -37,7 +37,7 @@ describe('POST /api/v1/transfers (schema validation)', () => {
     vi.clearAllMocks()
     // Auth runs before parseBody; schema-validation cases need passing
     // auth mocks so parseBody is reached.
-    vi.mocked(requireEmailVerified).mockResolvedValue(undefined as never)
+    vi.mocked(requireEmailVerified).mockResolvedValue({ userId: 'u1' } as never)
     vi.mocked(requireAuth).mockResolvedValue({ userId: 'u1' } as never)
   })
 

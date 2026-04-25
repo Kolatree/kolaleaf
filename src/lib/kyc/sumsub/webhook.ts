@@ -7,6 +7,8 @@ import { log } from '@/lib/obs/logger'
 interface SumsubWebhookPayload {
   applicantId: string
   type: string
+  correlationId?: string
+  inspectionId?: string
   reviewResult?: {
     reviewAnswer: string
     rejectLabels?: string[]
@@ -36,7 +38,15 @@ export async function handleSumsubWebhook(
 
   const data = JSON.parse(rawBody) as SumsubWebhookPayload
   const reviewAnswer = data.reviewResult?.reviewAnswer ?? 'unknown'
-  const eventId = `${data.applicantId}:${data.type}:${reviewAnswer}`
+  // Prefer correlationId (globally unique per Sumsub delivery). Fall back
+  // to a composite key that includes inspectionId as a tiebreaker so
+  // re-KYC events for the same applicant+type+answer don't collide.
+  // When inspectionId is also absent, omit the tiebreaker to preserve
+  // idempotency for identical retries of the same event.
+  const fallbackKey = data.inspectionId
+    ? `${data.applicantId}:${data.type}:${reviewAnswer}:${data.inspectionId}`
+    : `${data.applicantId}:${data.type}:${reviewAnswer}`
+  const eventId = data.correlationId ?? fallbackKey
 
   // 2. Atomically claim the event.
   try {

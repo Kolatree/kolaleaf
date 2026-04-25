@@ -2,6 +2,7 @@ import crypto from 'crypto'
 import bcrypt from 'bcrypt'
 import { generateSecret, generateURI, verifySync } from 'otplib'
 import QRCode from 'qrcode'
+import { prisma } from '@/lib/db/client'
 
 const ISSUER = 'Kolaleaf'
 
@@ -55,11 +56,47 @@ export async function generateQrCodeDataUrl(otpauthUri: string): Promise<string>
  * Verify a 6-digit TOTP code against a secret, tolerating ±1 time step
  * (~30s each side) for clock drift. Matches the standard server-side window
  * most TOTP implementations use.
+ *
+ * Pure cryptographic check — no replay protection. Used by enable route
+ * (validating a newly-scanned secret) and as the inner check for
+ * `verifyTotpCodeWithReplay`.
  */
 export function verifyTotpCode(secret: string, code: string): boolean {
   if (!secret || !code) return false
-  const result = verifySync({ token: code, secret, epochTolerance: 30 })
+  // epochTolerance is in seconds (not steps); 30s = ±1 time step
+  const STEP_SECONDS = 30
+  const result = verifySync({ token: code, secret, epochTolerance: STEP_SECONDS })
   return result.valid
+}
+
+/**
+ * Verify a TOTP code with replay protection. Runs the cryptographic check
+ * first, then atomically advances `twoFactorLastUsedStep` via a conditional
+ * UPDATE that only succeeds if the stored step is older than the current one.
+ * This eliminates the TOCTOU race between read and write — concurrent requests
+ * carrying the same code will have at most one succeed.
+ */
+export async function verifyTotpCodeWithReplay(
+  secret: string,
+  code: string,
+  userId: string,
+): Promise<boolean> {
+  if (!verifyTotpCode(secret, code)) return false
+
+  const currentStep = BigInt(Math.floor(Date.now() / 30_000))
+
+  // Atomic conditional UPDATE: only advances the step if the current stored
+  // value is NULL (first use) or strictly less than currentStep. If another
+  // concurrent request already advanced it, this returns 0 rows affected
+  // and we reject the replay.
+  const affected: number = await prisma.$executeRaw`
+    UPDATE "User"
+    SET "twoFactorLastUsedStep" = ${currentStep}
+    WHERE id = ${userId}
+      AND ("twoFactorLastUsedStep" IS NULL OR "twoFactorLastUsedStep" < ${currentStep})
+  `
+
+  return affected > 0
 }
 
 /**

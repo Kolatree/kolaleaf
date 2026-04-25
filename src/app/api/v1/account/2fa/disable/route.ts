@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { Prisma } from '@/generated/prisma/client'
 import { prisma } from '@/lib/db/client'
 import { requireAuth, AuthError } from '@/lib/auth/middleware'
-import { verifyTotpCode, verifyBackupCode } from '@/lib/auth/totp'
+import { verifyTotpCodeWithReplay, verifyBackupCode } from '@/lib/auth/totp'
 import { verifyChallenge } from '@/lib/auth/two-factor-challenge'
 import { parseBody } from '@/lib/http/validate'
 import { Disable2faBody } from './_schemas'
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     let usedBackupCode = false
 
     if (user.twoFactorMethod === 'TOTP' && user.twoFactorSecret) {
-      verified = verifyTotpCode(user.twoFactorSecret, code)
+      verified = await verifyTotpCodeWithReplay(user.twoFactorSecret, code, user.id)
     } else if (user.twoFactorMethod === 'SMS' && challengeId) {
       verified = await verifyChallenge(userId, challengeId, code)
     }
@@ -72,6 +72,7 @@ export async function POST(request: Request) {
           twoFactorSecret: null,
           twoFactorBackupCodes: [],
           twoFactorEnabledAt: null,
+          twoFactorLastUsedStep: null,
         },
       }),
       prisma.session.deleteMany({

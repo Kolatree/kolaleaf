@@ -164,14 +164,20 @@ describe('createTransfer', () => {
   })
 
   it('throws DailyLimitExceededError when cumulative sends exceed limit', async () => {
-    // User has 10000 daily limit. Create a transfer for 9000 first.
-    await createTransfer({
+    // User has 10000 daily limit. Create a transfer for 9000 first,
+    // then advance it to AUD_RECEIVED so it counts toward the limit
+    // (CREATED/AWAITING_AUD drafts are excluded from the daily cap).
+    const transfer = await createTransfer({
       userId: verifiedUserId,
       recipientId,
       corridorId,
       sendAmount: new Decimal(9000),
       exchangeRate: new Decimal('1042.65'),
       fee: new Decimal(5),
+    })
+    await prisma.transfer.update({
+      where: { id: transfer.id },
+      data: { status: 'AUD_RECEIVED' },
     })
 
     // Now try another 2000 — total 11000, exceeds 10000 limit

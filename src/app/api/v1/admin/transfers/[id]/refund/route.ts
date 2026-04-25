@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { ZodError } from 'zod'
 import { requireAdmin } from '@/lib/auth/admin-middleware'
 import { AuthError } from '@/lib/auth/middleware'
+import { jsonError } from '@/lib/http/json-error'
 import { transitionTransfer } from '@/lib/transfers/state-machine'
 import { TransferStatus, ActorType } from '@/generated/prisma/enums'
 import { logAuthEvent } from '@/lib/auth/audit'
@@ -44,19 +45,19 @@ export async function POST(
     return NextResponse.json({ transfer })
   } catch (error) {
     if (error instanceof AuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+      return jsonError(error.message, error.message, error.statusCode)
     }
     if (error instanceof ZodError) {
-      return NextResponse.json({ error: 'Invalid refund request' }, { status: 400 })
+      return jsonError('invalid_refund_request', 'Invalid refund request', 400)
     }
     const message = error instanceof Error ? error.message : 'Refund failed'
     const name = error instanceof Error ? error.name : ''
     if (name === 'InvalidTransitionError' || name === 'ConcurrentModificationError') {
-      return NextResponse.json({ error: message }, { status: 409 })
+      return jsonError('conflict', message, 409)
     }
     if (name === 'TransferNotFoundError') {
-      return NextResponse.json({ error: message }, { status: 404 })
+      return jsonError('transfer_not_found', message, 404)
     }
-    return NextResponse.json({ error: message }, { status: 500 })
+    return jsonError('refund_failed', message, 500)
   }
 }

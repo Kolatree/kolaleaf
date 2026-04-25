@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { requireAuth, AuthError } from '@/lib/auth/middleware'
+import { jsonError } from '@/lib/http/json-error'
 
 export async function DELETE(
   request: Request,
@@ -12,18 +13,18 @@ export async function DELETE(
 
     const recipient = await prisma.recipient.findUnique({ where: { id } })
     if (!recipient) {
-      return NextResponse.json({ error: 'Recipient not found' }, { status: 404 })
+      return jsonError('recipient_not_found', 'Recipient not found', 404)
     }
     if (recipient.userId !== userId) {
-      return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+      return jsonError('forbidden', 'Not authorized', 403)
     }
 
     await prisma.recipient.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {
     if (error instanceof AuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+      return jsonError(error.message, error.message, error.statusCode)
     }
-    return NextResponse.json({ error: 'Failed to delete recipient' }, { status: 500 })
+    return jsonError('delete_recipient_failed', 'Failed to delete recipient', 500)
   }
 }

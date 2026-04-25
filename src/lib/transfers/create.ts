@@ -77,7 +77,10 @@ export async function createTransfer(params: CreateTransferParams): Promise<Tran
       where: {
         userId,
         createdAt: { gte: todayStart, lte: todayEnd },
-        status: { notIn: ['CANCELLED', 'EXPIRED', 'REFUNDED'] },
+        // Only count transfers where AUD has actually been received.
+        // Drafts (CREATED, AWAITING_AUD) should not consume the daily
+        // limit — users can abandon them without funds moving.
+        status: { in: ['AUD_RECEIVED', 'PROCESSING_NGN', 'NGN_SENT', 'NGN_FAILED', 'NGN_RETRY', 'NEEDS_MANUAL', 'COMPLETED', 'FLOAT_INSUFFICIENT', 'REFUNDED'] },
       },
       select: { sendAmount: true },
     })

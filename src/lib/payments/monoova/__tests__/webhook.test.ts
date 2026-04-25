@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { handleMonoovaWebhook } from '../webhook'
+import { PermanentPaymentError } from '../../../transfers/errors'
 
 // Mock dependencies
 vi.mock('../../../db/client', () => ({
@@ -164,7 +165,7 @@ describe('handleMonoovaWebhook', () => {
     expect(prisma.webhookEvent.delete).not.toHaveBeenCalled()
   })
 
-  it('releases the claim (deletes) when processing throws', async () => {
+  it('keeps idempotency lock on permanent failure (amount mismatch)', async () => {
     const rawBody = JSON.stringify(makePayload({ amount: 999.99 }))
 
     vi.mocked(verifyMonoovaSignature).mockReturnValue(true)
@@ -175,19 +176,44 @@ describe('handleMonoovaWebhook', () => {
     } as any)
 
     vi.mocked(handlePaymentReceived).mockRejectedValue(
-      new Error('Amount mismatch: expected 250.00, received 999.99')
+      new PermanentPaymentError('Amount mismatch: expected 250.00, received 999.99')
     )
-    vi.mocked(prisma.webhookEvent.delete).mockResolvedValue({} as any)
+    vi.mocked(prisma.webhookEvent.update).mockResolvedValue({} as any)
 
     await expect(
       handleMonoovaWebhook(rawBody, 'sig')
     ).rejects.toThrow('Amount mismatch')
 
-    // Claim released so provider retry can re-enter
+    // Permanent failure: mark processed with error, don't delete
+    expect(prisma.webhookEvent.update).toHaveBeenCalledWith({
+      where: { provider_eventId: { provider: 'monoova', eventId: 'evt-001' } },
+      data: expect.objectContaining({ processed: true }),
+    })
+    expect(prisma.webhookEvent.delete).not.toHaveBeenCalled()
+  })
+
+  it('releases the claim (deletes) on transient failure', async () => {
+    const rawBody = JSON.stringify(makePayload({ amount: 250 }))
+
+    vi.mocked(verifyMonoovaSignature).mockReturnValue(true)
+    vi.mocked(prisma.webhookEvent.create).mockResolvedValue({} as any)
+    vi.mocked(prisma.transfer.findFirst).mockResolvedValue({
+      id: 'txn-001',
+      payidReference: 'KL-txn-001-1700000000',
+    } as any)
+
+    vi.mocked(handlePaymentReceived).mockRejectedValue(
+      new Error('Database connection timeout')
+    )
+    vi.mocked(prisma.webhookEvent.delete).mockResolvedValue({} as any)
+
+    await expect(
+      handleMonoovaWebhook(rawBody, 'sig')
+    ).rejects.toThrow('Database connection timeout')
+
+    // Transient failure: release lock for provider retry
     expect(prisma.webhookEvent.delete).toHaveBeenCalledWith({
       where: { provider_eventId: { provider: 'monoova', eventId: 'evt-001' } },
     })
-    // No processed=true update on failure
-    expect(prisma.webhookEvent.update).not.toHaveBeenCalled()
   })
 })

@@ -39,7 +39,16 @@ export async function validateSession(token: string) {
   const session = await prisma.session.findUnique({ where: { token } })
   if (!session) return null
   if (session.expiresAt < new Date()) return null
-  return session
+
+  // Sliding window: extend the session TTL on every valid access so
+  // active users aren't forced to re-authenticate every 15 minutes.
+  const newExpiresAt = new Date(Date.now() + SESSION_EXPIRY_MINUTES * 60 * 1000)
+  await prisma.session.update({
+    where: { id: session.id },
+    data: { expiresAt: newExpiresAt },
+  })
+
+  return { ...session, expiresAt: newExpiresAt }
 }
 
 export async function revokeSession(sessionId: string): Promise<void> {

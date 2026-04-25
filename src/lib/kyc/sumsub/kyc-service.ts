@@ -101,27 +101,37 @@ export async function initiateKyc(userId: string, client: SumsubClient): Promise
 }
 
 export async function handleKycApproved(userId: string) {
-  const user = await prisma.user.update({
-    where: { id: userId },
+  const result = await prisma.user.updateMany({
+    where: { id: userId, kycStatus: { in: ['IN_REVIEW', 'PENDING'] } },
     data: { kycStatus: 'VERIFIED' },
   })
+
+  if (result.count === 0) {
+    console.warn(`KYC approval for user ${userId} ignored — current status is not IN_REVIEW/PENDING`)
+    return null
+  }
 
   await logAuthEvent({
     userId,
     event: 'kyc.approved',
   })
 
-  return user
+  return result
 }
 
 export async function handleKycRejected(userId: string, reasons: string[]) {
-  const user = await prisma.user.update({
-    where: { id: userId },
+  const result = await prisma.user.updateMany({
+    where: { id: userId, kycStatus: { in: ['IN_REVIEW', 'PENDING'] } },
     data: {
       kycStatus: 'REJECTED',
       kycRejectionReasons: reasons,
     },
   })
+
+  if (result.count === 0) {
+    console.warn(`KYC rejection for user ${userId} ignored — current status is not IN_REVIEW/PENDING`)
+    return null
+  }
 
   await logAuthEvent({
     userId,
@@ -129,7 +139,7 @@ export async function handleKycRejected(userId: string, reasons: string[]) {
     metadata: { reasons },
   })
 
-  return user
+  return result
 }
 
 export async function getKycStatus(userId: string): Promise<KycStatusResult> {

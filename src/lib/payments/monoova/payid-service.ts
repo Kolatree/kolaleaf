@@ -5,6 +5,7 @@ import {
   ConcurrentModificationError,
   TransferNotFoundError,
   KycNotVerifiedError,
+  PermanentPaymentError,
 } from '../../transfers/errors'
 import { isKycGateDisabled, assertKycGateSafe } from '../../kyc/flag'
 import { isStubProvidersEnabled } from '../flag'
@@ -94,7 +95,7 @@ export async function handlePaymentReceived(
   const difference = receivedAmount.minus(expectedAmount).abs()
 
   if (difference.gt(AMOUNT_TOLERANCE)) {
-    throw new Error(
+    throw new PermanentPaymentError(
       `Amount mismatch: expected ${expectedAmount.toFixed(2)}, received ${receivedAmount.toFixed(2)}`
     )
   }

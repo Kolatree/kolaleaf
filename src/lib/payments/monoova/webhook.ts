@@ -3,6 +3,7 @@ import { Prisma } from '../../../generated/prisma/client'
 import { prisma } from '../../db/client'
 import { verifyMonoovaSignature } from './verify-signature'
 import { handlePaymentReceived } from './payid-service'
+import { PermanentPaymentError } from '../../transfers/errors'
 
 interface MonoovaWebhookPayload {
   eventId: string
@@ -75,13 +76,31 @@ export async function handleMonoovaWebhook(
     return
   }
 
-  // 4. Process payment and mark processed. If processing throws, release
-  //    the claim by deleting the WebhookEvent row so the provider's next
-  //    retry can re-enter; otherwise we'd permanently short-circuit retries
-  //    of a genuinely failed delivery.
+  // 4. Process payment and mark processed. On failure, distinguish:
+  //    - Permanent failures (amount mismatch, invalid data): keep the
+  //      idempotency lock so retries don't re-process bad data.
+  //    - Transient failures (DB errors, network): release the lock so
+  //      the provider's next retry can re-enter.
   try {
     await handlePaymentReceived(transfer.id, new Decimal(data.amount))
   } catch (err) {
+    const isPermanent = err instanceof PermanentPaymentError
+
+    if (isPermanent) {
+      // Keep the webhook event as a processed-with-error record so
+      // retries are blocked and the issue surfaces in reconciliation.
+      await prisma.webhookEvent.update({
+        where: { provider_eventId: { provider: 'monoova', eventId: data.eventId } },
+        data: {
+          processed: true,
+          processedAt: new Date(),
+          payload: { ...(data as unknown as object), processingError: err instanceof Error ? err.message : String(err) },
+        },
+      })
+      throw err
+    }
+
+    // Transient: release the lock for provider retry.
     await prisma.webhookEvent.delete({
       where: { provider_eventId: { provider: 'monoova', eventId: data.eventId } },
     })

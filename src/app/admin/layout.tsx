@@ -2,15 +2,8 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { validateSession } from '@/lib/auth/sessions'
 import { getSessionTokenFromCookie } from '@/lib/auth/middleware'
+import { getAdminEmails } from '@/lib/auth/admin-middleware'
 import { prisma } from '@/lib/db/client'
-
-function getAdminEmails(): string[] {
-  const raw = process.env.ADMIN_EMAILS ?? ''
-  return raw
-    .split(',')
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean)
-}
 
 // Admin group layout — auth + admin-email gate only. The visual shell
 // (AdminShell) is applied by each page so pages can declare their own active

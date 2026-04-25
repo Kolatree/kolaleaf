@@ -22,9 +22,9 @@ vi.mock('@/lib/auth/email-verification', () => ({
 }))
 
 vi.mock('@/lib/auth/login-rate-limit', () => ({
-  checkLoginRateLimit: vi.fn(() => ({ allowed: true, retryAfterMs: 0 })),
-  clearLoginRateLimit: vi.fn(),
-  recordLoginFailure: vi.fn(),
+  checkLoginRateLimit: vi.fn(async () => ({ allowed: true, retryAfterMs: 0 })),
+  clearLoginRateLimit: vi.fn(async () => {}),
+  recordLoginFailure: vi.fn(async () => {}),
 }))
 
 import { loginUser } from '@/lib/auth/login'
@@ -59,7 +59,7 @@ describe('POST /api/v1/auth/login', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockIssue.mockResolvedValue({ ok: true })
-    mockCheckRateLimit.mockReturnValue({ allowed: true, retryAfterMs: 0 })
+    mockCheckRateLimit.mockResolvedValue({ allowed: true, retryAfterMs: 0 })
   })
 
   it('returns 422 for missing identifier (Zod)', async () => {
@@ -167,7 +167,7 @@ describe('POST /api/v1/auth/login', () => {
   })
 
   it('returns 429 when login rate limit is exceeded', async () => {
-    mockCheckRateLimit.mockReturnValueOnce({ allowed: false, retryAfterMs: 30_000 })
+    mockCheckRateLimit.mockResolvedValueOnce({ allowed: false, retryAfterMs: 30_000 })
 
     const res = await POST(makeRequest(validBody()))
     expect(res.status).toBe(429)

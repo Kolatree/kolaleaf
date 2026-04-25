@@ -18,8 +18,20 @@ export async function GET(request: Request) {
 
     const where: Record<string, unknown> = {}
     if (status) where.status = status
-    if (from) where.createdAt = { ...(where.createdAt as object ?? {}), gte: new Date(from) }
-    if (to) where.createdAt = { ...(where.createdAt as object ?? {}), lte: new Date(to) }
+    if (from) {
+      const fromDate = new Date(from)
+      if (isNaN(fromDate.getTime())) {
+        return NextResponse.json({ error: 'Invalid from date' }, { status: 400 })
+      }
+      where.createdAt = { ...(where.createdAt as object ?? {}), gte: fromDate }
+    }
+    if (to) {
+      const toDate = new Date(to)
+      if (isNaN(toDate.getTime())) {
+        return NextResponse.json({ error: 'Invalid to date' }, { status: 400 })
+      }
+      where.createdAt = { ...(where.createdAt as object ?? {}), lte: toDate }
+    }
 
     if (search) {
       where.OR = [

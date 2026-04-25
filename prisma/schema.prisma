@@ -97,6 +97,7 @@ model User {
   twoFactorSecret      String?
   twoFactorBackupCodes String[]        @default([])
   twoFactorEnabledAt   DateTime?
+  twoFactorLastUsedStep BigInt?
   kycStatus     KycStatus        @default(PENDING)
   kycProviderId        String?
   kycRejectionReasons  String[]         @default([])

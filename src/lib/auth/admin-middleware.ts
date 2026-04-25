@@ -1,7 +1,7 @@
 import { requireAuth, AuthError } from './middleware'
 import { prisma } from '@/lib/db/client'
 
-function getAdminEmails(): string[] {
+export function getAdminEmails(): string[] {
   const raw = process.env.ADMIN_EMAILS ?? ''
   return raw
     .split(',')

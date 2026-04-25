@@ -9,7 +9,7 @@ function getCookieValue(cookieHeader: string | null, name: string): string | nul
   if (!cookieHeader) return null
   const match = cookieHeader.split(';').find((c) => c.trim().startsWith(`${name}=`))
   if (!match) return null
-  return match.split('=')[1]?.trim() ?? null
+  return match.split('=').slice(1).join('=')?.trim() ?? null
 }
 
 export function getSessionTokenFromCookie(cookieHeader: string | null): string | null {

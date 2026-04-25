@@ -16,13 +16,13 @@ vi.mock('@/lib/auth/middleware', () => ({
 
 vi.mock('@/lib/db/client', () => ({
   prisma: {
-    twoFactorChallenge: { findUnique: vi.fn() },
+    twoFactorChallenge: { findUnique: vi.fn(), update: vi.fn() },
     user: { findUniqueOrThrow: vi.fn(), update: vi.fn() },
   },
 }))
 
 vi.mock('@/lib/auth/totp', () => ({
-  verifyTotpCode: vi.fn(() => false),
+  verifyTotpCodeWithReplay: vi.fn(async () => false),
   verifyBackupCode: vi.fn(async () => ({ valid: false, remainingHashes: [] })),
 }))
 

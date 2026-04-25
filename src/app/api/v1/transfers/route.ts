@@ -3,6 +3,7 @@ import Decimal from 'decimal.js'
 import { createTransfer, listTransfers } from '@/lib/transfers'
 import { requireAuth, requireEmailVerified, AuthError } from '@/lib/auth/middleware'
 import { parseBody } from '@/lib/http/validate'
+import { jsonError } from '@/lib/http/json-error'
 import { extractRequestContext } from '@/lib/security/request-context'
 import { CreateTransferBody } from './_schemas'
 
@@ -16,8 +17,7 @@ export async function POST(request: Request) {
     // verification and progress to the verification wizard afterwards.
     // The KYC gate lives downstream at generatePayIdForTransfer, which
     // is the point where we start collecting AUD.
-    await requireEmailVerified(request)
-    const { userId } = await requireAuth(request)
+    const { userId } = await requireEmailVerified(request)
 
     const parsed = await parseBody(request, CreateTransferBody)
     if (!parsed.ok) return parsed.response
@@ -37,26 +37,20 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof AuthError) {
       if (error.message === 'email_unverified') {
-        return NextResponse.json(
-          {
-            error: 'email_unverified',
-            message: 'Please verify your email before sending money.',
-          },
-          { status: 403 },
-        )
+        return jsonError('email_unverified', 'Please verify your email before sending money.', 403)
       }
-      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+      return jsonError('unauthenticated', error.message, error.statusCode)
     }
     const message = error instanceof Error ? error.message : 'Transfer creation failed'
     const name = error instanceof Error ? error.name : ''
 
-    if (name === 'KycNotVerifiedError') return NextResponse.json({ error: message }, { status: 403 })
-    if (name === 'RecipientNotOwnedError') return NextResponse.json({ error: message }, { status: 403 })
-    if (name === 'InvalidCorridorError') return NextResponse.json({ error: message }, { status: 400 })
-    if (name === 'AmountOutOfRangeError') return NextResponse.json({ error: message }, { status: 400 })
-    if (name === 'DailyLimitExceededError') return NextResponse.json({ error: message }, { status: 400 })
+    if (name === 'KycNotVerifiedError') return jsonError('kyc_not_verified', message, 403)
+    if (name === 'RecipientNotOwnedError') return jsonError('recipient_not_owned', message, 403)
+    if (name === 'InvalidCorridorError') return jsonError('invalid_corridor', message, 400)
+    if (name === 'AmountOutOfRangeError') return jsonError('amount_out_of_range', message, 400)
+    if (name === 'DailyLimitExceededError') return jsonError('daily_limit_exceeded', message, 400)
 
-    return NextResponse.json({ error: message }, { status: 500 })
+    return jsonError('transfer_creation_failed', message, 500)
   }
 }
 
@@ -71,15 +65,15 @@ export async function GET(request: Request) {
 
     const result = await listTransfers(userId, {
       status: status as NonNullable<Parameters<typeof listTransfers>[1]>['status'],
-      limit: limit ? parseInt(limit, 10) : undefined,
+      limit: limit ? Math.min(parseInt(limit, 10), 100) : undefined,
       cursor,
     })
 
     return NextResponse.json(result)
   } catch (error) {
     if (error instanceof AuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+      return jsonError('unauthenticated', error.message, error.statusCode)
     }
-    return NextResponse.json({ error: 'Failed to list transfers' }, { status: 500 })
+    return jsonError('list_transfers_failed', 'Failed to list transfers', 500)
   }
 }

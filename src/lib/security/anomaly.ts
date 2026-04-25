@@ -206,7 +206,7 @@ async function runCheck(params: RecordAnomalyParams): Promise<void> {
           // details — raw UA is PII and CLAUDE.md mandates AES-256
           // at rest. Full UA stays in AuthEvent for ops triage;
           // compliance gets only the hash.
-          knownCountries: Array.from(seen.countries).sort(),
+          knownCountryCount: seen.countries.size,
           knownDeviceCount: seen.devices.size,
           detectedAt: new Date().toISOString(),
         },

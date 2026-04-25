@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   const { ip, userAgent } = securityContext
   const identifierValue = identifier.value
 
-  const rateLimit = checkLoginRateLimit(identifierValue, ip)
+  const rateLimit = await checkLoginRateLimit(identifierValue, ip)
   if (!rateLimit.allowed) {
     log('warn', 'auth.login.rate_limited', {
       identifier: identifierValue,
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
       userAgent,
       securityContext,
     })
-    clearLoginRateLimit(identifierValue, ip)
+    await clearLoginRateLimit(identifierValue, ip)
 
     const response = NextResponse.json({
       user: { id: user.id, fullName: user.fullName },
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
     return response
   } catch (error) {
     if (error instanceof EmailNotVerifiedError) {
-      clearLoginRateLimit(identifierValue, ip)
+      await clearLoginRateLimit(identifierValue, ip)
       // Password was correct but the email is unverified. Issue a fresh code
       // (best-effort: rate limit may suppress) and tell the client to bounce
       // to /verify-email. We do NOT set a session cookie.
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
     }
 
     if (error instanceof Error && error.message === 'Invalid credentials') {
-      recordLoginFailure(identifierValue, ip)
+      await recordLoginFailure(identifierValue, ip)
     }
 
     // Never leak the underlying error to the client — a DB error or internal

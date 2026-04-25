@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { verifyTotpCode, verifyBackupCode } from '@/lib/auth/totp'
+import { verifyTotpCodeWithReplay, verifyBackupCode } from '@/lib/auth/totp'
 import { consumeChallenge, verifyChallenge } from '@/lib/auth/two-factor-challenge'
 import {
   AuthError,
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     let verifiedMethod: 'TOTP' | 'SMS' | 'BACKUP_CODE' | null = null
 
     if (challenge.method === 'TOTP' && user.twoFactorMethod === 'TOTP' && user.twoFactorSecret) {
-      if (verifyTotpCode(user.twoFactorSecret, code)) {
+      if (await verifyTotpCodeWithReplay(user.twoFactorSecret, code, user.id)) {
         await consumeChallenge(challenge.id)
         verified = true
         verifiedMethod = 'TOTP'
@@ -86,6 +86,41 @@ export async function POST(request: Request) {
     }
 
     if (!verified || !verifiedMethod) {
+      // Increment attempts on the TOTP challenge (mirrors the SMS path's
+      // verifyChallenge logic which enforces MAX_ATTEMPTS=5).
+      if (challenge.method === 'TOTP') {
+        const MAX_TOTP_ATTEMPTS = 5
+        // Atomic conditional increment: only succeeds if attempts < max.
+        // Concurrent requests race on the DB row, not on a stale JS read.
+        const updated = await prisma.twoFactorChallenge.updateMany({
+          where: { id: challenge.id, attempts: { lt: MAX_TOTP_ATTEMPTS } },
+          data: { attempts: { increment: 1 } },
+        })
+        if (updated.count === 0) {
+          // Challenge already exhausted — consume it and clear cookie
+          await prisma.twoFactorChallenge.update({
+            where: { id: challenge.id },
+            data: { consumedAt: new Date() },
+          })
+          const response = NextResponse.json({ error: '2FA challenge expired' }, { status: 401 })
+          response.headers.append('Set-Cookie', clearPendingTwoFactorCookie())
+          return response
+        }
+        // Check if this increment just hit the cap
+        const current = await prisma.twoFactorChallenge.findUnique({
+          where: { id: challenge.id },
+          select: { attempts: true },
+        })
+        if (current && current.attempts >= MAX_TOTP_ATTEMPTS) {
+          await prisma.twoFactorChallenge.update({
+            where: { id: challenge.id },
+            data: { consumedAt: new Date() },
+          })
+          const response = NextResponse.json({ error: '2FA challenge expired' }, { status: 401 })
+          response.headers.append('Set-Cookie', clearPendingTwoFactorCookie())
+          return response
+        }
+      }
       return NextResponse.json({ error: 'Invalid 2FA code' }, { status: 401 })
     }
 

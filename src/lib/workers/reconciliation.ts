@@ -6,6 +6,7 @@ import { getOrchestrator } from '../payments/payout/orchestrator'
 const AWAITING_AUD_EXPIRE_HOURS = 24
 const PROCESSING_NGN_FLAG_HOURS = 1
 const NGN_RETRY_STALE_MINUTES = 30
+const AUD_RECEIVED_STALE_HOURS = 2
 
 export interface ReconciliationReport {
   expired: number
@@ -14,6 +15,7 @@ export interface ReconciliationReport {
   expiredIds: string[]
   flaggedIds: string[]
   retriedIds: string[]
+  errors: { transferId: string; error: string }[]
 }
 
 export async function runDailyReconciliation(): Promise<ReconciliationReport> {
@@ -25,6 +27,7 @@ export async function runDailyReconciliation(): Promise<ReconciliationReport> {
     expiredIds: [],
     flaggedIds: [],
     retriedIds: [],
+    errors: [],
   }
 
   try {
@@ -44,15 +47,20 @@ export async function runDailyReconciliation(): Promise<ReconciliationReport> {
     })
 
     for (const transfer of staleAwaiting) {
-      await transitionTransfer({
-        transferId: transfer.id,
-        toStatus: TransferStatus.EXPIRED,
-        actor: ActorType.SYSTEM,
-        expectedStatus: TransferStatus.AWAITING_AUD,
-        metadata: { reason: 'reconciliation_expired', hoursStale: AWAITING_AUD_EXPIRE_HOURS },
-      })
-      report.expired++
-      report.expiredIds.push(transfer.id)
+      try {
+        await transitionTransfer({
+          transferId: transfer.id,
+          toStatus: TransferStatus.EXPIRED,
+          actor: ActorType.SYSTEM,
+          expectedStatus: TransferStatus.AWAITING_AUD,
+          metadata: { reason: 'reconciliation_expired', hoursStale: AWAITING_AUD_EXPIRE_HOURS },
+        })
+        report.expired++
+        report.expiredIds.push(transfer.id)
+      } catch (err) {
+        console.error(`[worker/reconciliation] failed to expire transfer ${transfer.id}`, err)
+        report.errors.push({ transferId: transfer.id, error: String(err) })
+      }
     }
 
     // 2. Flag PROCESSING_NGN transfers stuck for >1h
@@ -65,21 +73,26 @@ export async function runDailyReconciliation(): Promise<ReconciliationReport> {
     })
 
     for (const transfer of stuckProcessing) {
-      // Create a compliance report for review — do NOT change transfer status
-      await prisma.complianceReport.create({
-        data: {
-          type: 'SUSPICIOUS',
-          transferId: transfer.id,
-          userId: transfer.userId,
-          details: {
-            reason: 'stuck_processing_ngn',
-            source: 'reconciliation_worker',
-            stuckSince: transfer.updatedAt.toISOString(),
+      try {
+        // Create a compliance report for review — do NOT change transfer status
+        await prisma.complianceReport.create({
+          data: {
+            type: 'SUSPICIOUS',
+            transferId: transfer.id,
+            userId: transfer.userId,
+            details: {
+              reason: 'stuck_processing_ngn',
+              source: 'reconciliation_worker',
+              stuckSince: transfer.updatedAt.toISOString(),
+            },
           },
-        },
-      })
-      report.flagged++
-      report.flaggedIds.push(transfer.id)
+        })
+        report.flagged++
+        report.flaggedIds.push(transfer.id)
+      } catch (err) {
+        console.error(`[worker/reconciliation] failed to flag transfer ${transfer.id}`, err)
+        report.errors.push({ transferId: transfer.id, error: String(err) })
+      }
     }
 
     // 3. Re-initiate NGN_RETRY transfers stuck for >30min
@@ -93,9 +106,47 @@ export async function runDailyReconciliation(): Promise<ReconciliationReport> {
     const orchestrator = getOrchestrator()
 
     for (const transfer of staleRetries) {
-      await orchestrator.resumeRetry(transfer.id)
-      report.retried++
-      report.retriedIds.push(transfer.id)
+      try {
+        await orchestrator.resumeRetry(transfer.id)
+        report.retried++
+        report.retriedIds.push(transfer.id)
+      } catch (err) {
+        console.error(`[worker/reconciliation] failed to resume retry for transfer ${transfer.id}`, err)
+        report.errors.push({ transferId: transfer.id, error: String(err) })
+      }
+    }
+
+    // 4. Flag stale AUD_RECEIVED transfers (>2h) that may have been
+    //    orphaned by a failed payout kickoff or float-monitor error.
+    const audReceivedCutoff = new Date(Date.now() - AUD_RECEIVED_STALE_HOURS * 60 * 60 * 1000)
+    const staleAudReceived = await prisma.transfer.findMany({
+      where: {
+        status: TransferStatus.AUD_RECEIVED,
+        updatedAt: { lt: audReceivedCutoff },
+      },
+    })
+
+    for (const transfer of staleAudReceived) {
+      try {
+        await prisma.complianceReport.create({
+          data: {
+            type: 'SUSPICIOUS',
+            transferId: transfer.id,
+            userId: transfer.userId,
+            details: {
+              reason: 'stale_aud_received',
+              source: 'reconciliation_worker',
+              staleSince: transfer.updatedAt.toISOString(),
+              hoursStale: AUD_RECEIVED_STALE_HOURS,
+            },
+          },
+        })
+        report.flagged++
+        report.flaggedIds.push(transfer.id)
+      } catch (err) {
+        console.error(`[worker/reconciliation] failed to flag stale AUD_RECEIVED transfer ${transfer.id}`, err)
+        report.errors.push({ transferId: transfer.id, error: String(err) })
+      }
     }
 
     console.log(

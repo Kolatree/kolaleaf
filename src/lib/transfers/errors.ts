@@ -61,6 +61,17 @@ export class NotTransferOwnerError extends Error {
   }
 }
 
+// Permanent payment processing failure that should NOT be retried.
+// Used to distinguish from transient errors (DB timeouts, network blips)
+// in webhook handlers — permanent failures keep the idempotency lock
+// so retries don't re-process bad data.
+export class PermanentPaymentError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'PermanentPaymentError'
+  }
+}
+
 // User-friendly error raised when a cancel is attempted against a
 // transfer that has already progressed past AWAITING_AUD. Distinct
 // from InvalidTransitionError so route handlers can surface a

@@ -28,6 +28,7 @@ vi.mock('@/lib/auth/totp', async () => {
   return {
     ...actual,
     verifyTotpCode: vi.fn(),
+    verifyTotpCodeWithReplay: vi.fn(),
     verifyBackupCode: vi.fn(),
     generateBackupCodes: vi.fn(() => ({
       codes: ['NEW1-111111', 'NEW2-222222', 'NEW3-333333', 'NEW4-444444', 'NEW5-555555', 'NEW6-666666', 'NEW7-777777', 'NEW8-888888'],
@@ -43,10 +44,10 @@ vi.mock('@/lib/auth/two-factor-challenge', () => ({
 import { POST } from '@/app/api/v1/account/2fa/regenerate-backup-codes/route'
 import { prisma } from '@/lib/db/client'
 import { requireAuth } from '@/lib/auth/middleware'
-import { verifyTotpCode, verifyBackupCode } from '@/lib/auth/totp'
+import { verifyTotpCodeWithReplay, verifyBackupCode } from '@/lib/auth/totp'
 
 const mockRequireAuth = vi.mocked(requireAuth)
-const mockVerifyTotp = vi.mocked(verifyTotpCode)
+const mockVerifyTotp = vi.mocked(verifyTotpCodeWithReplay)
 const mockVerifyBackup = vi.mocked(verifyBackupCode)
 
 function makeRequest(body: unknown): Request {
@@ -118,7 +119,7 @@ describe('POST /api/v1/account/2fa/regenerate-backup-codes', () => {
       twoFactorSecret: 'SECRET',
       twoFactorBackupCodes: ['h1', 'h2'],
     })
-    mockVerifyTotp.mockReturnValueOnce(true)
+    mockVerifyTotp.mockResolvedValueOnce(true)
     ;(prisma.user.update as ReturnType<typeof vi.fn>).mockResolvedValue({})
     ;(prisma.authEvent.create as ReturnType<typeof vi.fn>).mockResolvedValue({})
 
@@ -155,7 +156,7 @@ describe('POST /api/v1/account/2fa/regenerate-backup-codes', () => {
       twoFactorSecret: 'SECRET',
       twoFactorBackupCodes: ['h1'],
     })
-    mockVerifyTotp.mockReturnValueOnce(false)
+    mockVerifyTotp.mockResolvedValueOnce(false)
     mockVerifyBackup.mockResolvedValueOnce({ valid: false, remainingHashes: ['h1'] })
 
     const res = await POST(makeRequest({ code: '999999' }))

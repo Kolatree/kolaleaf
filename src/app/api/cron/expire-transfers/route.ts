@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db/client'
 import { transitionTransfer } from '@/lib/transfers/state-machine'
 import { TransferStatus, ActorType } from '@/generated/prisma/enums'
 import { log } from '@/lib/obs/logger'
+import { authorizeCron } from '@/lib/auth/cron-auth'
 
 // Dedicated AWAITING_AUD expiry cron.
 //
@@ -22,11 +23,8 @@ import { log } from '@/lib/obs/logger'
 const AWAITING_AUD_EXPIRE_HOURS = 24
 
 export async function POST(request: Request) {
-  if (process.env.CRON_SECRET) {
-    const auth = request.headers.get('authorization') ?? ''
-    if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-      return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-    }
+  if (!authorizeCron(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const expireCutoff = new Date(Date.now() - AWAITING_AUD_EXPIRE_HOURS * 60 * 60 * 1000)
@@ -66,7 +64,5 @@ export async function POST(request: Request) {
     expired: expiredIds.length,
   })
 
-  return NextResponse.json({ examined: stale.length, expired: expiredIds.length, expiredIds })
+  return NextResponse.json({ examined: stale.length, expired: expiredIds.length })
 }
-
-export { POST as GET }

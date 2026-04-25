@@ -76,10 +76,26 @@ export class FloatMonitor {
       try {
         await orchestrator.initiatePayout(transfer.id)
       } catch (error) {
-        console.error('[float-monitor] failed to resume payout after float restore', {
+        console.error('[float-monitor] payout failed after float restore, reverting to FLOAT_INSUFFICIENT', {
           transferId: transfer.id,
           error: error instanceof Error ? error.message : String(error),
         })
+        // Revert so the transfer re-enters the float-restore queue on
+        // the next check instead of getting stuck in AUD_RECEIVED.
+        try {
+          await transitionTransfer({
+            transferId: transfer.id,
+            toStatus: TransferStatus.FLOAT_INSUFFICIENT,
+            actor: ActorType.SYSTEM,
+            expectedStatus: TransferStatus.AUD_RECEIVED,
+            metadata: { reason: 'payout_failed_on_resume' },
+          })
+        } catch (revertErr) {
+          console.error('[float-monitor] revert to FLOAT_INSUFFICIENT also failed — transfer may be stranded', {
+            transferId: transfer.id,
+            revertError: revertErr instanceof Error ? revertErr.message : String(revertErr),
+          })
+        }
       }
     }
 

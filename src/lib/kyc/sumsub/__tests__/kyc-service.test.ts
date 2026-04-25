@@ -12,6 +12,7 @@ vi.mock('../../../db/client', () => ({
     user: {
       findUniqueOrThrow: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     // Step 27: initiateKyc now rate-limits via AuthEvent count in the
     // trailing hour. Default mock returns 0 so legacy tests exercise
@@ -117,14 +118,13 @@ describe('KYC Service', () => {
 
   describe('handleKycApproved', () => {
     it('updates KYC status to VERIFIED and logs auth event', async () => {
-      const updated = mockUser({ kycStatus: 'VERIFIED' })
-      vi.mocked(prisma.user.update).mockResolvedValue(updated as any)
+      vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 1 })
 
       const result = await handleKycApproved('user-001')
 
-      expect(result.kycStatus).toBe('VERIFIED')
-      expect(prisma.user.update).toHaveBeenCalledWith({
-        where: { id: 'user-001' },
+      expect(result).toEqual({ count: 1 })
+      expect(prisma.user.updateMany).toHaveBeenCalledWith({
+        where: { id: 'user-001', kycStatus: { in: ['IN_REVIEW', 'PENDING'] } },
         data: { kycStatus: 'VERIFIED' },
       })
 
@@ -138,17 +138,13 @@ describe('KYC Service', () => {
   describe('handleKycRejected', () => {
     it('updates KYC status to REJECTED with reasons and logs auth event', async () => {
       const reasons = ['ID_INVALID', 'SELFIE_MISMATCH']
-      const updated = mockUser({
-        kycStatus: 'REJECTED',
-        kycRejectionReasons: reasons,
-      })
-      vi.mocked(prisma.user.update).mockResolvedValue(updated as any)
+      vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 1 })
 
       const result = await handleKycRejected('user-001', reasons)
 
-      expect(result.kycStatus).toBe('REJECTED')
-      expect(prisma.user.update).toHaveBeenCalledWith({
-        where: { id: 'user-001' },
+      expect(result).toEqual({ count: 1 })
+      expect(prisma.user.updateMany).toHaveBeenCalledWith({
+        where: { id: 'user-001', kycStatus: { in: ['IN_REVIEW', 'PENDING'] } },
         data: {
           kycStatus: 'REJECTED',
           kycRejectionReasons: reasons,

@@ -66,6 +66,8 @@ export class PayoutOrchestrator {
     }> = {},
   ): Promise<Transfer> {
     const reference = generatePayoutReference(transfer.id)
+    // Network call stays outside the DB transaction to avoid holding
+    // an interactive transaction open across provider latency.
     const result = await provider.initiatePayout({
       transferId: transfer.id,
       amount: transfer.receiveAmount,
@@ -76,22 +78,26 @@ export class PayoutOrchestrator {
       reference,
     })
 
-    await prisma.transfer.update({
-      where: { id: transfer.id },
-      data: {
-        payoutProvider: provider.name as PayoutProviderEnum,
-        payoutProviderRef: result.providerRef,
-        ...transferPatch,
-      },
-    })
+    // Atomic: provider metadata write + state transition in one tx.
+    return prisma.$transaction(async (tx) => {
+      await tx.transfer.update({
+        where: { id: transfer.id },
+        data: {
+          payoutProvider: provider.name as PayoutProviderEnum,
+          payoutProviderRef: result.providerRef,
+          ...transferPatch,
+        },
+      })
 
-    return transitionTransfer({
-      transferId: transfer.id,
-      toStatus: TransferStatus.PROCESSING_NGN,
-      actor,
-      actorId,
-      expectedStatus,
-      metadata: { ...metadata, provider: provider.name, providerRef: result.providerRef, reference },
+      return transitionTransfer({
+        transferId: transfer.id,
+        toStatus: TransferStatus.PROCESSING_NGN,
+        actor,
+        actorId,
+        expectedStatus,
+        metadata: { ...metadata, provider: provider.name, providerRef: result.providerRef, reference },
+        tx,
+      })
     })
   }
 
@@ -146,8 +152,14 @@ export class PayoutOrchestrator {
       metadata: { reason },
     })
 
-    const currentRetryCount = transfer.retryCount
-    const currentProvider = transfer.payoutProvider
+    // Re-read after transition to get the current retryCount (the
+    // pre-transition snapshot may be stale if concurrent writes landed).
+    const updatedTransfer = await prisma.transfer.findUniqueOrThrow({
+      where: { id: transferId },
+      include: { recipient: true },
+    })
+    const currentRetryCount = updatedTransfer.retryCount
+    const currentProvider = updatedTransfer.payoutProvider
 
     // Same-provider retry window. A pure NGN_RETRY -> PROCESSING_NGN
     // status flip is not a retry; it just lies about work being in
@@ -261,6 +273,18 @@ export class PayoutOrchestrator {
       throw new Error(
         `Cannot resume retry: transfer ${transferId} is in state ${transfer.status}, expected NGN_RETRY`,
       )
+    }
+
+    // Budget guard: align with hasSameProviderRetriesRemaining so the
+    // reconciliation path and the live path use the same threshold.
+    if (!hasSameProviderRetriesRemaining(transfer.retryCount)) {
+      return transitionTransfer({
+        transferId,
+        toStatus: TransferStatus.NEEDS_MANUAL,
+        actor: ActorType.SYSTEM,
+        expectedStatus: TransferStatus.NGN_RETRY,
+        metadata: { reason: 'retry_budget_exhausted', retryCount: transfer.retryCount },
+      })
     }
 
     return this.startPayoutAttempt(

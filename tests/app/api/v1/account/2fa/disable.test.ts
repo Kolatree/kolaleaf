@@ -31,6 +31,7 @@ vi.mock('@/lib/auth/totp', async () => {
   return {
     ...actual,
     verifyTotpCode: vi.fn(),
+    verifyTotpCodeWithReplay: vi.fn(),
     verifyBackupCode: vi.fn(),
   }
 })
@@ -42,11 +43,11 @@ vi.mock('@/lib/auth/two-factor-challenge', () => ({
 import { POST } from '@/app/api/v1/account/2fa/disable/route'
 import { prisma } from '@/lib/db/client'
 import { requireAuth } from '@/lib/auth/middleware'
-import { verifyTotpCode, verifyBackupCode } from '@/lib/auth/totp'
+import { verifyTotpCodeWithReplay, verifyBackupCode } from '@/lib/auth/totp'
 import { verifyChallenge } from '@/lib/auth/two-factor-challenge'
 
 const mockRequireAuth = vi.mocked(requireAuth)
-const mockVerifyTotp = vi.mocked(verifyTotpCode)
+const mockVerifyTotp = vi.mocked(verifyTotpCodeWithReplay)
 const mockVerifyBackup = vi.mocked(verifyBackupCode)
 const mockVerifyChallenge = vi.mocked(verifyChallenge)
 
@@ -107,7 +108,7 @@ describe('POST /api/v1/account/2fa/disable', () => {
       twoFactorSecret: 'SECRET',
       twoFactorBackupCodes: ['h1', 'h2'],
     })
-    mockVerifyTotp.mockReturnValueOnce(true)
+    mockVerifyTotp.mockResolvedValueOnce(true)
     ;(prisma.user.update as ReturnType<typeof vi.fn>).mockResolvedValue({})
     ;(prisma.session.deleteMany as ReturnType<typeof vi.fn>).mockResolvedValue({ count: 2 })
     ;(prisma.authEvent.create as ReturnType<typeof vi.fn>).mockResolvedValue({})
@@ -159,7 +160,7 @@ describe('POST /api/v1/account/2fa/disable', () => {
       twoFactorSecret: 'SECRET',
       twoFactorBackupCodes: ['h1', 'h2'],
     })
-    mockVerifyTotp.mockReturnValueOnce(false)
+    mockVerifyTotp.mockResolvedValueOnce(false)
     mockVerifyBackup.mockResolvedValueOnce({ valid: true, remainingHashes: ['h2'] })
     ;(prisma.user.update as ReturnType<typeof vi.fn>).mockResolvedValue({})
     ;(prisma.session.deleteMany as ReturnType<typeof vi.fn>).mockResolvedValue({ count: 0 })
@@ -196,7 +197,7 @@ describe('POST /api/v1/account/2fa/disable', () => {
       twoFactorSecret: 'SECRET',
       twoFactorBackupCodes: ['h1'],
     })
-    mockVerifyTotp.mockReturnValueOnce(false)
+    mockVerifyTotp.mockResolvedValueOnce(false)
     mockVerifyBackup.mockResolvedValueOnce({ valid: false, remainingHashes: ['h1'] })
 
     const res = await POST(makeRequest({ code: '999999' }))

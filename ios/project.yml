@@ -1,0 +1,152 @@
+# XcodeGen project spec for Kolaleaf iOS app.
+# Generate the .xcodeproj with: cd ios && xcodegen generate
+# Install xcodegen: brew install xcodegen
+
+name: Kolaleaf
+options:
+  bundleIdPrefix: com.kolaleaf
+  deploymentTarget:
+    iOS: "17.2"
+  developmentLanguage: en
+  groupSortPosition: top
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    DEVELOPMENT_TEAM: "" # Fill in App Store Connect team ID at signing time
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    CLANG_ENABLE_MODULES: YES
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
+    GCC_TREAT_WARNINGS_AS_ERRORS: YES
+    OTHER_SWIFT_FLAGS:
+      - "-strict-concurrency=complete"
+
+# ============== App Target ==============
+targets:
+  Kolaleaf:
+    type: application
+    platform: iOS
+    sources:
+      - path: Kolaleaf
+        excludes:
+          - "**/*.md"
+    resources:
+      - Kolaleaf/Resources/Tokens.json
+      - Kolaleaf/Resources/Assets.xcassets
+      - Kolaleaf/Resources/Inter-fonts
+    info:
+      path: Kolaleaf/Info.plist
+      properties:
+        CFBundleDisplayName: Kolaleaf
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen:
+          UIColorName: launchBackground
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIRequiredDeviceCapabilities:
+          - armv7
+        NSCameraUsageDescription: "Kolaleaf uses your camera to verify your identity for AUSTRAC compliance."
+        NSMicrophoneUsageDescription: "Kolaleaf uses the microphone during identity verification (Sumsub liveness check)."
+        NSFaceIDUsageDescription: "Kolaleaf uses Face ID to confirm transfers."
+        NSPhotoLibraryAddUsageDescription: "Kolaleaf can save transfer receipts to your Photos."
+        UIAppFonts:
+          - Inter-Regular.ttf
+          - Inter-Medium.ttf
+          - Inter-SemiBold.ttf
+          - Inter-Bold.ttf
+          - Inter-ExtraBold.ttf
+          - Inter-Black.ttf
+        ITSAppUsesNonExemptEncryption: false
+        FileProtection: NSFileProtectionComplete
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kolaleaf.app
+        TARGETED_DEVICE_FAMILY: "1,2" # iPhone + iPad (R1)
+        ENABLE_PREVIEWS: YES
+    entitlements:
+      path: Kolaleaf/Kolaleaf.entitlements
+      properties:
+        aps-environment: development
+        com.apple.security.application-groups:
+          - group.com.kolaleaf.shared
+        com.apple.developer.associated-domains:
+          - applinks:kolaleaf.com.au
+        com.apple.developer.devicecheck.appattest-environment: production
+    dependencies:
+      - target: KolaleafWidgets
+
+  # ============== Widget Extension Target ==============
+  KolaleafWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: KolaleafWidgets
+        excludes:
+          - "**/*.md"
+    info:
+      path: KolaleafWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Kolaleaf Live Activity
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kolaleaf.app.widgets
+    entitlements:
+      path: KolaleafWidgets/KolaleafWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.kolaleaf.shared
+
+  # ============== Test Targets ==============
+  KolaleafTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - KolaleafTests
+    dependencies:
+      - target: Kolaleaf
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kolaleaf.app.tests
+
+  KolaleafUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - KolaleafUITests
+    dependencies:
+      - target: Kolaleaf
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kolaleaf.app.uitests
+
+packages:
+  SnapshotTesting:
+    url: https://github.com/pointfreeco/swift-snapshot-testing
+    from: "1.17.0"
+
+schemes:
+  Kolaleaf:
+    build:
+      targets:
+        Kolaleaf: all
+        KolaleafWidgets: all
+    test:
+      gatherCoverageData: true
+      coverageTargets:
+        - Kolaleaf
+      targets:
+        - KolaleafTests
+        - KolaleafUITests
+    run:
+      config: Debug
+    archive:
+      config: Release

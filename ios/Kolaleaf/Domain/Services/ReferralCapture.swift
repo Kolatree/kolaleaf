@@ -38,10 +38,15 @@ public struct SystemPasteboard: PasteboardSource {
 }
 #endif
 
-/// Actor-isolated service that owns capture / persistence / consumption of the
-/// referral token. Inject via `@Environment(\.referralCapture)` once wired in
-/// the app root.
-public actor ReferralCapture {
+/// Service that owns capture / persistence / consumption of the referral token.
+/// Inject via `@Environment(\.referralCapture)` once wired in the app root.
+///
+/// Concurrency: declared `final class @unchecked Sendable`. The class holds only
+/// references to thread-safe primitives (UserDefaults' set/bool API, the
+/// `Keychain` actor, and a Sendable PasteboardSource), so no internal locking
+/// is needed. Async methods exist because `PasteboardSource` and `Keychain` are
+/// async; nothing about this class itself requires actor isolation.
+public final class ReferralCapture: @unchecked Sendable {
 
     // MARK: - Token format
     //
@@ -49,7 +54,9 @@ public actor ReferralCapture {
     // Validation also accepts the token in any case + surrounding whitespace
     // so explicit-prompt input "feels right" — see `normalize(_:)`.
 
-    private static let tokenRegex = #/^kola_[a-z0-9]{12}$/#
+    // Regex<Substring> isn't Sendable, but this instance is immutable and
+    // pattern-matching is read-only / thread-safe in practice.
+    nonisolated(unsafe) private static let tokenRegex = #/^kola_[a-z0-9]{12}$/#
 
     // MARK: - Pasteboard one-shot guard
 

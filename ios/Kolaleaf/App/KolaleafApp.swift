@@ -96,29 +96,4 @@ struct KolaleafApp: App {
     }
 }
 
-/// Phase 1 root view. Routes by `hasActiveSession`. The post-auth branch is a
-/// transient stub until U33 (MainTabView) lands; the unauth branch shows the
-/// real `WelcomeView` (U16). The full coordinator (U15) takes over in a follow-up.
-struct RootCoordinator: View {
-    @Environment(AppState.self) private var appState
-
-    var body: some View {
-        if appState.hasActiveSession {
-            // Replaced by MainTabView in Phase 4 (U33).
-            VStack {
-                Text("Kolaleaf")
-                    .font(KolaFont.headline)
-                    .foregroundStyle(KolaColors.whiteOnGradient)
-                Text("Phase 1 root coming up")
-                    .font(KolaFont.tagline)
-                    .foregroundStyle(KolaColors.whiteOnGradientMuted)
-            }
-            .kolaWallpaper()
-        } else {
-            WelcomeView(
-                onGetStarted: { /* wired to phone signup in U17 */ },
-                onSignIn: { /* wired to login in U21 */ }
-            )
-        }
-    }
-}
+// `RootCoordinator` is defined in `App/RootCoordinator.swift` (U15).

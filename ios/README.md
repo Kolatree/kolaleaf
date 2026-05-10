@@ -63,4 +63,4 @@ See `Kolaleaf/` for the source tree. Top-level groups:
 
 ## Three Man Team
 
-This iOS module follows the project's Arch / Bob / Richard workflow. See `BUILDER.md` and `REVIEWER.md` at repo root.
+This iOS module follows the project's Arch / Bob / Richard workflow. See `ARCHITECT.md`, `BUILDER.md`, and `REVIEWER.md` at repo root, and `handoff/BUILD-LOG.md` for the running log of completed steps.

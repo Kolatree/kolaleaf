@@ -1,6 +1,14 @@
 // KolaleafApp.swift  (Phase 0 · U8 / Phase 1 root)
-// @main entry. Initialises shared singletons (AppState, APIClient, Keychain) and
-// installs the RootCoordinator. Coordinator branches by AppState; this file stays minimal.
+// @main entry. Initialises shared singletons and installs the RootCoordinator.
+//
+// r2-review fixes · 2026-05-09:
+//   • #3 (correctness): scenePhase .active calls shouldForceReauth() BEFORE markForegrounded
+//     so the foreground-idle path is reachable.
+//   • #9 (security): force-logout clears the private cookie jar regardless of the network
+//     call's outcome, so the local cookie can't be replayed if /auth/logout fails.
+//   • #14 (swift-ios): preferredColorScheme(.dark) removed from the WindowGroup root —
+//     it was forcing dark on system sheets/alerts. Wallpaper carries the dark surface;
+//     system UI now follows user preference.
 
 import SwiftUI
 
@@ -8,8 +16,11 @@ import SwiftUI
 struct KolaleafApp: App {
     @State private var appState = AppState()
     @State private var apiClient: APIClient = {
-        let url = URL(string: ProcessInfo.processInfo.environment["KOLA_API_BASE_URL"]
-                      ?? "https://kolaleaf.com.au")!
+        let urlString = ProcessInfo.processInfo.environment["KOLA_API_BASE_URL"]
+            ?? "https://kolaleaf.com.au"
+        guard let url = URL(string: urlString) else {
+            fatalError("KOLA_API_BASE_URL is invalid: \(urlString)")
+        }
         return APIClient(baseURL: url)
     }()
     @State private var keychain = Keychain()
@@ -22,7 +33,6 @@ struct KolaleafApp: App {
                 .environment(appState)
                 .environment(\.apiClient, apiClient)
                 .environment(\.keychain, keychain)
-                .preferredColorScheme(.dark)  // Variant C is dark-on-gradient by design
                 .task { await wireAPIClientHooks() }
         }
         .onChange(of: scenePhase) { _, newPhase in
@@ -37,9 +47,11 @@ struct KolaleafApp: App {
         case .background:
             appState.markBackgrounded()
         case .active:
+            // r2 fix #3: compute reauth FIRST, then mark foreground. Otherwise
+            // markForegrounded() clears lastBackgroundedAt and the check is unreachable.
+            let needsReauth = appState.shouldForceReauth()
             appState.markForegrounded()
-            // Re-auth check fires here per U76b. RootCoordinator reacts to AppState changes.
-            if appState.shouldForceReauth() && appState.hasActiveSession {
+            if needsReauth && appState.hasActiveSession {
                 Task { await forceReauth() }
             }
         case .inactive:
@@ -52,26 +64,31 @@ struct KolaleafApp: App {
 
     private func wireAPIClientHooks() async {
         // Bump idle clock on every successful API call (U76b).
-        await apiClient.setSuccessHook { [weak appState] in
-            await MainActor.run { appState?.bumpInteraction() }
+        await apiClient.setSuccessHook { [appState] in
+            await appState.bumpInteraction()
         }
     }
 
     private func forceReauth() async {
-        // Clear local state — the network call to /auth/logout is best-effort.
-        let result = await apiClient.send(AuthEndpoints.Logout())
-        if case .failure = result {
-            // Even if logout call fails, drop local state. Backend session may have already expired.
-        }
+        // r2 fix #9: clear local credentials FIRST so a stale cookie cannot be replayed
+        // even if /auth/logout fails (offline, 5xx, captive portal). The network call
+        // is best-effort.
         try? await keychain.delete(forKey: KeychainKeys.sessionToken)
         try? await keychain.delete(forKey: KeychainKeys.currentUserId)
-        await MainActor.run { appState.clearForLogout() }
+        await apiClient.clearCookies()
+        appState.clearForLogout()
+
+        // Best-effort network revoke. Note: the local cookie is already gone, so this
+        // request goes out cookie-less and the backend will return 401 — that's fine,
+        // we use it to instruct the backend session row to delete if the cookie was
+        // still on a different store.
+        _ = await apiClient.send(AuthEndpoints.Logout())
     }
 }
 
-/// Placeholder root view until Phase 1 (U15) lands. Routes by hasActiveSession to either
-/// a Welcome stub (unauth) or a "Main app" stub (auth). Replaced by real RootCoordinator
-/// in Phase 1.
+/// Phase 0 root view stub. Replaced by the real `RootCoordinator` in `App/RootCoordinator.swift`
+/// when Phase 1 (U15) lands. Routes by hasActiveSession to a Welcome stub or a "main app" stub.
+#warning("Phase 0 stub — replace with App/RootCoordinator.swift in Phase 1 (U15)")
 struct RootCoordinator: View {
     @Environment(AppState.self) private var appState
 
@@ -90,11 +107,9 @@ struct RootCoordinator: View {
         } else {
             // Replaced by WelcomeView in Phase 1 (U16).
             VStack {
-                Text("Kola")
+                (Text("Kola")
+                    + Text("leaf").foregroundColor(KolaColors.greenLight))
                     .font(KolaFont.headline)
-                + Text("leaf")
-                    .font(KolaFont.headline)
-                    .foregroundStyle(KolaColors.greenLight)
                 Text("Send to Nigeria · Welcome stub")
                     .font(KolaFont.tagline)
                     .foregroundStyle(KolaColors.whiteOnGradient)

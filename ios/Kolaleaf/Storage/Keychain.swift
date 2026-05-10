@@ -5,8 +5,12 @@
 //   • SESSION TOKEN  → app-private keychain (no kSecAttrAccessGroup). Widget cannot read.
 //   • TRANSFER STATE → shared via App Group only (key: `liveActivityState.<id>`).
 //
-// Use the `.appPrivate` access option for any auth/session credential.
-// Use `.appGroup` only for non-credential data the widget legitimately needs.
+// r2-review fix · 2026-05-09:
+//   • #19: errSecInteractionNotAllowed (-25308, device locked before first unlock) is
+//     now an explicit error case, distinct from .notFound. Cold-launch on a locked
+//     device must NOT trigger a fake logout.
+//   • Save path: prefer SecItemUpdate over delete-then-add (cross-project lesson from
+//     Porizo) — race-safe and avoids token loss on transient errors.
 
 import Foundation
 import Security
@@ -19,6 +23,7 @@ public enum KeychainAccessGroup: Sendable {
 public enum KeychainError: Error, Equatable, Sendable {
     case duplicate
     case notFound
+    case interactionNotAllowed   // device locked, retry after unlock
     case unexpectedStatus(OSStatus)
     case invalidData
 }
@@ -36,18 +41,19 @@ public actor Keychain {
     // MARK: - Public
 
     public func save(_ data: Data, forKey key: String) throws {
-        var query = baseQuery(for: key)
-        query[kSecValueData as String] = data
-        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-
-        let status = SecItemAdd(query as CFDictionary, nil)
-        switch status {
+        // Try update first (cross-project lesson from Porizo). On notFound, fall through to add.
+        let updateQuery = baseQuery(for: key)
+        let updateAttrs: [String: Any] = [kSecValueData as String: data]
+        let updateStatus = SecItemUpdate(updateQuery as CFDictionary, updateAttrs as CFDictionary)
+        switch updateStatus {
         case errSecSuccess:
             return
-        case errSecDuplicateItem:
-            try update(data, forKey: key)
+        case errSecItemNotFound:
+            try add(data, forKey: key)
+        case errSecInteractionNotAllowed:
+            throw KeychainError.interactionNotAllowed
         default:
-            throw KeychainError.unexpectedStatus(status)
+            throw KeychainError.unexpectedStatus(updateStatus)
         }
     }
 
@@ -64,6 +70,8 @@ public actor Keychain {
             return data
         case errSecItemNotFound:
             throw KeychainError.notFound
+        case errSecInteractionNotAllowed:
+            throw KeychainError.interactionNotAllowed
         default:
             throw KeychainError.unexpectedStatus(status)
         }
@@ -72,7 +80,12 @@ public actor Keychain {
     public func delete(forKey key: String) throws {
         let query = baseQuery(for: key)
         let status = SecItemDelete(query as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
+        switch status {
+        case errSecSuccess, errSecItemNotFound:
+            return
+        case errSecInteractionNotAllowed:
+            throw KeychainError.interactionNotAllowed
+        default:
             throw KeychainError.unexpectedStatus(status)
         }
     }
@@ -92,11 +105,28 @@ public actor Keychain {
 
     // MARK: - Private
 
-    private func update(_ data: Data, forKey key: String) throws {
-        let query = baseQuery(for: key)
-        let attributes: [String: Any] = [kSecValueData as String: data]
-        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-        guard status == errSecSuccess else { throw KeychainError.unexpectedStatus(status) }
+    private func add(_ data: Data, forKey key: String) throws {
+        var query = baseQuery(for: key)
+        query[kSecValueData as String] = data
+        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+
+        let status = SecItemAdd(query as CFDictionary, nil)
+        switch status {
+        case errSecSuccess:
+            return
+        case errSecDuplicateItem:
+            // Lost a race with another writer. Retry as update.
+            let updateQuery = baseQuery(for: key)
+            let updateAttrs: [String: Any] = [kSecValueData as String: data]
+            let updateStatus = SecItemUpdate(updateQuery as CFDictionary, updateAttrs as CFDictionary)
+            guard updateStatus == errSecSuccess else {
+                throw KeychainError.unexpectedStatus(updateStatus)
+            }
+        case errSecInteractionNotAllowed:
+            throw KeychainError.interactionNotAllowed
+        default:
+            throw KeychainError.unexpectedStatus(status)
+        }
     }
 
     private func baseQuery(for key: String) -> [String: Any] {
@@ -115,20 +145,12 @@ public actor Keychain {
 // MARK: - Well-known keys
 
 public enum KeychainKeys {
-    /// Mirror of the auth session cookie value, app-private. Used for:
-    ///   - Re-auth detection on cold launch (cookie may survive in HTTPCookieStorage but
-    ///     having a separate marker lets us detect partial corruption / migration).
-    ///   - Force-logout: clearing this key on idle-timeout supersedes any in-memory state.
+    /// Mirror of the auth session cookie value, app-private.
     public static let sessionToken = "session.token"
-
-    /// User ID (so the app can show "logged in as ___" before a /me round-trip on cold launch).
+    /// User ID. Survives reinstall; used to show "logged in as ___" pre-/me.
     public static let currentUserId = "session.userId"
-
     /// Captured referral code from a warm-arrival universal link or clipboard (U91).
-    /// Persisted until first successful send, then cleared.
     public static let pendingReferralCode = "referral.pendingCode"
-
-    /// App Attest key ID (U76d). Per-device, generated once, used for every assertion.
-    /// Not the assertion itself — that's request-scoped.
+    /// App Attest key ID (U76d). Per-device, generated once.
     public static let appAttestKeyId = "attest.keyId"
 }

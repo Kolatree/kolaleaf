@@ -1,6 +1,8 @@
 // KolaColors.swift
-// Brand color tokens. Source of truth: Resources/Tokens.json (mirrored from approved.json).
-// Update both files together; never hard-code hex values outside this file.
+// Brand color tokens. Hex values are the source of truth at the iOS layer.
+// Upstream design source: ~/.gstack/projects/Kolaleaf/designs/mobile-app-20260509/approved.json
+// (Variant C "The Send Gesture"). Keep these values in sync with that file when
+// design tokens change.
 
 import SwiftUI
 

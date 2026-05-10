@@ -1,5 +1,6 @@
 # Build Log
-*Owned by Architect. Updated by Builder after each step.*
+
+_Owned by Architect. Updated by Builder after each step._
 
 ---
 
@@ -12,17 +13,17 @@
 
 ### Wave 1 commit ledger (closes WAVE-1-AUDIT.md gaps)
 
-| Step | Hash | Title | Closes audit gaps |
-|---|---|---|---|
-| 26 | _(earlier session)_ | Admin ops tooling + admin-action audit log | 8 |
-| 27 | _(earlier session)_ | KYC retry route + Sumsub webhook coverage + initiate rate-limit | 4, 9, 16 |
-| 28 | _(earlier session)_ | AUSTRAC TTR ($9.5k buffered) + IFTI (every transfer) ComplianceReports | 1, 2 |
-| 30 | _(earlier session)_ | Audit-log completeness — LOGOUT, EMAIL_CHANGE_COMPLETED, velocity SMR | 6, 7, 15 |
-| 31 | 6001843 | Transfer state machine cleanup — NULL_STATE sentinel, dead edge removed, awaitingAudSince semantics, dedicated expiry cron, CancelTooLateError | 5, 10, 11, 12, 19 |
-| 29 | c27ead4 | Reconciliation vs provider statements — Monoova + Flutterwave + Paystack pulls, diff engine, SUSPICIOUS emission | 3 |
-| 29h | e221c59 | Step 29 hardening — unbounded transfer query bound, cross-provider ref collision fix, idempotency dedupe, prod auth fail-closed, write cap, timing-safe compare | review findings P0×2 + P1×5 |
-| 32 | cd664d6 | Security anomaly detection — IP + device fingerprint + anomaly detector + AuthEvent enrichment | 13, 14, 17, 18 |
-| 32h | 4113332 | Step 32 hardening — self-inclusion P0 fixed via observedAt filter, AuthEvent index, country-header trust gate, PII reduction, 24h dedupe, KYC-country mismatch kind | review findings P0×2 + P1×5 |
+| Step | Hash                | Title                                                                                                                                                               | Closes audit gaps           |
+| ---- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| 26   | _(earlier session)_ | Admin ops tooling + admin-action audit log                                                                                                                          | 8                           |
+| 27   | _(earlier session)_ | KYC retry route + Sumsub webhook coverage + initiate rate-limit                                                                                                     | 4, 9, 16                    |
+| 28   | _(earlier session)_ | AUSTRAC TTR ($9.5k buffered) + IFTI (every transfer) ComplianceReports                                                                                              | 1, 2                        |
+| 30   | _(earlier session)_ | Audit-log completeness — LOGOUT, EMAIL_CHANGE_COMPLETED, velocity SMR                                                                                               | 6, 7, 15                    |
+| 31   | 6001843             | Transfer state machine cleanup — NULL_STATE sentinel, dead edge removed, awaitingAudSince semantics, dedicated expiry cron, CancelTooLateError                      | 5, 10, 11, 12, 19           |
+| 29   | c27ead4             | Reconciliation vs provider statements — Monoova + Flutterwave + Paystack pulls, diff engine, SUSPICIOUS emission                                                    | 3                           |
+| 29h  | e221c59             | Step 29 hardening — unbounded transfer query bound, cross-provider ref collision fix, idempotency dedupe, prod auth fail-closed, write cap, timing-safe compare     | review findings P0×2 + P1×5 |
+| 32   | cd664d6             | Security anomaly detection — IP + device fingerprint + anomaly detector + AuthEvent enrichment                                                                      | 13, 14, 17, 18              |
+| 32h  | 4113332             | Step 32 hardening — self-inclusion P0 fixed via observedAt filter, AuthEvent index, country-header trust gate, PII reduction, 24h dedupe, KYC-country mismatch kind | review findings P0×2 + P1×5 |
 
 ### Wave 1 deferred / out-of-scope (tracked, not blocking)
 
@@ -38,17 +39,17 @@
 
 ### Pile B commit ledger
 
-| Step | Hash | Title | State |
-|---|---|---|---|
-| 19 | 6d3db06 | /api/v1 versioning — 42 routes moved | **pushed** + Railway auto-deployed |
-| 20a | 3cc886f | Zod + OpenAPI — tooling + 5 pilot routes | local |
-| 20b | ae9b6a4 | Zod schemas for remaining 36 routes + barrel | local |
-| 20c | e3911de | Richard's Step 20 review feedback | local |
-| 22 | 47d9c84 | User.state → Postgres AuState enum | local |
-| 23 | 89ad06e | BullMQ email queue with FailedEmail sink | local |
-| 25 | 408fa2b | soft-delete User rows (Option B) + cleanup script | local |
-| 21 | 3333e08 | discriminated-union identifier body on /auth/login | local |
-| 24 | 24c9657 | observability foundation — pino + request ID + /api/health + alert sinks | local |
+| Step | Hash    | Title                                                                    | State                              |
+| ---- | ------- | ------------------------------------------------------------------------ | ---------------------------------- |
+| 19   | 6d3db06 | /api/v1 versioning — 42 routes moved                                     | **pushed** + Railway auto-deployed |
+| 20a  | 3cc886f | Zod + OpenAPI — tooling + 5 pilot routes                                 | local                              |
+| 20b  | ae9b6a4 | Zod schemas for remaining 36 routes + barrel                             | local                              |
+| 20c  | e3911de | Richard's Step 20 review feedback                                        | local                              |
+| 22   | 47d9c84 | User.state → Postgres AuState enum                                       | local                              |
+| 23   | 89ad06e | BullMQ email queue with FailedEmail sink                                 | local                              |
+| 25   | 408fa2b | soft-delete User rows (Option B) + cleanup script                        | local                              |
+| 21   | 3333e08 | discriminated-union identifier body on /auth/login                       | local                              |
+| 24   | 24c9657 | observability foundation — pino + request ID + /api/health + alert sinks | local                              |
 
 ### Pre-push checklist for Arch
 
@@ -61,8 +62,84 @@
 
 ## Step History
 
+### Wave 2a · iOS Phase -1 / -0.5 / 0 (foundation) -- REVIEW PENDING
+
+**Date:** 2026-05-09 -> 2026-05-10
+**Branch:** `feat/ios-swiftui-app`
+**Plan:** `docs/plans/2026-05-09-001-feat-ios-swiftui-kolaleaf-mobile-app-plan.md` (r2)
+
+**Phase -1 (U0a):** Compliance counsel engagement placeholder created at
+`docs/legal/counsel-engagement-2026-PLACEHOLDER.md`. Must be replaced with executed
+engagement letter before Phase 11.5.
+
+**Phase -0.5 (U93):** Token alignment. Extended `approved.json` with gold/coral/ink/
+pageLight/whiteOnGradient/shareReceiptCardBg tokens. Bumped whiteOnGradient body-text
+opacity 0.65 -> 0.78 per AA contrast fix.
+
+**Phase 0 (U1-U14, plus U7b1/U7b2 + U76b primitives):** iOS scaffold, design tokens,
+networking, AppState, Keychain, snapshot test infra. XcodeGen-generated project at
+`ios/Kolaleaf.xcodeproj` (gitignored — canonical source is `ios/project.yml`).
+
+**Files added:**
+
+- `ios/project.yml` (XcodeGen spec, iOS 17.2+, App Attest entitlement per-config)
+- `ios/Kolaleaf/{App, Design, Networking, Storage}/...` (16 .swift files)
+- `ios/KolaleafTests/{Design, App, Networking}/...` (4 test files)
+- `ios/KolaleafWidgets/KolaleafWidgets.swift` (stub for Phase 10)
+- `ios/Kolaleaf.entitlements`, `ios/KolaleafWidgets/KolaleafWidgets.entitlements`
+- `ios/README.md`
+
+**Key decisions:**
+
+- XcodeGen for project generation (project.yml is canonical, .xcodeproj gitignored)
+- Hand-rolled URLSession networking with PRIVATE cookie jar (not URLSession.shared)
+- Cookie-based session auth (opaque PG-session, NOT JWT) — matches Wave 1 backend
+- `@MainActor` on AppState for strict-concurrency safety
+- App Attest (not DeviceCheck) for device attestation; env per-config Debug=development
+- App Group keychain partition: session token app-private, only ContentState shares
+- Idle timer aligned to backend SESSION_EXPIRY_MINUTES = 15 (iOS = 14 min foreground)
+
+**Architecture decisions added to the locked list (above):**
+
+- iOS minimum deployment target = iOS 17.2 (Wave 2a) -- 2026-05-10
+- iOS project tooling = XcodeGen (project.yml is canonical) -- 2026-05-10
+- iOS auth model = opaque PG-session cookies via private HTTPCookieStorage; not JWT -- 2026-05-10
+
+**r2 review findings applied** (commit `fix(ios): Phase 0 r2 review findings`):
+
+- All 5 auth DTOs corrected against actual Wave 1 Zod schemas
+- Backend error envelope `{error, reason}` (was assumed `{error: {code, message}}`)
+- AppState.shouldForceReauth() ordering bug fixed (markForegrounded no longer bumps)
+- TransferStatus custom Codable for unknown fallback
+- App Attest env per-config; FileProtection moved to entitlements
+- HTTP-date Retry-After parsing; URLSession 15s/30s timeouts
+- preferredColorScheme(.dark) removed from root (was forcing system surfaces dark)
+- AnyEncodable wrapper replaced with `any Encodable & Sendable`
+- SwitcherBlur ref-count drift replaced with Set<UUID> tied to SwiftUI lifecycle
+- Empty-body APIClient fast path uses static type matching
+- Keychain delete handles errSecInteractionNotAllowed distinctly from notFound
+- Force-logout clears cookies BEFORE backend call so stale cookies cannot replay
+- 202 verification-required login surfaces as APIError.verificationRequired
+- ISO-8601 decoder accepts fractional seconds (Prisma toISOString format)
+- Tokens.json removed (was bundled but unused)
+- KolaleafUITests target removed (was empty, would break xcodebuild test)
+- UIRequiredDeviceCapabilities armv7 removed (invalid for iOS 17.2)
+
+**Tests added:** AppStateTests, TransferStatusCodableTests, APIErrorMappingTests,
+KolaColorsTests + SnapshotTestCase base.
+
+**Verification:** `xcodebuild -project ios/Kolaleaf.xcodeproj -scheme Kolaleaf
+-destination 'platform=iOS Simulator,name=iPhone 15 Pro,OS=17.2' build` (pending —
+runs on Bob's local + Xcode Cloud once configured).
+
+**Next:** Phase 1 onboarding (U16-U23, screens 01-06) — Welcome, email entry, email
+OTP, KYC intro. Phase 1.5 phone OTP path gated on backend SMS provider integration.
+
+---
+
 ### Step 19 -- /api/v1 versioning -- APPROVED (deploy pending)
-*Date: 2026-04-17*
+
+_Date: 2026-04-17_
 
 Every client-facing API route moved under `/api/v1/`. All in-repo callers
 rewired through a new single-source HTTP client `apiFetch`. Webhooks (4
@@ -75,16 +152,19 @@ This is the foundation for Steps 20-25 of Pile B -- each of those
 assumes a versioned surface.
 
 Files added (3):
+
 - `src/lib/http/api-client.ts` -- `API_V1 = '/api/v1'` + `apiFetch(path, init)` wrapping `fetchWithTimeout`. 17 lines.
 - `tests/lib/http/api-client.test.ts` -- 4 unit tests (prefix, leading-slash tolerance, method/headers/body passthrough, timeout abort).
 - `tests/e2e/versioning-smoke.test.ts` -- 4 smoke tests (v1 200, legacy 404, register 410, webhook still at legacy path).
 
 Files moved (42 routes + 22 paired tests):
+
 - `src/app/api/{auth,account,admin,transfers,recipients,rates,kyc,banks}/*` -> `src/app/api/v1/{same}/*` (41 routes under v1).
 - `tests/app/api/<area>/*` -> `tests/app/api/v1/<area>/*` for moved areas.
 - `/api/auth/register` 410 stub restored at legacy path after the initial auth rename.
 
 Files modified (18):
+
 - `src/lib/hooks/use-wizard-submit.ts` -- swapped `fetchWithTimeout` for `apiFetch`.
 - 5 wizard pages, 8 dashboard pages/components, 4 admin pages -- all call sites updated to `apiFetch('area/path', ...)` tail paths.
 - `fetchAdminJson` in `src/app/admin/page.tsx` -- sources prefix from exported `API_V1`, preserves RSC absolute-URL + cookie-forwarding pattern.
@@ -93,14 +173,17 @@ Files modified (18):
 Files deleted: none.
 
 Review findings applied (N1+N2 from Richard):
+
 - 410 stub migration hint updated: `/api/auth/send-code` -> `/api/v1/auth/send-code` in both the JSON `migrate_to` field, the `Link` response header, and the prose `error` field. Stale clients parsing the hint now land on the live endpoint instead of a 404.
 - Comment-only legacy path references refreshed in `account-identity-section.tsx:11` and `register/details/page.tsx:21`.
 
 Decisions made (not explicit in brief):
+
 - `fetchAdminJson` kept as RSC-side wrapper over raw `fetch` (not `apiFetch`). Relative URLs don't resolve in server components; absolute-URL + cookie-forwarding pattern preserved. Prefix sourced from exported `API_V1` constant so "one prefix, one source" still holds.
 - Versioning smoke test uses `await import(variable)` to defer module resolution to runtime -- static `import()` of a deleted module would fail type-check; the runtime rejection is what the test asserts.
 
 Verification:
+
 - `npm test -- --run` -- 706 passed / 0 failed (baseline 698 + 4 api-client unit + 4 versioning smoke).
 - `npx tsc --noEmit` -- 0 errors.
 - `rm -rf .next && npm run build` -- success, 41 `/api/v1/*` routes + 4 webhooks + 5 crons + 1 `/api/auth/register` 410 stub all listed.
@@ -113,7 +196,8 @@ Deploy: pending Arch -- no migration, rollback is a single-commit revert.
 ---
 
 ### Step 18 -- Verify-first registration (3-step wizard) -- REVIEW PENDING
-*Date: 2026-04-17*
+
+_Date: 2026-04-17_
 
 Replaces the one-shot /register with a three-step wizard that creates NO User
 row until the email has been verified AND the claim is completed. Eliminates
@@ -123,6 +207,7 @@ the moment of account creation. Per Product Owner: "so we don't fill the
 database with unverified emails."
 
 Files added:
+
 - `prisma/migrations/20260417035232_pending_email_verification_and_address/migration.sql` -- new `PendingEmailVerification` table + nullable AU address columns on `User`
 - `src/lib/auth/pending-email-verification.ts` -- `issuePendingEmailCode` + `verifyPendingEmailCode` helpers (modelled on `email-verification.ts`, adapted for rows keyed by email instead of userId since no User exists yet)
 - `src/app/api/auth/send-code/route.ts` -- step 1 endpoint, always 200 (enumeration-proof)
@@ -138,14 +223,17 @@ Files added:
 - `tests/e2e/register-wizard.test.ts` -- 3 e2e tests against the real DB
 
 Files modified:
+
 - `prisma/schema.prisma` -- new `PendingEmailVerification` model; new nullable fields on `User` (addressLine1, addressLine2, city, state, postcode, country)
 - `src/app/(auth)/register/page.tsx` -- rewritten: email-only form that calls `/api/auth/send-code` and bounces to `/register/verify`
 
 Files deleted:
+
 - `src/app/api/auth/register/route.ts` -- legacy monolithic register handler (404 in prod, confirmed via curl)
 - `tests/app/api/auth/register.test.ts` -- paired tests (7 cases)
 
 Decisions made (that weren't explicitly called out in the brief):
+
 - Pending row keyed by email (unique). Upsert on re-send wipes attempts + verifiedAt + claimExpiresAt — resend always restarts the clock cleanly. Alternative was to keep each issue as a separate row with "most recent wins"; the upsert model matches the brief's natural "one pending row per email" mental model and avoids needing cleanup jobs for stale-but-unused rows.
 - `PendingEmailVerification` has no `usedAt` column. Burning a token after the Nth wrong attempt is done by setting `expiresAt = now - 1ms`. A cleaner-looking alternative would be adding a `usedAt` column, but the row is deleted by /complete-registration within minutes anyway — the expiry-based burn keeps the schema smaller and still blocks further guesses.
 - Re-verify within the claim window returns `ok: true` rather than `used`. This makes the UX robust to back-button reloads on step 3 that re-fire step 2 — a common React wizard trap — without needing a "verified but not claimed" branch in the route.
@@ -155,6 +243,7 @@ Decisions made (that weren't explicitly called out in the brief):
 - Session cookie is set by `setSessionCookie(session.token)` -- reused from the existing middleware so the cookie lifetime policy stays in one place.
 
 Verification:
+
 - `npm test -- --run` -- 695 passed / 0 failed (baseline 655 + 44 new + 3 e2e -- 7 deleted legacy = 695)
 - `npx tsc --noEmit` -- 0 errors
 - `rm -rf .next && npm run build` -- success, all new routes present (`/register`, `/register/verify`, `/register/details`, `/kyc`, `/api/auth/send-code`, `/api/auth/verify-code`, `/api/auth/complete-registration`)
@@ -167,7 +256,8 @@ Deploy: pending Arch -- migration is backfill-safe (all new User columns nullabl
 ---
 
 ### Step 16 -- Flutterwave bank resolution for recipients UX -- REVIEW PENDING
-*Date: 2026-04-16*
+
+_Date: 2026-04-16_
 
 Replaces the free-text recipient form with a provider-verified flow: pick a
 bank from Flutterwave's bank list, type a 10-digit account number, and the
@@ -176,6 +266,7 @@ the Nigerian remittance UX standard (every prod NG fintech works this way)
 and removes the "typo in account name" failure mode that eats payouts.
 
 Files changed:
+
 - `src/lib/payments/payout/types.ts` -- Added `AccountNotFoundError` (non-
   retryable `PayoutError` subclass). Callers distinguish "invalid combo" from
   transient provider errors.
@@ -183,7 +274,7 @@ Files changed:
   (21 tier-1 + mobile-money banks). Added `listBanks(country: 'NG')` — dev
   returns the fallback list with a one-shot log, prod GETs `/v3/banks/NG` via
   `withRetry` and memos for 24h. Added `resolveAccount({bankCode,
-  accountNumber})` — dev returns `DEMO ACCOUNT <last4>` deterministically,
+accountNumber})` — dev returns `DEMO ACCOUNT <last4>` deterministically,
   prod POSTs `/v3/accounts/resolve` with SHA-256 Idempotency-Key of
   `bankCode:accountNumber`. Account name returned verbatim (no trim/case).
   Added `createFlutterwaveProvider()` lazy factory — reads env each call,
@@ -194,9 +285,9 @@ Files changed:
   `requireAuth`; rejects unsupported country with 400; returns `{ banks }`
   with `Cache-Control: private, max-age=3600`; 503 on provider failure.
 - `src/app/api/recipients/resolve/route.ts` (new) -- `POST /api/recipients/
-  resolve`. `requireAuth`; validates `bankCode` non-empty and `accountNumber`
+resolve`. `requireAuth`; validates `bankCode` non-empty and `accountNumber`
   exactly 10 digits; in-memory per-user rate-limit (20/min); returns `{
-  accountName }` on success, 404 `account_not_found` on AccountNotFoundError,
+accountName }` on success, 404 `account_not_found` on AccountNotFoundError,
   503 `resolve_unavailable` on provider temp/timeout/retryable errors.
 - `src/app/(dashboard)/recipients/page.tsx` -- Replaced 4 free-text inputs
   with (1) bank dropdown loaded from `/api/banks?country=NG` on mount, (2)
@@ -207,6 +298,7 @@ Files changed:
   resolved name to the unchanged `POST /api/recipients` contract.
 
 Tests added (+21, baseline 607 -> 628):
+
 - `tests/lib/payments/payout/flutterwave-resolve.test.ts` (+10) -- listBanks
   dev fallback no-network, prod fetch + normalise, 24h cache; resolveAccount
   dev stub determinism, prod body + Idempotency-Key hash, literal name
@@ -220,6 +312,7 @@ Tests added (+21, baseline 607 -> 628):
   per-user rate-limit threshold.
 
 Key decisions:
+
 - Lazy env validation matches 15l: `createFlutterwaveProvider()` reads env
   every call but the `FlutterwaveProvider` constructor is side-effect-free
   and never throws. `npm run build` stays green without prod secrets.
@@ -232,7 +325,7 @@ Key decisions:
   padded input so a future "cleanup" refactor can't silently regress.
 - `POST /api/recipients` contract unchanged. The existing route, its tests,
   and the server-side validation still expect `{fullName, bankName, bankCode,
-  accountNumber}`. The client now fills all four from verified sources.
+accountNumber}`. The client now fills all four from verified sources.
 
 Manual smoke: DEFERRED. No `.env.local` in this workspace so the dev server
 can't reach Postgres. The 21 unit/integration tests exercise all branches
@@ -241,6 +334,7 @@ bank-cache, idempotency-key shape). Richard may run the dev server himself
 with env wired — or punt smoke to QA gate after review.
 
 Known gaps (not in scope for 16):
+
 - `<select>` is a native dropdown. A searchable combobox (21 banks is fine
   for NG but AU/KE/GH corridors will have 40+) is a polish step for a later
   multi-corridor sprint.
@@ -255,6 +349,7 @@ Known gaps (not in scope for 16):
   with a Redis-backed limiter when the Redis limiter above lands.
 
 Post-review fixes applied (per Richard's Step 16 Should-Fix):
+
 - `flutterwave.ts` resolveAccount catch narrowed: only `ProviderPermanentError`
   and generic `PayoutError` (exact class, not subclasses) with
   `retryable=false` map to `AccountNotFoundError`. Future non-retryable
@@ -267,6 +362,7 @@ Post-review fixes applied (per Richard's Step 16 Should-Fix):
 - The rateLimitMap unbounded-growth concern kept in Known Gaps above.
 
 Phase D:
+
 - `npx tsc --noEmit` -> clean
 - `npx vitest run` -> 628 passed / 244 suites / 0 failed
 - `npm run build` -> `Compiled successfully`, 0 warnings, new routes
@@ -275,7 +371,8 @@ Phase D:
 ---
 
 ### Step 15l -- Final wholistic audit + fix pass (capstone) -- REVIEW PENDING
-*Date: 2026-04-16*
+
+_Date: 2026-04-16_
 
 Capstone pass over the completed web app + admin + auth surface. Phase A
 audit walked all 12 prior checkpoints end-to-end (not just the 15k delta).
@@ -287,19 +384,20 @@ Phase A findings: 1 Critical, 4 Major, 6 Minor, 4 categories verified Clean.
 Full findings in `handoff/ARCHITECT-BRIEF.md` under "Phase A Findings -- Step 15l".
 
 Files changed:
+
 - `src/lib/rates/fx-fetcher.ts` -- removed top-level `export const fxConfig =
-  validateFxConfig()`. `DefaultFxRateProvider` now resolves config lazily on
+validateFxConfig()`. `DefaultFxRateProvider` now resolves config lazily on
   first `fetchWholesaleRate` call via a new `getConfig()` helper. Constructor
   stores the explicit config (if any) without validating -- construction is
   side-effect-free. Import is side-effect-free. Header comment updated to
   document the lazy contract.
 - `src/lib/rates/index.ts` -- dropped the now-gone `fxConfig` re-export.
 - `src/lib/payments/monoova/client.ts` -- removed top-level `export const
-  monoovaConfig = validateMonoovaConfig()`. `createMonoovaClient()` now calls
+monoovaConfig = validateMonoovaConfig()`. `createMonoovaClient()` now calls
   `validateMonoovaConfig()` on invocation (first-use). Header comment updated.
 - `src/lib/payments/monoova/index.ts` -- dropped `monoovaConfig` re-export.
 - `src/lib/kyc/sumsub/client.ts` -- removed top-level `export const sumsubConfig
-  = validateSumsubConfig()`. `createSumsubClient()` now validates on
+= validateSumsubConfig()`. `createSumsubClient()` now validates on
   invocation.
 - `src/lib/kyc/sumsub/index.ts` -- dropped `sumsubConfig` re-export.
 - `src/lib/email/client.ts` -- top-level `if (isProduction) throw` replaced
@@ -323,15 +421,16 @@ Files changed:
   one import-does-NOT-throw + three `sendSms()` first-call-throws tests
   (one per missing var).
 - `src/lib/rates/__tests__/fx-fetcher.test.ts` -- added a new `fx-fetcher
-  build-time safety` describe block: import does not throw in prod with
+build-time safety` describe block: import does not throw in prod with
   missing creds; constructing `DefaultFxRateProvider()` does not throw;
   `fetchWholesaleRate()` throws with the specific var-name message.
 - `src/lib/payments/monoova/__tests__/client.test.ts` -- added `monoova client
-  build-time safety`: import does not throw.
+build-time safety`: import does not throw.
 - `src/lib/kyc/sumsub/__tests__/client.test.ts` -- added `sumsub client
-  build-time safety`: import does not throw.
+build-time safety`: import does not throw.
 
 Decisions made:
+
 - **Lazy validation, not removal.** Fail-fast in production is preserved --
   the server still refuses to send / fetch / create clients with missing
   creds. Only the TIMING moved from module-load to first-use. This is the
@@ -347,6 +446,7 @@ Decisions made:
 - **No new dependencies. No schema migrations.**
 
 Phase D results:
+
 - `npx tsc --noEmit` -- 0 errors.
 - `npm test -- --run` -- 82 files / 607 tests passing (599 baseline + 8 net
   new build-safety assertions).
@@ -359,7 +459,8 @@ Deploy: N/A
 ---
 
 ### Step 15k -- Public stub pages + mobile hamburger menu -- REVIEW PENDING
-*Date: 2026-04-15*
+
+_Date: 2026-04-15_
 
 Filled the three 404 footer links (`/privacy`, `/terms`,
 `/compliance-info`) with server-rendered stub pages carrying a prominent
@@ -371,6 +472,7 @@ No new deps. No schema migrations. No changes outside the public-chrome
 surface and three new route segments.
 
 Files changed:
+
 - `src/app/(marketing)/privacy/page.tsx` (new) -- server-component
   privacy stub. `LegalBanner` at top. 6 placeholder sections (collection,
   purpose, storage, sharing, rights, contact). Max-width 720px,
@@ -395,6 +497,7 @@ Files changed:
   banner and the page's H1 text appear.
 
 Decisions made:
+
 - Pages are plain server components (no `'use client'`). The layout's
   `SiteHeader` + `SiteFooter` provide the public chrome automatically.
 - Banner renders inline at the top of each page (role="note",
@@ -414,6 +517,7 @@ Decisions made:
   intentionally avoids function-component invocation.
 
 Verification:
+
 - `npx tsc --noEmit` -- 0 errors
 - `npm test -- --run` -- 599 passed (596 baseline + 3 new), 0 failures
 
@@ -423,7 +527,8 @@ Deploy: N/A
 ---
 
 ### Step 15j -- Provider hardening: env validation + retry + timeout + idempotency -- REVIEW PENDING
-*Date: 2026-04-15*
+
+_Date: 2026-04-15_
 
 Every third-party adapter (Sumsub, Monoova, Flutterwave, Paystack, FX rate)
 now validates its env vars on module load (fail-fast in production, mock
@@ -438,6 +543,7 @@ only the outbound-call layer. The `PayoutError` subclass surface (used
 by the orchestrator's retry/failover) is unchanged.
 
 Files changed:
+
 - `src/lib/http/retry.ts` (new) -- shared `withRetry(fn, opts)` helper
   with `AbortSignal` timeout, exponential backoff + jitter, and a default
   `shouldRetry` that retries network / timeout / 5xx / 429 but not 4xx.
@@ -470,8 +576,8 @@ Files changed:
   `src/lib/rates/index.ts` -- re-export the new validators + config
   constants so call-sites and tests can import them from the module
   root.
-- `.env.example` -- added SUMSUB_*, MONOOVA_*, FLUTTERWAVE_*,
-  PAYSTACK_*, FX_* with per-provider idempotency notes and dev/prod
+- `.env.example` -- added SUMSUB*\*, MONOOVA*_, FLUTTERWAVE\__,
+  PAYSTACK*\*, FX*\* with per-provider idempotency notes and dev/prod
   behavior documented inline.
 - `tests/lib/http/retry.test.ts` (new) -- 12 tests: first-success,
   retry-then-success, exhausted attempts, permanent-no-retry, custom
@@ -492,6 +598,7 @@ Files changed:
   error-shape expectations; added `validateFxConfig` suite.
 
 Decisions made:
+
 - Two `ProviderTimeoutError`s coexist: one in `src/lib/http/retry.ts`
   (generic, for Sumsub/Monoova/FX) and one already in
   `src/lib/payments/payout/types.ts` (`extends PayoutError`). Kept both
@@ -520,7 +627,8 @@ Deploy: N/A
 ---
 
 ### Step 15i -- BullMQ + Redis webhook queue -- REVIEW PENDING
-*Date: 2026-04-15*
+
+_Date: 2026-04-15_
 
 Replaces INLINE webhook processing with a queue. Webhook routes now verify
 signatures synchronously and hand off to a dispatcher, returning 200
@@ -535,6 +643,7 @@ create-as-lock pattern on `WebhookEvent` is still the authoritative
 dedup).
 
 Files changed:
+
 - `src/lib/queue/webhook-dispatcher.ts` (new) -- `WebhookProvider`,
   `WebhookJob`, `WebhookDispatcher` interface, `WEBHOOK_QUEUE_NAME`
   constant.
@@ -545,7 +654,7 @@ Files changed:
 - `src/lib/queue/bullmq-dispatcher.ts` (new) -- `BullMQDispatcher` wraps
   a `Queue('webhooks')`. Job opts locked to
   `{attempts:5, backoff:{type:'exponential', delay:2000},
-  removeOnComplete:1000, removeOnFail:5000}`. `jobId` = SHA-256 of
+removeOnComplete:1000, removeOnFail:5000}`. `jobId` = SHA-256 of
   `rawBody`, so identical provider retries dedup at enqueue. Uses
   `maxRetriesPerRequest:null` on the ioredis connection (BullMQ
   requirement for blocking ops).
@@ -558,7 +667,7 @@ Files changed:
   gate). Logic matches what lived inline in `payout/webhooks.ts`.
 - `src/app/api/webhooks/monoova/route.ts` -- verifies signature with
   `verifyMonoovaSignature`, dispatches `{provider:'monoova', rawBody,
-  signature, receivedAt}`, returns 200. 401 on bad sig (no dispatch),
+signature, receivedAt}`, returns 200. 401 on bad sig (no dispatch),
   400 on bad JSON, 500 if the dispatcher throws (Redis unreachable ->
   provider retries).
 - `src/app/api/webhooks/flutterwave/route.ts` -- same pattern with
@@ -593,6 +702,7 @@ Files changed:
   (5) bad JSON returns 400.
 
 Decisions made:
+
 - **Signature verification at BOTH route and worker layers.** Route
   verification is the DoS gate (don't enqueue junk). Worker verification
   is defense-in-depth against a compromised producer. CPU cost of the
@@ -614,6 +724,7 @@ Decisions made:
   pre-enqueue check is an additional edge layer, not a replacement.
 
 Local dev Redis (when you WANT to exercise the queue path):
+
 ```
 docker run --name kolaleaf-redis -p 6379:6379 -d redis:7
 export REDIS_URL=redis://localhost:6379
@@ -625,6 +736,7 @@ Leave `REDIS_URL` blank for normal dev/tests -- the in-process
 dispatcher is transparent to callers.
 
 Phase D results:
+
 - `npx tsc --noEmit` -- 0 errors
 - `npm test -- --run` -- 80 files, 565 tests passed (545 pre-existing +
   20 new queue/route tests)
@@ -638,7 +750,8 @@ Deploy: N/A
 ---
 
 ### Step 15f-2 -- 2FA setup API routes + /account UI section -- REVIEW PENDING
-*Date: 2026-04-15*
+
+_Date: 2026-04-15_
 
 Adds the user-facing 2FA management surface: four API routes and one `/account`
 UI section. With 15f-1 handling the login-side verification, this step covers
@@ -646,6 +759,7 @@ the enrollment, disable, and backup-code-regeneration flows. No schema
 migrations (all 2FA columns + `TwoFactorChallenge` landed in 15c). No new deps.
 
 Files changed:
+
 - `src/app/api/account/2fa/setup/route.ts` (new) -- `requireAuth`. Body
   `{method: 'TOTP'|'SMS'}`. TOTP path: fresh secret (NOT persisted -- echoed
   back on response and committed only via `/enable`), otpauth URI labelled
@@ -659,7 +773,7 @@ Files changed:
   miss. SMS: `verifyChallenge(challengeId, code)`, 400 `invalid_code` on
   miss. On success: generates 8 raw backup codes + hashes, `$transaction`
   updates `User{twoFactorMethod, twoFactorSecret|null, twoFactorBackupCodes,
-  twoFactorEnabledAt}` + writes `TWO_FACTOR_ENABLED` AuthEvent. Returns
+twoFactorEnabledAt}` + writes `TWO_FACTOR_ENABLED` AuthEvent. Returns
   `{enabled:true, backupCodes: rawCodes}` -- the ONLY place raw codes exist.
 - `src/app/api/account/2fa/disable/route.ts` (new) -- `requireAuth`. Body
   `{code, challengeId?}`. 400 `not_enabled` if off. Verifies the code using
@@ -672,11 +786,11 @@ Files changed:
 - `src/app/api/account/2fa/regenerate-backup-codes/route.ts` (new) --
   `requireAuth`. Same code-verification as `/disable`. On success: generates
   8 fresh codes, `$transaction` updates `User.twoFactorBackupCodes = hashes`
-  + writes `TWO_FACTOR_BACKUP_CODES_REGENERATED`. Returns raw codes once.
+  - writes `TWO_FACTOR_BACKUP_CODES_REGENERATED`. Returns raw codes once.
 - `src/app/api/account/me/route.ts` (new) -- GET-only `requireAuth`.
   Returns minimal account summary for the `/account` client components:
   `{twoFactorMethod, twoFactorEnabledAt, hasVerifiedPhone, phoneMasked,
-  backupCodesRemaining}`. Never returns the 2FA secret or backup-code hashes.
+backupCodesRemaining}`. Never returns the 2FA secret or backup-code hashes.
 - `src/app/(dashboard)/account/_components/two-factor-section.tsx` (new) --
   client component rendering the full 2FA state-machine: view (on/off),
   picker (TOTP vs SMS with disabled-SMS-when-no-phone), TOTP setup
@@ -693,17 +807,20 @@ Files changed:
   client component (KYC fetch, logout). No other edits.
 
 New tests (+25):
+
 - `tests/app/api/account/2fa/setup.test.ts` (7 cases)
 - `tests/app/api/account/2fa/enable.test.ts` (7 cases)
 - `tests/app/api/account/2fa/disable.test.ts` (7 cases)
 - `tests/app/api/account/2fa/regenerate-backup-codes.test.ts` (4 cases)
 
 Phase D results:
+
 - `npx tsc --noEmit`: 0 errors.
 - `npm test -- --run`: 73 files / 520 tests passed (was 73/495; +25 new).
 - Manual smoke sequence documented in REVIEW-REQUEST.
 
 Fixes applied post-Richard review (0 Must Fix, 5 Should Fix — all applied):
+
 1. `verifyChallenge(userId, challengeId, code)` — added userId scoping as
    defense-in-depth. Updated all 4 call sites (enable, disable,
    regenerate-backup-codes, verify-2fa). Switched
@@ -725,6 +842,7 @@ Fixes applied post-Richard review (0 Must Fix, 5 Should Fix — all applied):
    unused `remainingBackupHashes` local.
 
 Post-fix Phase D:
+
 - `npx tsc --noEmit`: 0 errors.
 - `npm test -- --run`: 73 files / 521 tests passed (+1 cross-user regression).
 
@@ -734,7 +852,8 @@ Deploy: N/A
 ---
 
 ### Step 15e -- Twilio SMS integration + phone verification + SMS 2FA helpers -- REVIEW PENDING
-*Date: 2026-04-15*
+
+_Date: 2026-04-15_
 
 Ships the outbound-SMS infrastructure (Twilio), the phone-verification flow
 (add phone -> receive 6-digit SMS -> submit -> identifier flipped verified),
@@ -743,6 +862,7 @@ a phone-remove endpoint that blocks while SMS 2FA is active, and the
 No schema migrations (15c covered all tables). One new dep: `twilio`.
 
 Files changed:
+
 - `package.json` / `package-lock.json` -- added `twilio` dependency (only new dep).
 - `.env` / `.env.example` -- added `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
   `TWILIO_FROM_NUMBER`. All blank in dev; `sendSms()` console.logs with
@@ -759,7 +879,7 @@ Files changed:
   code space is only 10^6 so sha256 would be rainbow-tabled; bcrypt's salt
   blocks that, and cost 4 keeps verify fast for a 5-10min ttl.
 - `src/lib/auth/two-factor-challenge.ts` (new) -- `issueSmsChallenge(userId,
-  phoneE164)` returns `{challengeId}` after creating a `TwoFactorChallenge`
+phoneE164)` returns `{challengeId}` after creating a `TwoFactorChallenge`
   (method=SMS, 5min expiry) and dispatching the SMS. `verifyChallenge(id, raw)`
   looks up, rejects expired/consumed/attempts>=5, increments attempts on every
   submission, bcrypt-compares, and marks `consumedAt` on success.
@@ -789,6 +909,7 @@ Test count: 438 -> 481 (43 new, all green). tsc: 0 new errors (one pre-existing
 error in `src/app/api/auth/register/route.ts` from 15d -- see Known Gaps).
 
 Decisions:
+
 - **bcrypt cost 4 for SMS codes is intentional.** Short-lived (5-10min) + low
   entropy (6 digits). Higher cost hurts verify latency without materially
   raising the attacker's cost for a brute-force within the ttl. Documented
@@ -803,11 +924,12 @@ Decisions:
   identifier flip and the code consume. An audit hole is impossible.
 - **Phone-remove blocks SMS 2FA active users.** Without this guard they'd
   lock themselves out -- no phone to receive the 2FA code on. 15f's disable-
-   2FA flow is the supported escape hatch.
+  2FA flow is the supported escape hatch.
 - **SMS 2FA login wiring is NOT in this step.** Helpers exist but no route
   path calls them -- that's 15f.
 
 Known Gaps:
+
 - Regex E.164 normalisation in `src/lib/auth/phone.ts` is a placeholder. It
   does not validate country codes or regional carrier formats. Replace with
   `libphonenumber-js` or Twilio Lookup in a later step when bringing in a
@@ -818,6 +940,7 @@ Known Gaps:
   counted as a gap anymore; flagging here only for traceability.
 
 Fixes applied post-Richard review (round 1):
+
 - **Must Fix 1** -- cross-user phone hijack via abandoned unverified claim.
   Upsert `update` in `src/app/api/account/phone/add/route.ts` now transfers
   ownership (`{userId, verified:false, verifiedAt:null}`) when the row
@@ -838,7 +961,8 @@ Fixes applied post-Richard review (round 1):
   passing.
 
 ### Step 15d -- Resend integration + email verification + password reset flows -- REVIEW PENDING
-*Date: 2026-04-15*
+
+_Date: 2026-04-15_
 
 Ships the first outbound-email infrastructure (Resend), the email-verification flow
 (signup → email → click → flipped), the password-reset flow (forgot → email → reset →
@@ -846,6 +970,7 @@ force-logout), and a new `requireEmailVerified` gate on transfer creation. Email
 enumeration prevented on `request-password-reset`; all tokens stored only as sha256(raw).
 
 Files changed:
+
 - `package.json` / `package-lock.json` -- added `resend` dependency (only new dep).
 - `.env` / `.env.example` -- added `RESEND_API_KEY`, `EMAIL_FROM`, `APP_URL`; `.env.example`
   created fresh (no prior file). `RESEND_API_KEY` blank in dev — emails console.log with
@@ -887,7 +1012,7 @@ Files changed:
   otherwise invalidates prior unused tokens and sends a fresh one.
 - `src/app/api/auth/request-password-reset/route.ts` (new) -- public. ALWAYS returns
   the same generic 200 response (`"If an account exists with that email, we've sent
-  a reset link."`) whether the email exists, is rate-limited, or the send fails —
+a reset link."`) whether the email exists, is rate-limited, or the send fails —
   email-enumeration defence. Rate limit: 3 per user per hour, silent. Captures IP +
   user-agent in the email body + persists them on the token row for audit.
 - `src/app/api/auth/reset-password/route.ts` (new) -- public. Validates token, hashes
@@ -914,6 +1039,7 @@ Files changed:
   `tests/app/api/auth/reset-password.test.ts` (7).
 
 Decisions:
+
 - **Unverified-at-signup is the whole point.** Registration now lands new users with
   `UserIdentifier.verified=false`. If registration continued to auto-verify, the whole
   15d verification flow would be toothless. This means login had to stop gating on
@@ -943,18 +1069,20 @@ Decisions:
   why), 3/hour on `/request-password-reset` (200 generic — attacker cannot probe).
 
 Verification:
+
 - `npx tsc --noEmit` — 0 errors.
 - `npm test -- --run` — 436/436 passing (392 baseline + 44 new).
 - `npm run dev` smoke:
-    - `POST /api/auth/register {email:"smoke-TS@test.com",...}` → 201, dev log shows
-      `[email-dev] Subject: Verify your Kolaleaf email` with a verification URL.
-    - `POST /api/auth/request-password-reset {email:"smoke-TS@test.com"}` → 200 with
-      generic message, dev log shows `[email-dev] Subject: Reset your Kolaleaf password`
-      including IP (`::1`) and user-agent (`curl/8.7.1`) context and a reset URL.
-    - `POST /api/auth/request-password-reset {email:"nonexistent@test.com"}` → 200
-      with identical generic message, no `[email-dev]` log.
+  - `POST /api/auth/register {email:"smoke-TS@test.com",...}` → 201, dev log shows
+    `[email-dev] Subject: Verify your Kolaleaf email` with a verification URL.
+  - `POST /api/auth/request-password-reset {email:"smoke-TS@test.com"}` → 200 with
+    generic message, dev log shows `[email-dev] Subject: Reset your Kolaleaf password`
+    including IP (`::1`) and user-agent (`curl/8.7.1`) context and a reset URL.
+  - `POST /api/auth/request-password-reset {email:"nonexistent@test.com"}` → 200
+    with identical generic message, no `[email-dev]` log.
 
 Known Gaps (out of 15d scope):
+
 - `login.ts` now no longer blocks non-EMAIL unverified identifiers either. Per the
   brief, phone verification is 15g scope; the minimal safe default was to drop the
   universal gate. 15g will reintroduce a type-aware gate if needed.
@@ -963,13 +1091,15 @@ Known Gaps (out of 15d scope):
   users on reset; leave as-is until Arch explicitly bumps the policy.
 
 ### Step 15c -- Schema migration foundation for auth/verification/2FA -- REVIEW PENDING
-*Date: 2026-04-15*
+
+_Date: 2026-04-15_
 
 Pure schema step. Adds the database foundation for the auth work landing in 15d-15g
 (email/phone verification, password reset, 2FA via TOTP/SMS). Zero application-logic
 changes. Additive migration only — no drops, no renames.
 
 Files changed:
+
 - `prisma/schema.prisma` -- added `TwoFactorMethod` enum (NONE/TOTP/SMS); extended `User`
   with `twoFactorMethod` (default NONE), `twoFactorSecret?`, `twoFactorBackupCodes` (default []),
   `twoFactorEnabledAt?`; added 4 new models: `EmailVerificationToken`, `PasswordResetToken`,
@@ -979,6 +1109,7 @@ Files changed:
 - `src/generated/prisma/**` -- regenerated Prisma Client (7.7.0) with new models + enum.
 
 Decisions:
+
 - Email/phone verification status stays on `UserIdentifier.verified` + `verifiedAt` per the
   brief's explicit constraint. No `User.emailVerified` / `User.phoneVerified` added.
 - Existing legacy 2FA fields (`totpSecret`, `totpEnabled`, `backupCodes`) are untouched. The
@@ -995,6 +1126,7 @@ Decisions:
   cleanup/expiry sweep job that will land in 15d-15g.
 
 Verification:
+
 - `npx prisma validate` -- schema valid.
 - `npx prisma generate` -- client regenerated cleanly.
 - `npx prisma migrate dev --name auth_verification_2fa --create-only` -- inspected SQL;
@@ -1009,12 +1141,14 @@ Verification:
 - `npx prisma db seed` -- succeeds; seed does not touch the new tables.
 
 ### Step 15b -- FIX-NOW Cleanup (projection, RateService, observability, banner) -- REVIEW PENDING
-*Date: 2026-04-15*
+
+_Date: 2026-04-15_
 
 Closes the 6 remaining FIX-NOW items from the Step 15 audit (#3, #5, #6, #7, #8, #9).
 Items #1, #2, #4, #10 landed in Step 15a.
 
 Files changed:
+
 - `src/lib/transfers/queries.ts` -- new exported `TransferUserView` interface; `getTransfer` now uses an explicit `USER_SAFE_TRANSFER_SELECT` projection so internal fields (`failureReason`, `payoutProviderRef`, `payoutProvider`, `payidProviderRef`, `payidReference`, `retryCount`) are stripped from user-facing routes. Admin routes already use `prisma.transfer` directly so no `getTransferAdmin()` shim was needed.
 - `src/lib/rates/rate-service.ts` -- new `getCurrentRateByPair(base, target)` helper; resolves corridor by pair then delegates to `RateService.getCurrentRate(corridorId)`. Single source of truth for "current customer rate" logic, so admin overrides and ordering rules are honored uniformly.
 - `src/lib/rates/index.ts` -- export the new helper.
@@ -1032,6 +1166,7 @@ Files changed:
 - `tests/app/admin/page.test.tsx` (NEW) -- 2 tests verifying the `AdminAlert` renders on partial-fetch failure and is absent when all three succeed. Uses a tiny tree-walk helper since the project does not depend on React Testing Library.
 
 Decisions:
+
 - `getTransferAdmin()` not added because no admin route currently calls `getTransfer` (admin uses `prisma.transfer` directly). If that changes, add it then.
 - `USER_SAFE_TRANSFER_SELECT` is `satisfies Prisma.TransferSelect` so future Transfer columns won't silently leak.
 - `getCurrentRateByPair` instantiates a `RateService` per call. Cheap; consolidating into a singleton is in Known Gaps and not in scope here.
@@ -1040,6 +1175,7 @@ Decisions:
 - `.next/types/validator.ts` had a stale reference to a deleted `src/app/page.tsx` — deleted the `.next` cache so tsc's clean baseline is reproducible.
 
 Verification:
+
 - `npx tsc --noEmit` -- 0 errors. NO exclusions.
 - `npm test -- --run` -- 392 pass / 0 fail (was 387; +5 new tests).
 - Targeted: `tests/app/api/rates/public.test.ts` 9/9 pass; `tests/lib/transfers/queries.test.ts` 11/11 pass; `tests/app/admin/page.test.tsx` 2/2 pass.
@@ -1051,11 +1187,13 @@ Deploy: pending Step 15 holistic review
 ---
 
 ### Step 14 -- UI→Backend Gap Closure -- REVIEW PENDING
-*Date: 2026-04-15*
+
+_Date: 2026-04-15_
 
 Closes 3 gaps the Variant D redesign introduced (audit by Bob, scope confirmed by Arch).
 
 Files changed:
+
 - `src/app/api/rates/public/route.ts` (NEW) -- public read-only rate endpoint, pair-based query, 60s/120s SWR cache, no admin field leak
 - `tests/app/api/rates/public.test.ts` (NEW) -- 8 cases covering 400, 404, success shape, PII filter, cache header, case normalization
 - `src/lib/transfers/queries.ts` -- enrich `listTransfers` with `recipient: { id, fullName, bankName }`; new exported `TransferListRecipient` and `TransferWithRecipient` types
@@ -1064,12 +1202,14 @@ Files changed:
 - `src/app/_components/landing-page.tsx` -- same swap + comment update
 
 Decisions:
+
 - Generic pair-based public endpoint (consistent with multi-corridor invariant), not slug-based
 - Send page uses the same public endpoint (no separate authed variant in this step)
 - `TransferWithRecipient.recipient` typed nullable for safety
 - Pre-existing `/api/rates/[corridorId]` left in place; no callers but no harm
 
 Verification:
+
 - `npx tsc --noEmit` -- 0 errors (cleaner than baseline of 4)
 - `npm test -- --run` -- ~382 pass, 4 known-flaky failures (matches HANDOVER baseline)
 - `tests/app/api/rates/public.test.ts` in isolation -- 8/8 pass
@@ -1080,9 +1220,11 @@ Deploy: pending Step 15 holistic review
 ---
 
 ### Step 1 -- Project Scaffold + Database Schema -- REVIEW PENDING
-*Date: 2026-04-14*
+
+_Date: 2026-04-14_
 
 Files changed:
+
 - `.gitignore` -- git ignore rules
 - `package.json` -- project config, scripts, dependencies
 - `tsconfig.json`, `next.config.ts`, `eslint.config.mjs`, `postcss.config.mjs` -- Next.js 15 scaffold config
@@ -1097,6 +1239,7 @@ Files changed:
 - `.env` -- local DATABASE_URL (port 5433)
 
 Decisions made:
+
 - Prisma 7.7.0 requires adapter-based client (PrismaPg from @prisma/adapter-pg) instead of classic PrismaClient
 - Docker Postgres on port 5433 (5432 occupied by existing porizo-postgres container)
 - Generated Prisma client gitignored, regenerated via postinstall hook
@@ -1108,9 +1251,11 @@ Deploy: N/A
 ---
 
 ### Step 9 -- API Routes + Pages (Full Stack) -- REVIEW PENDING
-*Date: 2026-04-14*
+
+_Date: 2026-04-14_
 
 Files changed:
+
 - `src/lib/auth/middleware.ts` -- auth middleware (cookie parsing, session validation, requireAuth/requireKyc)
 - `src/app/api/auth/{register,login,logout,verify-2fa}/route.ts` -- auth API routes
 - `src/app/api/transfers/route.ts`, `[id]/route.ts`, `[id]/cancel/route.ts` -- transfer CRUD + cancel
@@ -1132,6 +1277,7 @@ Files changed:
 - `src/lib/transfers/state-machine.ts` -- metadata cast for Prisma Json type
 
 Decisions made:
+
 - Custom cookie-based auth (kolaleaf_session, HttpOnly, SameSite=Lax, Max-Age=900)
 - Webhook routes use request.text() for raw body signature verification
 - Dashboard layout does server-side session check, redirects to /login if unauthenticated
@@ -1144,9 +1290,11 @@ Deploy: N/A
 ---
 
 ## Known Gaps
-*Logged here instead of fixed. Addressed in a future step.*
+
+_Logged here instead of fixed. Addressed in a future step._
 
 **Closed in Step 15:**
+
 - ~~`/activity/[id]` -- transfer detail page~~ -- closed in Step 15h
 - ~~`/privacy`, `/terms`, `/compliance-info` -- footer stub links (404 today)~~ -- closed in Step 15k
 - ~~Mobile hamburger menu in `SiteHeader`~~ -- closed in Step 15k
@@ -1154,6 +1302,7 @@ Deploy: N/A
 - ~~`npm run build` fails in production mode~~ -- fixed in Step 15l (lazy env validation)
 
 **Still open:**
+
 - Login rate limiting (no protection against brute force)
 - Account page user name/email display (not requested in any brief; nice-to-have)
 - Test flakiness in `tests/lib/transfers/queries.test.ts` (4 tests fail under `afterEach` cleanup race; pre-existing)
@@ -1170,7 +1319,8 @@ Deploy: N/A
 ---
 
 ## Architecture Decisions
-*Locked decisions that cannot be changed without breaking the system.*
+
+_Locked decisions that cannot be changed without breaking the system._
 
 - Prisma 7 with adapter pattern (PrismaPg) for database connectivity -- 2026-04-14
 - cuid() for all primary keys (URL-safe, sortable) -- 2026-04-14

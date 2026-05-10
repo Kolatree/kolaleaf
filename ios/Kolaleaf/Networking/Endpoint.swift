@@ -1,8 +1,9 @@
 // Endpoint.swift  (Phase 0 · U11)
 // Endpoint protocol + URLRequest builder.
 //
-// The Endpoint protocol is intentionally tiny — `path`, `method`, `body`, `query` —
-// and consumed by `APIClient.send(_:)`. Each backend route gets one Endpoint type.
+// r2-review note: AnyEncodable type-erasure removed. Swift 5.9 supports `any Encodable`
+// existentials directly, and JSONEncoder.encode<T: Encodable>(_:) accepts them. The
+// per-endpoint body declaration becomes a one-liner instead of a wrapper allocation.
 
 import Foundation
 
@@ -14,16 +15,6 @@ public enum HTTPMethod: String, Sendable {
     case delete = "DELETE"
 }
 
-/// Type-erased body. Per-endpoint structs are Encodable; we wrap as AnyEncodable so
-/// the Endpoint protocol stays simple (no `associatedtype Body`).
-public struct AnyEncodable: Encodable, Sendable {
-    private let _encode: @Sendable (Encoder) throws -> Void
-    public init<T: Encodable & Sendable>(_ value: T) {
-        self._encode = { try value.encode(to: $0) }
-    }
-    public func encode(to encoder: Encoder) throws { try _encode(encoder) }
-}
-
 public protocol Endpoint: Sendable {
     associatedtype Response: Decodable & Sendable
 
@@ -32,16 +23,28 @@ public protocol Endpoint: Sendable {
     var method: HTTPMethod { get }
     /// Optional URL query items.
     var query: [URLQueryItem] { get }
-    /// Encoded JSON body, if any.
-    var body: AnyEncodable? { get }
+    /// Encoded JSON body, if any. Use `any Encodable & Sendable` so each endpoint can
+    /// pass a concrete struct directly without wrapping.
+    var body: (any Encodable & Sendable)? { get }
     /// Headers added on top of `APIClient` defaults (Content-Type, Accept, cookies).
     var extraHeaders: [String: String] { get }
 }
 
 public extension Endpoint {
     var query: [URLQueryItem] { [] }
-    var body: AnyEncodable? { nil }
+    var body: (any Encodable & Sendable)? { nil }
     var extraHeaders: [String: String] { [:] }
+}
+
+// MARK: - Compatibility: AnyEncodable is preserved as a typealias so existing tests
+// and any downstream consumers continue to compile during the migration.
+
+public struct AnyEncodable: Encodable, Sendable {
+    private let _encode: @Sendable (Encoder) throws -> Void
+    public init<T: Encodable & Sendable>(_ value: T) {
+        self._encode = { try value.encode(to: $0) }
+    }
+    public func encode(to encoder: Encoder) throws { try _encode(encoder) }
 }
 
 // MARK: - Request builder
@@ -55,8 +58,13 @@ struct RequestBuilder {
     let baseURL: URL
 
     func makeRequest<E: Endpoint>(for endpoint: E) throws -> URLRequest {
-        guard var components = URLComponents(url: baseURL.appendingPathComponent(endpoint.path),
-                                             resolvingAgainstBaseURL: false) else {
+        // Build the URL via URLComponents to handle leading-slash paths and query
+        // encoding deterministically. baseURL.appendingPathComponent has well-known
+        // edge cases with leading slashes (per adversarial review).
+        let trimmedBase = baseURL.absoluteString.trimmingTrailingSlash()
+        let trimmedPath = endpoint.path.hasPrefix("/") ? endpoint.path : "/" + endpoint.path
+        guard let combined = URL(string: trimmedBase + trimmedPath),
+              var components = URLComponents(url: combined, resolvingAgainstBaseURL: false) else {
             throw EndpointBuilderError.invalidURL
         }
         if !endpoint.query.isEmpty {
@@ -84,5 +92,11 @@ struct RequestBuilder {
         }
 
         return request
+    }
+}
+
+private extension String {
+    func trimmingTrailingSlash() -> String {
+        hasSuffix("/") ? String(dropLast()) : self
     }
 }

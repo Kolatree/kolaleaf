@@ -14,16 +14,29 @@
 // the lock screen and Dynamic Island are SpringBoard-rendered; their redaction lives in
 // `KolaleafWidgets/LockScreenCardRedacted.swift` and `DynamicIslandExpanded.swift`
 // (U7c, gated by lock state via the App Group flag).
+//
+// r2-review fixes · 2026-05-09:
+//   • #11 (concurrency): @MainActor isolation on the controller eliminates the strict-
+//     concurrency error from non-isolated UIViewRepresentable lifecycle methods touching
+//     shared state.
+//   • #4 (security/correctness): Marker tracking moved to a Set<UUID> keyed by per-screen
+//     identity, removing the ref-count drift that could leave the count positive (blur
+//     stuck on Welcome) or negative (no blur on Send). SwiftUI .onAppear/.onDisappear
+//     replaces UIViewRepresentable lifecycle which had no removal guarantee.
 
 import SwiftUI
 import UIKit
 
-/// Marker that opts a screen into the switcher-blur overlay. Apply on the root container of
-/// any screen showing transfer amounts, recipient names, PayID, BSB/account, or backup codes.
+/// Marker that opts a screen into the switcher-blur overlay. Apply on the root container
+/// of any screen showing transfer amounts, recipient names, PayID, BSB/account, or
+/// backup codes.
 public struct SwitcherBlurMarker: ViewModifier {
+    @State private var token = UUID()
+
     public func body(content: Content) -> some View {
         content
-            .background(SwitcherBlurMarkerProbe())
+            .onAppear { Task { @MainActor in SwitcherBlurController.shared.add(token) } }
+            .onDisappear { Task { @MainActor in SwitcherBlurController.shared.remove(token) } }
     }
 }
 
@@ -33,31 +46,13 @@ public extension View {
     func sensitiveScreen() -> some View { modifier(SwitcherBlurMarker()) }
 }
 
-// MARK: - Internal: probe + window-level overlay
-
-private struct SwitcherBlurMarkerProbe: UIViewRepresentable {
-    func makeUIView(context: Context) -> UIView {
-        let v = UIView()
-        v.isHidden = true
-        SwitcherBlurController.shared.markerCount += 1
-        return v
-    }
-
-    func updateUIView(_ uiView: UIView, context: Context) {}
-
-    static func dismantleUIView(_ uiView: UIView, coordinator: ()) {
-        SwitcherBlurController.shared.markerCount = max(0, SwitcherBlurController.shared.markerCount - 1)
-    }
-}
+// MARK: - Internal: window-level overlay controller
 
 @MainActor
 final class SwitcherBlurController {
     static let shared = SwitcherBlurController()
 
-    /// Reference count of currently-mounted sensitive screens. The blur fires only when
-    /// at least one is on top; non-sensitive screens (Welcome, Help, About) are skipped.
-    var markerCount: Int = 0
-
+    private var activeMarkers: Set<UUID> = []
     private weak var overlayView: UIView?
 
     private init() {
@@ -68,11 +63,23 @@ final class SwitcherBlurController {
                        name: UIScene.didActivateNotification, object: nil)
     }
 
+    func add(_ token: UUID)    { activeMarkers.insert(token) }
+    func remove(_ token: UUID) { activeMarkers.remove(token) }
+
+    /// Test-only: reset state between tests so previous test's markers don't leak.
+    func resetForTesting() {
+        activeMarkers.removeAll()
+        overlayView?.removeFromSuperview()
+        overlayView = nil
+    }
+
     @objc private func willDeactivate() {
-        guard markerCount > 0, overlayView == nil else { return }
+        guard !activeMarkers.isEmpty, overlayView == nil else { return }
         guard let window = keyWindow() else { return }
 
         let overlay = makeOverlay(frame: window.bounds)
+        // Hide everything below the overlay from accessibility tools.
+        window.accessibilityElementsHidden = true
         window.addSubview(overlay)
         overlayView = overlay
     }
@@ -80,6 +87,7 @@ final class SwitcherBlurController {
     @objc private func didActivate() {
         overlayView?.removeFromSuperview()
         overlayView = nil
+        keyWindow()?.accessibilityElementsHidden = false
     }
 
     private func keyWindow() -> UIWindow? {
@@ -93,8 +101,9 @@ final class SwitcherBlurController {
         let host = UIView(frame: frame)
         host.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         host.backgroundColor = UIColor(red: 0x1F/255, green: 0x11/255, blue: 0x48/255, alpha: 1)
+        host.accessibilityElementsHidden = true
 
-        // Gradient sublayer mirroring the Variant C wallpaper (without overhead of SwiftUI render).
+        // Gradient sublayer mirroring the Variant C wallpaper without SwiftUI overhead.
         let gradient = CAGradientLayer()
         gradient.frame = host.bounds
         gradient.colors = [

@@ -1,9 +1,6 @@
 // AuthEndpoints.swift  (Phase 0 · U12)
-// Concrete Endpoint conformances for the auth surface verified to exist in the Wave 1
-// backend. See src/app/api/v1/auth/* for canonical request/response shapes.
-//
-// Phone OTP variants (Phase 1.5 · U17/U19) are added as separate endpoints once the
-// backend SMS provider integration lands.
+// Concrete Endpoint conformances for the auth surface verified to exist in Wave 1.
+// See src/app/api/v1/auth/* for canonical request/response shapes.
 
 import Foundation
 
@@ -15,10 +12,10 @@ public enum AuthEndpoints {
         public typealias Response = SendCodeResponse
         public let path = "/api/v1/auth/send-code"
         public let method: HTTPMethod = .post
-        public let body: AnyEncodable?
+        public let body: (any Encodable & Sendable)?
 
         public init(email: String) {
-            self.body = AnyEncodable(SendCodeRequest(email: email))
+            self.body = SendCodeRequest(email: email)
         }
     }
 
@@ -26,30 +23,37 @@ public enum AuthEndpoints {
         public typealias Response = VerifyCodeResponse
         public let path = "/api/v1/auth/verify-code"
         public let method: HTTPMethod = .post
-        public let body: AnyEncodable?
+        public let body: (any Encodable & Sendable)?
 
         public init(email: String, code: String) {
-            self.body = AnyEncodable(VerifyCodeRequest(email: email, code: code))
+            self.body = VerifyCodeRequest(email: email, code: code)
         }
     }
 
     // MARK: - Login (returning user)
+    //
+    // Login can return EITHER 200 LoginResponse OR 202 LoginVerificationRequiredResponse.
+    // The 202 case is handled at APIClient.send level and surfaces as
+    // APIError.verificationRequired — so the iOS Endpoint declares only the 200 type.
 
     public struct Login: Endpoint {
         public typealias Response = LoginResponse
         public let path = "/api/v1/auth/login"
         public let method: HTTPMethod = .post
-        public let body: AnyEncodable?
+        public let body: (any Encodable & Sendable)?
 
         public init(email: String, password: String) {
-            self.body = AnyEncodable(LoginRequest(email: email, password: password))
+            self.body = LoginRequest(email: email, password: password)
         }
     }
 
     // MARK: - Logout
 
+    /// Logout uses EmptyResponse so APIClient's empty-body fast-path applies even when
+    /// the backend evolves to 204 No Content. Today it returns `{ success: true }` but
+    /// we intentionally don't decode the body — only the HTTP status matters.
     public struct Logout: Endpoint {
-        public typealias Response = LogoutResponse
+        public typealias Response = EmptyResponse
         public let path = "/api/v1/auth/logout"
         public let method: HTTPMethod = .post
         public init() {}

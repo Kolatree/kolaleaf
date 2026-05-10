@@ -23,6 +23,13 @@ settings:
     OTHER_SWIFT_FLAGS:
       - "-strict-concurrency=complete"
 
+# Per-configuration overrides for App Attest environment + APS environment.
+# r2 review fix #7: production attestation env in dev builds will fail every attestation;
+# scope it per-config.
+configs:
+  Debug: debug
+  Release: release
+
 # ============== App Target ==============
 targets:
   Kolaleaf:
@@ -33,7 +40,6 @@ targets:
         excludes:
           - "**/*.md"
     resources:
-      - Kolaleaf/Resources/Tokens.json
       - Kolaleaf/Resources/Assets.xcassets
       - Kolaleaf/Resources/Inter-fonts
     info:
@@ -46,10 +52,10 @@ targets:
           UIColorName: launchBackground
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        UIRequiredDeviceCapabilities:
-          - armv7
-        NSCameraUsageDescription: "Kolaleaf uses your camera to verify your identity for AUSTRAC compliance."
-        NSMicrophoneUsageDescription: "Kolaleaf uses the microphone during identity verification (Sumsub liveness check)."
+        # r2 fix #6: armv7 (32-bit) is invalid for iOS 17.2 (arm64-only). Removed key entirely;
+        # iOS derives required architecture from the build slice.
+        NSCameraUsageDescription: "Kolaleaf scans your photo ID and a selfie to verify your identity, as required for Australian money-transfer regulations. Images are processed by our identity provider Sumsub."
+        NSMicrophoneUsageDescription: "Kolaleaf records a brief audio sample during identity verification (Sumsub liveness check)."
         NSFaceIDUsageDescription: "Kolaleaf uses Face ID to confirm transfers."
         NSPhotoLibraryAddUsageDescription: "Kolaleaf can save transfer receipts to your Photos."
         UIAppFonts:
@@ -60,7 +66,8 @@ targets:
           - Inter-ExtraBold.ttf
           - Inter-Black.ttf
         ITSAppUsesNonExemptEncryption: false
-        FileProtection: NSFileProtectionComplete
+        # r2 fix #15: removed FileProtection from Info.plist — that key is not honored by iOS.
+        # Data Protection class is set via the entitlement instead (see Kolaleaf.entitlements).
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: false
     settings:
@@ -68,15 +75,23 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.kolaleaf.app
         TARGETED_DEVICE_FAMILY: "1,2" # iPhone + iPad (R1)
         ENABLE_PREVIEWS: YES
+      configs:
+        Debug:
+          APP_ATTEST_ENVIRONMENT: development
+          APS_ENVIRONMENT: development
+        Release:
+          APP_ATTEST_ENVIRONMENT: production
+          APS_ENVIRONMENT: production
     entitlements:
       path: Kolaleaf/Kolaleaf.entitlements
       properties:
-        aps-environment: development
+        aps-environment: $(APS_ENVIRONMENT)
         com.apple.security.application-groups:
           - group.com.kolaleaf.shared
         com.apple.developer.associated-domains:
           - applinks:kolaleaf.com.au
-        com.apple.developer.devicecheck.appattest-environment: production
+        com.apple.developer.devicecheck.appattest-environment: $(APP_ATTEST_ENVIRONMENT)
+        com.apple.developer.default-data-protection: NSFileProtectionComplete
     dependencies:
       - target: KolaleafWidgets
 
@@ -117,16 +132,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kolaleaf.app.tests
 
-  KolaleafUITests:
-    type: bundle.ui-testing
-    platform: iOS
-    sources:
-      - KolaleafUITests
-    dependencies:
-      - target: Kolaleaf
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.kolaleaf.app.uitests
+  # r2 fix #12: KolaleafUITests had an empty source dir wired into the scheme — would
+  # break xcodebuild test. Removed from project until Phase 12's actual UI tests land.
+  # The directory may still exist for future use; xcodegen won't include it without a target.
 
 packages:
   SnapshotTesting:
@@ -145,7 +153,6 @@ schemes:
         - Kolaleaf
       targets:
         - KolaleafTests
-        - KolaleafUITests
     run:
       config: Debug
     archive:

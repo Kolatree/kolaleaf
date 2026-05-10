@@ -14,7 +14,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    DEVELOPMENT_TEAM: "" # Fill in App Store Connect team ID at signing time
+    DEVELOPMENT_TEAM: "5VCH6937XM" # Acuoos Pty Ltd
     CODE_SIGN_STYLE: Automatic
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     CLANG_ENABLE_MODULES: YES
@@ -42,6 +42,7 @@ targets:
     resources:
       - Kolaleaf/Resources/Assets.xcassets
       - Kolaleaf/Resources/Inter-fonts
+      - Kolaleaf/PrivacyInfo.xcprivacy
     info:
       path: Kolaleaf/Info.plist
       properties:

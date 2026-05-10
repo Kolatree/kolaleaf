@@ -373,9 +373,128 @@ false` plus no frame check in the `WKScriptMessageHandler` meant any iframe
 
 **Run artifact:** `/tmp/compound-engineering/ce-code-review/20260510-223436-3fd0c000/`
 
-**Next:** Phase 3 — After-KYC sequence (U29 confirm profile, U30 confirm address,
-U31 PayID provisioning, U32 PostKYCCoordinator). Backend prereq for U29: `PATCH
-/api/v1/account/me` accepting display name + optional address fields.
+**Next:** Phase 0.6 brand pivot per `docs/Kolaleaf Vectors /`, then Phase 3 —
+After-KYC sequence (U29–U32).
+
+---
+
+### Wave 2a · iOS Phase 0.6 — Brand pivot to Kolaleaf Vectors design system
+
+**Date:** 2026-05-10
+**Brief:** `docs/Kolaleaf Vectors /kolaleaf_money_remittance_website_design_system.md`
+**Scope:** Visual layer only. ViewModels, networking, KYC state machine,
+Sumsub bridge, polling, push permission service all untouched. Token
+foundation + modifiers + Welcome screen + asset catalog rewritten.
+
+**Rationale:** the Phase 0 design (variant-C-journey: purple→green gradient,
+dark theme, frosted glass, Nigeria-Australia framing) shipped against an
+internal mockup. The Vectors brief is the canonical brand system: Trust
+Green primary, Hope Gold accents, white/cream surfaces, pan-African diaspora
+audience, "Send Love, Deliver Hope" identity. Plan R1's "pixel-fidelity to
+variant-C-journey" anchor is superseded by the Vectors brief; an r3 plan
+revision will fold the explicit copy and visual rules in.
+
+**Token foundation rewritten:**
+
+- `Design/Tokens/KolaColors.swift` — full palette swap. New canonical
+  tokens: `trustGreen` (`#014D35`), `kolaGreen` (`#03553C`), `leafGreen`
+  (`#289F2A`), `hopeGold` (`#F6D09A`), `ink` (`#0B1713`), `muted` (`#5E6F68`),
+  `border` (`#DDE6E1`), `surface` (`#FAFCFB`), `cream` (`#FFF8EF`).
+  `coral` remapped to `danger.600` (`#D92D20`). Added semantic
+  `textPrimary` / `textSecondary` and `Card` namespace (white background +
+  shadow spec). Phase 0 tokens (`green`, `greenLight`, `gold`, `pageLight`,
+  `whiteOnGradient`, `whiteOnGradientMuted`, `Frosted.background`,
+  `Frosted.border`) preserved as aliases pointing at new values so this
+  pivot lands as one commit instead of touching every view file in the
+  same change. Subsequent phases will rename the aliases away.
+- `Design/Modifiers/GradientWallpaper.swift` — replaced 165° purple→green
+  gradient + radial blooms with the Vectors §8 hero spec
+  `linear-gradient(180deg, #FAFCFB 0%, #FFF8EF 100%)`.
+- `Design/Modifiers/FrostedGlass.swift` — `.ultraThinMaterial` translucent
+  treatment replaced with the Vectors §6 card spec (white card, 1 px
+  `#DDE6E1` border, `0 8px 24px rgba(11, 23, 19, 0.08)` shadow). Kept the
+  `kolaFrosted(.card)` modifier name so existing views compile; added the
+  `kolaCard()` semantic alias for new code. ImageRenderer regression
+  documented in the Phase 0 header is now moot — the surface is solid white.
+
+**Asset catalog created:**
+
+- `Resources/Assets.xcassets/` — previously empty; now contains 7 imagesets
+  for the Vectors-supplied vector logos (`LogoPrimary`, `LogoSecondary`,
+  `WordmarkPrimary`, `WordmarkSecondary`, `WordmarkPrimaryWithTagline`,
+  `WordmarkSecondaryWithTagline`, `WordmarkPlain`) with
+  `preserves-vector-representation: true`. Plus the `launchBackground`
+  colour (cream `#FFF8EF`) that `Info.plist` references and an empty
+  `AppIcon.appiconset` so xcodebuild stops failing on the missing
+  catalog entry.
+
+**Welcome screen rewritten:**
+
+- `Features/Onboarding/WelcomeView.swift` — Phase 0 coded "K" badge
+  replaced with the official `LogoPrimary` SVG asset; Phase 0 dual-colour
+  text wordmark replaced with the official `WordmarkPrimary` SVG. Hero copy
+  swapped from "Send to Nigeria. In minutes." to the Vectors §8
+  recommendation: "Send money home with trust, care, and confidence." +
+  "Kolaleaf helps Africans abroad support loved ones quickly, securely,
+  and affordably." Primary CTA is the Vectors §6 button-primary spec
+  (Trust-Green pill with subtle shadow). Secondary CTA is the white
+  outline pill with neutral.200 border and Trust-Green label. Trust strip
+  preserves the AUSTRAC RG 105 compliance signal with a Hope-Gold dot
+  separator (10% accent allowance per the 70/20/10 colour-ratio rule).
+
+**Tests:**
+
+- `KolaleafTests/Design/KolaColorsTests.swift` — rewritten to validate
+  every Vectors-spec hex value against the resolved `Color` rawValue.
+  Old tests were 5 cases (purple/green/greenLight/gold/coral); new is 12
+  cases covering all core brand colours, semantic colours, and surfaces.
+- `KolaleafTests/Features/Onboarding/__Snapshots__/WelcomeViewSnapshotTests/`
+  — both reference PNGs (default + accessibility5 dynamic-type variants)
+  re-recorded under the new visual. Old snapshots deleted before the
+  re-record run.
+
+**Verification:** `cd ios && xcodebuild test -scheme Kolaleaf -destination
+'platform=iOS Simulator,id=88D2B85D-E98B-4A0B-86A2-C82D77D11298'` →
+**201 tests, 0 failures** (was 194 before Phase 0.6; +7 from the expanded
+KolaColors palette validation). Build clean under `-strict-concurrency=complete`.
+
+**Visual smoke (verified via the recorded snapshot PNG):**
+
+- LogoPrimary leaf glyph renders correctly from the SVG asset.
+- WordmarkPrimary "Kolaleaf" lockup renders correctly from the SVG asset.
+- Light surface→cream gradient background applies cleanly.
+- Trust-Green pill CTA contrast against white background is AA-compliant.
+- AUSTRAC trust strip retains its compliance prominence.
+
+**Out of scope (deferred to follow-up phases):**
+
+- Poppins typeface integration. The Vectors brief recommends Poppins for
+  headings; iOS currently uses Inter for everything. Adding Poppins
+  requires acquiring the Poppins TTF files, bundling them in
+  `Resources/`, and registering in `Info.plist UIAppFonts`. Inter remains
+  in use as both heading and body font until Poppins lands; no visual
+  surprise — Inter renders close enough that the rebrand reads correctly.
+- Renaming the `whiteOnGradient` / `whiteOnGradientMuted` /
+  `Frosted.background` aliases away. They resolve to the correct new
+  values today; the rename is mechanical churn that can ride along with
+  Phase 3 view work.
+- Pan-African corridor expansion. The Vectors brief lists send corridors
+  AU / CA / NZ / US / UK → African countries; Kolaleaf's Wave 1 backend
+  ships AUD-NGN only. Corridor expansion is a backend (rates / payout
+  providers / compliance) effort, not an iOS one.
+- Marketing-site adoption. Vectors is explicitly a "Money Remittance
+  **Website** Design System". The web app under `src/app/(marketing)`
+  will adopt it separately.
+- Plan r3 revision. R1 in the iOS plan still references variant-C-journey;
+  needs an r3 amendment to point at the Vectors brief instead. Tracked.
+- Logo SVG ContentsJSON appearance variants (light/dark colour-scheme
+  bindings) — single asset per imageset for v1; dark-mode-aware lockups
+  added when iOS dark-mode support lands.
+
+**Next:** Phase 3 — After-KYC sequence (U29 confirm profile, U30 confirm
+address, U31 PayID provisioning, U32 PostKYCCoordinator). Backend prereq
+for U29: `PATCH /api/v1/account/me` accepting display name + optional
+address fields.
 
 ---
 

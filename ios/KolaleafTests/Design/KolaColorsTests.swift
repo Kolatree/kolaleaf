@@ -1,30 +1,82 @@
-// KolaColorsTests.swift  (Phase 0 · U2)
-// Asserts brand color tokens parse to the expected hex values.
+// KolaColorsTests.swift  (Phase 0.6 · Vectors brand pivot)
+// Asserts brand colour tokens parse to the Vectors-spec hex values.
+// Source of truth: docs/Kolaleaf Vectors /kolaleaf_money_remittance_website_design_system.md §3.
 
 import XCTest
 import SwiftUI
 @testable import Kolaleaf
 
 final class KolaColorsTests: XCTestCase {
-    func testPurpleResolvesToBrandHex() {
-        let c = KolaColors.purple
-        XCTAssertEqual(c.hexString, "#2D1B69")
+
+    // MARK: - Core brand
+
+    func testTrustGreenResolvesToBrandHex() {
+        // brand.green.900 — primary brand colour (Vectors §3).
+        XCTAssertEqual(KolaColors.trustGreen.hexString, "#014D35")
+        // Phase 0.6: `green` is an alias for `trustGreen` to keep view
+        // call-sites compiling during the rebrand sweep.
+        XCTAssertEqual(KolaColors.green.hexString, "#014D35")
     }
 
-    func testGreenResolvesToBrandHex() {
-        XCTAssertEqual(KolaColors.green.hexString, "#1A6B3C")
+    func testKolaGreenResolvesToBrandHex() {
+        // brand.green.800 — wordmark colour, nav active state.
+        XCTAssertEqual(KolaColors.kolaGreen.hexString, "#03553C")
     }
 
-    func testGreenLightResolvesToBrandHex() {
-        XCTAssertEqual(KolaColors.greenLight.hexString, "#7DD87D")
+    func testLeafGreenResolvesToBrandHex() {
+        // brand.green.500 — success states, secondary CTA accents.
+        XCTAssertEqual(KolaColors.leafGreen.hexString, "#289F2A")
+        XCTAssertEqual(KolaColors.greenLight.hexString, "#289F2A")
     }
 
-    func testGoldResolvesToBrandHex() {
-        XCTAssertEqual(KolaColors.gold.hexString, "#FFD700")
+    func testHopeGoldResolvesToBrandHex() {
+        // brand.gold.300 — premium accents.
+        XCTAssertEqual(KolaColors.hopeGold.hexString, "#F6D09A")
+        XCTAssertEqual(KolaColors.gold.hexString, "#F6D09A")
     }
 
-    func testCoralResolvesToBrandHex() {
-        XCTAssertEqual(KolaColors.coral.hexString, "#FF8A8A")
+    // MARK: - Semantic / status
+
+    func testCoralResolvesToDangerHex() {
+        // danger.600.
+        XCTAssertEqual(KolaColors.coral.hexString, "#D92D20")
+    }
+
+    func testWarningResolvesToHex() {
+        XCTAssertEqual(KolaColors.warning.hexString, "#F79009")
+    }
+
+    func testInfoResolvesToHex() {
+        XCTAssertEqual(KolaColors.info.hexString, "#1570EF")
+    }
+
+    // MARK: - Neutrals + surfaces
+
+    func testInkResolvesToNeutralHex() {
+        // neutral.950 — primary text on light backgrounds.
+        XCTAssertEqual(KolaColors.ink.hexString, "#0B1713")
+    }
+
+    func testMutedResolvesToNeutralHex() {
+        // neutral.600 — body copy / helper text.
+        XCTAssertEqual(KolaColors.muted.hexString, "#5E6F68")
+    }
+
+    func testBorderResolvesToNeutralHex() {
+        // neutral.200 — card borders, dividers.
+        XCTAssertEqual(KolaColors.border.hexString, "#DDE6E1")
+    }
+
+    func testSurfaceResolvesToNeutralHex() {
+        // neutral.50 — page background.
+        XCTAssertEqual(KolaColors.surface.hexString, "#FAFCFB")
+        // pageLight alias for legacy callers.
+        XCTAssertEqual(KolaColors.pageLight.hexString, "#FAFCFB")
+    }
+
+    func testCreamResolvesToHex() {
+        // cream.50 — warm sections.
+        XCTAssertEqual(KolaColors.cream.hexString, "#FFF8EF")
     }
 }
 

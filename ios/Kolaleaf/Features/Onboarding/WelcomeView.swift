@@ -1,18 +1,20 @@
-// WelcomeView.swift  (Phase 1 · U16)
-// Screen 01 from variant-C-journey: brand introduction with two CTAs and an
-// AUSTRAC trust strip at the foot. Wallpaper via `.kolaWallpaper()`.
+// WelcomeView.swift  (Phase 1 · U16 — rebrand pass Phase 0.6)
+// Screen 01 — first impression. Vectors brand: Trust Green primary, white
+// surface, Hope Gold accents on the trust line, AUSTRAC compliance signal
+// preserved. The Phase 0 coded "K" badge is replaced with the official
+// `LogoPrimary` SVG asset; the wordmark uses `WordmarkPrimary` so the
+// supplied vector is the source of truth (per Vectors §2 logo usage rules).
 //
-// On appear, kicks off a fire-and-forget pasteboard scan via ReferralCapture
-// (U91) so a WhatsApp-shared token is captured before the user signs up.
-//
-// Pre-auth screen — does NOT call AppState.bumpInteraction().
+// On appear, kicks off the same fire-and-forget pasteboard scan via
+// ReferralCapture (U91) so a WhatsApp-shared token is captured before the
+// user signs up. Pre-auth screen — does NOT call `bumpInteraction()`.
 
 import SwiftUI
 
 public struct WelcomeView: View {
-    /// Tapped "Get started" — route to phone signup (U17).
+    /// Tapped "Get started" — route to email signup.
     public var onGetStarted: () -> Void
-    /// Tapped "I already have an account" — route to login (U21).
+    /// Tapped "Sign in" — route to login.
     public var onSignIn: () -> Void
 
     @Environment(\.referralCapture) private var referralCapture
@@ -26,8 +28,8 @@ public struct WelcomeView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            // Top: logo mark + wordmark
-            VStack(spacing: KolaSpacing.xl) {
+            // Top: official logomark + wordmark
+            VStack(spacing: KolaSpacing.l) {
                 logoMark
                 wordmark
             }
@@ -36,7 +38,7 @@ public struct WelcomeView: View {
             Spacer(minLength: KolaSpacing.card)
 
             // Middle hero: pitch + subtitle
-            VStack(spacing: KolaSpacing.s) {
+            VStack(spacing: KolaSpacing.m) {
                 pitch
                 subtitle
             }
@@ -46,7 +48,7 @@ public struct WelcomeView: View {
             Spacer(minLength: KolaSpacing.card)
 
             // Bottom: CTAs + trust strip
-            VStack(spacing: KolaSpacing.s) {
+            VStack(spacing: KolaSpacing.m) {
                 primaryCTA
                 secondaryCTA
                 trustStrip.padding(.top, KolaSpacing.s)
@@ -61,57 +63,47 @@ public struct WelcomeView: View {
 
     // MARK: - Pieces
 
+    /// Vectors-supplied primary logomark (leaf glyph). Asset catalog stores
+    /// the SVG with `preserves-vector-representation: true` so it scales
+    /// without raster artifacts at any size.
     private var logoMark: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 22)
-                .fill(LinearGradient(
-                    colors: [KolaColors.greenLight, KolaColors.green],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ))
-                .frame(width: 76, height: 76)
-                .shadow(color: .black.opacity(0.22), radius: 15, x: 0, y: 12)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22)
-                        .stroke(Color.white.opacity(0.25), lineWidth: 2)
-                )
-
-            Text("K")
-                .font(.system(size: 36, weight: .black))
-                .foregroundStyle(KolaColors.ink)
-        }
-        .accessibilityHidden(true)
+        Image("LogoPrimary")
+            .resizable()
+            .renderingMode(.original)
+            .aspectRatio(contentMode: .fit)
+            .frame(width: 76, height: 76)
+            .accessibilityHidden(true)
     }
 
+    /// Vectors-supplied primary wordmark — the official `Kolaleaf` lockup.
     private var wordmark: some View {
-        (Text("Kola")
-            .foregroundStyle(KolaColors.whiteOnGradient)
-         + Text("leaf")
-            .foregroundStyle(KolaColors.greenLight))
-            .font(KolaFont.headline)
-            .kerning(KolaKerning.headline)
+        Image("WordmarkPrimary")
+            .resizable()
+            .renderingMode(.original)
+            .aspectRatio(contentMode: .fit)
+            .frame(height: 32)
             .accessibilityLabel("Kolaleaf")
     }
 
+    /// Hero copy from Vectors §8 hero recommendation.
     private var pitch: some View {
-        (Text("Send to Nigeria.\nIn ")
-            .foregroundStyle(KolaColors.whiteOnGradient)
-         + Text("minutes.")
-            .foregroundStyle(KolaColors.greenLight))
+        Text("Send money home with\ntrust, care, and confidence.")
             .font(KolaFont.headline)
             .kerning(KolaKerning.headline)
+            .foregroundStyle(KolaColors.ink)
             .lineLimit(3)
             .fixedSize(horizontal: false, vertical: true)
     }
 
     private var subtitle: some View {
-        Text("Better rates than WorldRemit. AUSTRAC registered. Trusted by Nigerian-Australians since 2019.")
+        Text("Kolaleaf helps Africans abroad support loved ones quickly, securely, and affordably.")
             .font(KolaFont.tagline)
-            .foregroundStyle(KolaColors.whiteOnGradientMuted)
+            .foregroundStyle(KolaColors.muted)
             .lineSpacing(2)
             .frame(maxWidth: 320)
     }
 
+    /// Primary CTA — Trust Green filled pill (Vectors §6 button-primary spec).
     private var primaryCTA: some View {
         Button(action: onGetStarted) {
             HStack(spacing: KolaSpacing.s) {
@@ -124,54 +116,60 @@ public struct WelcomeView: View {
             .frame(maxWidth: .infinity)
             .frame(minHeight: KolaSpacing.hitTarget)
             .padding(.vertical, KolaSpacing.l)
-            .background(
-                LinearGradient(
-                    colors: [KolaColors.greenLight, KolaColors.green],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: KolaRadius.card))
-            .shadow(color: KolaColors.green.opacity(0.35), radius: 9, x: 0, y: 6)
+            .background(KolaColors.trustGreen)
+            .clipShape(RoundedRectangle(cornerRadius: KolaRadius.pill))
+            .shadow(color: KolaColors.trustGreen.opacity(0.18), radius: 12, x: 0, y: 8)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Get started, sign up for an account")
         .accessibilityAddTraits(.isButton)
     }
 
+    /// Secondary CTA — white pill with `neutral.200` border + Trust-Green
+    /// label (Vectors §6 button-secondary spec).
     private var secondaryCTA: some View {
         Button(action: onSignIn) {
             Text("I already have an account")
                 .font(KolaFont.row)
-                .foregroundStyle(KolaColors.whiteOnGradient)
+                .foregroundStyle(KolaColors.trustGreen)
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: KolaSpacing.hitTarget)
                 .padding(.vertical, KolaSpacing.m)
-                .background(KolaColors.Frosted.background)
+                .background(Color.white)
                 .overlay(
-                    RoundedRectangle(cornerRadius: KolaRadius.card)
-                        .stroke(KolaColors.Frosted.border, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: KolaRadius.pill)
+                        .stroke(KolaColors.border, lineWidth: 1)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: KolaRadius.card))
+                .clipShape(RoundedRectangle(cornerRadius: KolaRadius.pill))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Sign in, returning user")
         .accessibilityAddTraits(.isButton)
     }
 
+    /// AUSTRAC compliance signal preserved (Kolaleaf is the licensed entity).
+    /// Hope Gold accent reserved for the regulatory reference per the
+    /// 70/20/10 colour ratio: gold = 10% accent moments only.
     private var trustStrip: some View {
-        Text("Licensed AU money transmitter · AUSTRAC RG 105")
-            .font(KolaFont.trust)
-            .kerning(KolaKerning.label)
-            .foregroundStyle(KolaColors.whiteOnGradientMuted)
-            .accessibilityLabel("Licensed Australian money transmitter, AUSTRAC reference RG 105")
+        HStack(spacing: KolaSpacing.s) {
+            Text("Licensed AU money transmitter")
+                .foregroundStyle(KolaColors.muted)
+            Text("·")
+                .foregroundStyle(KolaColors.hopeGold)
+            Text("AUSTRAC RG 105")
+                .foregroundStyle(KolaColors.muted)
+        }
+        .font(KolaFont.trust)
+        .kerning(KolaKerning.label)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Licensed Australian money transmitter, AUSTRAC reference RG 105")
     }
 
     // MARK: - Pasteboard one-shot
 
     private func scanPasteboardOnce() async {
-        // Fire-and-forget: a missing referralCapture (e.g., previews without injection)
-        // returns silently. The injection key has a sane default below.
+        // Fire-and-forget: a missing referralCapture (e.g., previews without
+        // injection) returns silently. The injection key has a sane default.
         _ = await referralCapture.captureFromPasteboardIfNotConsumed()
     }
 }
@@ -179,5 +177,4 @@ public struct WelcomeView: View {
 // MARK: - Environment injection
 
 // Note: `\.referralCapture` EnvironmentKey lives in App/Environment+Kola.swift
-// alongside `\.apiClient` and `\.keychain`. The preview-friendly default value
-// is defined there.
+// alongside `\.apiClient`, `\.keychain`, and `\.pushPermissionService`.

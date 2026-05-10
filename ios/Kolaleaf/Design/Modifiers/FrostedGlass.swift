@@ -1,11 +1,16 @@
-// FrostedGlass.swift
-// Translucent surface modifier wrapping `.ultraThinMaterial` with a tinted overlay and
-// 1px white-18% stroke. Three radius variants: card / pill / sheet.
+// FrostedGlass.swift  (Phase 0.6 · Vectors brand pivot)
+// Light card surface modifier — white background, 1 px border, soft shadow.
 //
-// IMPORTANT: `.ultraThinMaterial` does NOT render correctly inside SwiftUI's `ImageRenderer`
-// (it samples an underlying view hierarchy that doesn't exist in offscreen rendering).
-// For the share-receipt PNG (U92), use `ShareableReceiptView` which renders with
-// solid-color cards instead. See plan U92 + r2 risks table.
+// The Phase 0 `.ultraThinMaterial` translucent treatment is replaced per
+// the Vectors §6 card spec (white card, `1 px` `#DDE6E1` border, shadow
+// `0 8px 24px rgba(11, 23, 19, 0.08)`). The modifier name and call-sites
+// (`kolaFrosted(.card)`) stay so existing views compile; the visual is now
+// premium-light instead of dark-frosted.
+//
+// IMPORTANT (kept from Phase 0): for share-receipt PNGs (U92), use
+// `ShareableReceiptView` which already renders solid-colour cards — Phase
+// 0.6 doesn't change that surface, but the `Card` background being solid
+// white means the ImageRenderer regression is now moot.
 
 import SwiftUI
 
@@ -34,36 +39,43 @@ public struct FrostedGlass: ViewModifier {
             .background(backgroundLayer)
             .overlay(borderLayer)
             .clipShape(RoundedRectangle(cornerRadius: shape.radius, style: .continuous))
+            .shadow(
+                color: KolaColors.Card.shadow,
+                radius: KolaColors.Card.shadowRadius,
+                x: 0,
+                y: KolaColors.Card.shadowY
+            )
     }
 
     @ViewBuilder
     private var backgroundLayer: some View {
         if highContrast {
-            // Accessibility: opaque card against the gradient.
+            // Accessibility variant: opaque ink card (high-contrast mode).
             RoundedRectangle(cornerRadius: shape.radius, style: .continuous)
-                .fill(KolaColors.ink.opacity(0.88))
+                .fill(KolaColors.ink)
         } else {
             RoundedRectangle(cornerRadius: shape.radius, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: shape.radius, style: .continuous)
-                        .fill(KolaColors.Frosted.background)
-                )
+                .fill(KolaColors.Card.background)
         }
     }
 
     private var borderLayer: some View {
         RoundedRectangle(cornerRadius: shape.radius, style: .continuous)
-            .strokeBorder(KolaColors.Frosted.border, lineWidth: 1)
+            .strokeBorder(KolaColors.Card.border, lineWidth: 1)
     }
 }
 
 public extension View {
-    /// Apply Kolaleaf frosted-glass surface treatment.
-    /// - Parameter shape: corner-radius variant. Defaults to `.card`.
-    /// - Parameter highContrast: pass `true` when `.accessibilityReduceTransparency`
-    ///   environment is on; renders an opaque card for AA contrast.
+    /// Apply the Vectors-spec light card surface treatment.
+    /// - Parameter shape: corner-radius variant. Defaults to `.card` (16 pt).
+    /// - Parameter highContrast: opaque ink card for `.accessibilityReduceTransparency`.
     func kolaFrosted(_ shape: FrostedShape = .card, highContrast: Bool = false) -> some View {
+        modifier(FrostedGlass(shape: shape, highContrast: highContrast))
+    }
+
+    /// Semantic alias — `kolaCard()` reads more naturally now that the
+    /// surface is no longer frosted glass.
+    func kolaCard(_ shape: FrostedShape = .card, highContrast: Bool = false) -> some View {
         modifier(FrostedGlass(shape: shape, highContrast: highContrast))
     }
 }

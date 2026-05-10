@@ -84,6 +84,27 @@ public actor APIClient {
             return .failure(.transport("Non-HTTP response"))
         }
 
+        // Phase 1 review fix (advisory): eagerly commit any Set-Cookie headers
+        // into our private cookieStorage BEFORE returning success. URLSession
+        // ordinarily writes cookies to the configured storage during request
+        // teardown, but on iOS 17+ with `.onlyFromMainDocumentDomain` policy
+        // the commit can race against a follow-up request issued from the same
+        // RunLoop tick — observed as cookieless next-requests after a
+        // session-issuing endpoint (e.g. complete-registration → kyc/initiate).
+        // Parsing the response headers and writing the cookies synchronously
+        // closes the window: the cookie is in the jar by the time send(_:)
+        // returns, regardless of URLSession's internal scheduling.
+        if let url = http.url,
+           let headerFields = http.allHeaderFields as? [String: String] {
+            let cookies = HTTPCookie.cookies(
+                withResponseHeaderFields: headerFields,
+                for: url
+            )
+            if !cookies.isEmpty {
+                cookieStorage.setCookies(cookies, for: url, mainDocumentURL: url)
+            }
+        }
+
         // Success path: fire hook BEFORE decode so the idle clock reflects the
         // network-level success even if a contract-drift decode fails.
         if (200..<300).contains(http.statusCode) {

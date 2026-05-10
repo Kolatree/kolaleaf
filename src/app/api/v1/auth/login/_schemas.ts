@@ -1,10 +1,10 @@
-import { z } from 'zod'
-import { registry } from '@/lib/openapi/registry'
+import { z } from "zod";
+import { registry } from "@/lib/openapi/registry";
 import {
   Email,
   ErrorEnvelope,
   ValidationErrorEnvelope,
-} from '@/lib/schemas/common'
+} from "@/lib/schemas/common";
 
 // POST /api/v1/auth/login
 //
@@ -15,57 +15,72 @@ import {
 // we don't actually authenticate.
 
 export const LoginIdentifier = z.object({
-  type: z.literal('email'),
+  type: z.literal("email"),
   value: Email,
-})
+});
 
 export const LoginBody = z.object({
   identifier: LoginIdentifier,
-  password: z.string().min(1, 'Password is required'),
-})
+  password: z.string().min(1, "Password is required"),
+});
 
 export const LoginResponse = z.object({
   user: z.object({ id: z.string(), fullName: z.string().nullable() }),
   requires2FA: z.boolean(),
-  twoFactorMethod: z.enum(['NONE', 'TOTP', 'SMS']).optional(),
-})
+  twoFactorMethod: z.enum(["NONE", "TOTP", "SMS"]).optional(),
+});
 
 export const LoginVerificationRequiredResponse = z.object({
   requiresVerification: z.literal(true),
   email: z.string(),
   message: z.string(),
-})
+});
 
-export type LoginBodyInput = z.infer<typeof LoginBody>
+export type LoginBodyInput = z.infer<typeof LoginBody>;
 
 registry.registerPath({
-  method: 'post',
-  path: '/auth/login',
-  tags: ['auth'],
-  summary: 'Authenticate with identifier + password',
+  method: "post",
+  path: "/auth/login",
+  tags: ["auth"],
+  summary: "Authenticate with identifier + password",
   request: {
-    body: { required: true, content: { 'application/json': { schema: LoginBody } } },
+    body: {
+      required: true,
+      content: { "application/json": { schema: LoginBody } },
+    },
   },
   responses: {
     200: {
-      description: 'Signed in (cookie set)',
-      content: { 'application/json': { schema: LoginResponse } },
+      description: "Signed in (cookie set)",
+      content: { "application/json": { schema: LoginResponse } },
     },
     202: {
-      description: 'Password OK but email unverified — code issued',
-      content: { 'application/json': { schema: LoginVerificationRequiredResponse } },
+      description: "Password OK but email unverified — code issued",
+      content: {
+        "application/json": { schema: LoginVerificationRequiredResponse },
+      },
     },
     400: {
-      description: 'Malformed JSON',
-      content: { 'application/json': { schema: ErrorEnvelope } },
+      description: "Malformed JSON",
+      content: { "application/json": { schema: ErrorEnvelope } },
     },
     401: {
-      description: 'Bad credentials',
-      content: { 'application/json': { schema: ErrorEnvelope } },
+      description: "Bad credentials (reason: invalid_credentials)",
+      content: { "application/json": { schema: ErrorEnvelope } },
     },
     422: {
-      description: 'Schema validation failed',
-      content: { 'application/json': { schema: ValidationErrorEnvelope } },
+      description: "Schema validation failed",
+      content: { "application/json": { schema: ValidationErrorEnvelope } },
+    },
+    429: {
+      description:
+        "Rate-limited (reason: rate_limited). Retry-After header carries seconds.",
+      content: { "application/json": { schema: ErrorEnvelope } },
+    },
+    500: {
+      description:
+        "Internal failure (reason: internal_error). Underlying error is logged but not exposed.",
+      content: { "application/json": { schema: ErrorEnvelope } },
     },
   },
-})
+});

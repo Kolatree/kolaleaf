@@ -47,7 +47,8 @@ describe('GET /api/v1/openapi', () => {
     // the data routes it describes. Step 20 baseline: 41. Step 26 adds
     // admin/failed-emails (GET list + resolve) -> 43. Step 27 adds
     // kyc/retry -> 44. Step 28 adds admin/compliance/{id}/mark-reported
-    // -> 45. Exact match gates the contract.
-    expect(keys.length).toBe(45)
+    // -> 45. Sumsub WebSDK token refresh adds kyc/access-token -> 46.
+    // Exact match gates the contract.
+    expect(keys.length).toBe(46)
   })
 })

@@ -46,6 +46,15 @@ private struct ReferralCaptureKey: EnvironmentKey {
     )
 }
 
+private struct PushPermissionServiceKey: EnvironmentKey {
+    /// Default: pointed at the same APIClient default. Real injection happens
+    /// at KolaleafApp's WindowGroup root; this default keeps previews and
+    /// tests building without an explicit `.environment(...)` call.
+    static let defaultValue: PushPermissionService = PushPermissionService(
+        api: APIClientKey.defaultValue
+    )
+}
+
 public extension EnvironmentValues {
     var apiClient: APIClient {
         get { self[APIClientKey.self] }
@@ -58,5 +67,9 @@ public extension EnvironmentValues {
     var referralCapture: ReferralCapture {
         get { self[ReferralCaptureKey.self] }
         set { self[ReferralCaptureKey.self] = newValue }
+    }
+    var pushPermissionService: PushPermissionService {
+        get { self[PushPermissionServiceKey.self] }
+        set { self[PushPermissionServiceKey.self] = newValue }
     }
 }

@@ -233,6 +233,152 @@ provider integration. Then Phase 2 KYC native Sumsub SDK (U24a/b/c + U24-fallbac
 
 ---
 
+### Wave 2a · iOS Phase 2 — KYC outcomes + Sumsub integration (U22a / U24 / U25 / U26 / U27 / U28)
+
+**Date:** 2026-05-10
+**Plan:** `docs/plans/2026-05-09-001-feat-ios-swiftui-kolaleaf-mobile-app-plan.md` (r2)
+**Phase 1.5 status:** still gated on backend SMS provider; deferred per prior decision.
+
+**Units shipped (8):**
+
+| Unit                | Description                                                                                                                         |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| U22a                | `SumsubPreWarmView` — 700 ms transition shell that masks WKWebView cold-start                                                       |
+| U24a                | `SumsubProvider` protocol + `SumsubPresenter` — provider abstraction for native SDK / WebView fallback                              |
+| U24b / U24-fallback | `SumsubWebView` — WKWebView wrapper per R16 spec (nonPersistent data store, JS bridge, camera origin allowlist)                     |
+| U24c                | `SumsubBridge` — maps `SumsubResult` (submitted / verdict / cancelled / failed) to KycStatus + route                                |
+| U25                 | `KYCProcessingView` + `KYCProcessingViewModel` — 3 s polling of `/kyc/status` with pause/resume on scenePhase + Retry-After honored |
+| U26                 | `KYCSoftRejectionView` + ViewModel — calls `POST /kyc/retry` for atomic re-issuance                                                 |
+| U27                 | `KYCUnderReviewView` — human-review wait state with notify-me CTA                                                                   |
+| U28                 | `PushPermissionService` + `PushNotificationDelegate` — lazy APNs permission + token registration                                    |
+
+**Backend changes consumed in this phase:**
+
+- `GET /api/v1/kyc/status` — already live, response shape verified
+- `POST /api/v1/kyc/retry` — already live (Wave 1 audit P0 gap closed)
+
+**Backend changes shipped alongside:**
+
+- `/kyc/status` and `/kyc/retry` error responses now use the canonical
+  `{ error, reason }` envelope (was bare `{ error }`). 401 → `unauthenticated`,
+  409 → `kyc_not_rejected | kyc_no_application`, 500 → `kyc_status_failed | kyc_retry_failed`.
+- `KycStatusResponse` Zod schema now pins `status` to `z.enum(['PENDING', 'IN_REVIEW',
+'VERIFIED', 'REJECTED'])` and declares the optional `applicantId` field that the
+  route was already returning. Schema/runtime divergence closed.
+
+**P0 contract drift fixed in this phase:**
+
+- iOS `KycStatus` enum rawValues (`NOT_STARTED / PROCESSING / APPROVED / SOFT_REJECTED
+/ UNDER_REVIEW / HARD_REJECTED`) didn't match the backend Prisma enum (`PENDING /
+IN_REVIEW / VERIFIED / REJECTED`). Aligned exactly. Custom `Codable` maps unknown
+  rawValues to the `_iOS_UNKNOWN` sentinel for forward-compat. `RootCoordinator`
+  switch + `OnboardingCoordinator` transitions + tests updated to use the canonical
+  case names.
+
+**Verification:** `cd ios && xcodebuild test -scheme Kolaleaf -destination
+'platform=iOS Simulator,id=88D2B85D-E98B-4A0B-86A2-C82D77D11298'` → **194 tests, 0
+failures** (was 147 before Phase 2; +47 new tests). Backend KYC unit tests:
+`npx vitest run tests/app/api/v1/kyc/` → 22/22 pass. OpenAPI endpoint test 4/4 pass.
+
+**Code review pass — 12 reviewers (correctness, security, api-contract, reliability,
+swift-ios, adversarial, performance, testing, maintainability, project-standards,
+agent-native, learnings-researcher):**
+
+The review surfaced **4 P0 findings** (each multi-reviewer convergent — the strongest
+signal possible) and **15 P1/P2 findings** that the test suite missed because there
+were no integration tests for the WKWebView coordinator or the OnboardingCoordinator
+routing under AppState changes.
+
+**P0 fixes:**
+
+1. **Sumsub WebView coordinator delivered no terminal events.** `SumsubWebViewCoordinator
+.attach(_:)` was never called → `resolve(_:)` always early-returned on a nil
+   continuation → every successful KYC reported as `.cancelled` via `viewDidDisappear`
+   and the user looped back to KYC intro forever. The WebView is the only active
+   path at v1 ship (native SDK gated on signing). Convergent across correctness,
+   swift-ios, adversarial, maintainability, and security reviewers. Fixed by
+   removing the dead continuation/attach pattern; the coordinator now holds the
+   `onResult` closure directly with a single-shot `didResolve` latch.
+2. **OnboardingCoordinator's optimistic `appState.kycStatus` mutation unmounted the
+   subtree mid-flow.** `RootCoordinator` routes on `appState.kycStatus` at every
+   render; flipping it to `.inReview` BEFORE pushing the `.kycProcessing` route
+   caused `RootRouter.route` to switch to `KYCUnderReviewPlaceholder`, unmounting
+   the OnboardingCoordinator's NavigationStack — `KYCProcessingView` was unreachable.
+   Fixed by dropping the optimistic flip; status now changes only at terminal
+   resolution where the RootCoordinator hand-off is the desired effect.
+3. **JS bridge exposed terminal-event spoofing via subframes.** `forMainFrameOnly:
+false` plus no frame check in the `WKScriptMessageHandler` meant any iframe
+   Sumsub loaded (analytics, partner SDKs) could `postMessage('kola', {event:
+'statusChanged', answer: 'GREEN'})` and trick iOS into accepting a fake verdict.
+   Fixed by setting `forMainFrameOnly: true`, gating `userContentController(_:didReceive:)`
+   on `message.frameInfo.isMainFrame`, and adding a JS-side `e.origin` allowlist
+   for `*.sumsub.com`.
+4. **WKWebView load failure rendered a blank screen forever.** No `WKNavigationDelegate`
+   error handlers; offline/DNS/TLS failure left the user staring at a blank view
+   with no recovery. Fixed by implementing `webView(_:didFailProvisionalNavigation:withError:)`
+   and `webView(_:didFail:withError:)` to resolve `.failed` immediately.
+
+**P1 fixes:**
+
+- Polling pause on background — `KYCProcessingViewModel` now exposes `pause()` /
+  `resume()` and the View binds them to `scenePhase`. Elapsed time is preserved
+  across pause/resume cycles so the 10 min timeout doesn't accumulate background
+  time. Was: ~200 polls/session continuing while backgrounded, hammering the backend.
+- Retry-After honored in pollLoop — `nextDelayOverrideSeconds` consumed once and
+  cleared, applied as `max(retryAfter, pollIntervalSeconds)`.
+- 401 routing — added `Terminal.unauthorized` (was folded into `.timedOut` which
+  trapped the user behind the under-review screen). Coordinator now drives
+  `appState.clearForLogout()` so RootCoordinator routes to Welcome for re-auth.
+- Camera permission origin allowlist — `WKUIDelegate` now denies non-`*.sumsub.com`
+  origins instead of unconditionally granting.
+- APNs `application(_:didRegisterForRemoteNotificationsWithDeviceToken:)` hook
+  added via `@UIApplicationDelegateAdaptor(PushNotificationDelegate.self)` —
+  `PushPermissionService.register()` is no longer dead code.
+- `removeScriptMessageHandler(forName: "kola")` in `willMove(toParent: nil)` —
+  prevents WKWebView retaining the coordinator (with selfie/ID PII buffer) past
+  expected dismissal.
+- Backend `/kyc/status` and `/kyc/retry` envelope shape — see backend changes above.
+
+**P2/P3 fixes:**
+
+- `KYCSession.hash(into:)` excludes `accessToken` so a future `NavigationPath
+.CodableRepresentation` migration can't leak the bearer secret into persisted state.
+- Malformed `verificationUrl` now resolves through the coordinator's single-shot
+  latch, preventing a double-route push.
+- `@State rotation` hoisted to the top-level body; spinner animation now triggered
+  from `body.onAppear` rather than a recomputed subview.
+
+**Out-of-scope findings filed for downstream:**
+
+- Backend `/kyc/status` should add `rejectionReasons: string[]` so `KYCSoftRejectionView`
+  can show specific Sumsub rejection codes instead of generic copy. Backend follow-up
+  ticket pending.
+- Backend `POST /api/v1/account/push-tokens` route does not yet exist; iOS
+  `PushTokenEndpoints.Register` compiles but every call will return 404 until the
+  route lands. Tracked as backend follow-up; iOS surface is laid so no client-side
+  changes are needed when the route ships.
+- `KYCUnderReviewView.onTalkToSupport` and `KYCSoftRejectionView.onContactSupport`
+  are deliberate no-ops until Phase 11.5 ships the web-help deep-link.
+
+**Verified safe by reviewers (confirmed in artifact):**
+
+- WKWebView cookie isolation from APIClient cookie jar (separate `WKWebsiteDataStore
+.nonPersistent()` per session).
+- URL fragment access-token NOT leaked via `Referer` header (WKWebView strips
+  fragments by default; verified the JS bridge does not log `window.location`).
+- iOS-side `KycStatus.unknown` sentinel prevents backend rawValue impersonation.
+- `PushPermissionService` actor isolation under strict concurrency.
+- All Phase 1 P0+P1 fixes preserved (env-injection layer, idle-timer mechanics,
+  send-code enumeration-proof property, Keychain partitioning).
+
+**Run artifact:** `/tmp/compound-engineering/ce-code-review/20260510-223436-3fd0c000/`
+
+**Next:** Phase 3 — After-KYC sequence (U29 confirm profile, U30 confirm address,
+U31 PayID provisioning, U32 PostKYCCoordinator). Backend prereq for U29: `PATCH
+/api/v1/account/me` accepting display name + optional address fields.
+
+---
+
 ### Wave 2a · iOS Plan amendment r2.1 (post-Phase-0 review follow-ups)
 
 **Date:** 2026-05-10

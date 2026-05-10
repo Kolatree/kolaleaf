@@ -6,8 +6,8 @@
 //   hasActiveSession  | kycStatus       | destination
 //   ------------------+-----------------+----------------------------------
 //   false             | (any)           | OnboardingCoordinator (Welcome)
-//   true              | .approved       | MainTabView (placeholder, Phase 8)
-//   true              | .underReview    | KYCUnderReviewPlaceholder
+//   true              | .verified       | MainTabView (placeholder, Phase 8)
+//   true              | .inReview       | KYCUnderReviewPlaceholder
 //   true              | other / unknown | OnboardingCoordinator (resume at KYC intro)
 //
 // The full MainTabView lands in Phase 8 (U33). For now the post-auth /
@@ -29,9 +29,9 @@ public enum RootRouter {
     public static func route(hasActiveSession: Bool, kycStatus: KycStatus) -> RootRoute {
         guard hasActiveSession else { return .onboardingWelcome }
         switch kycStatus {
-        case .approved:    return .mainTab
-        case .underReview: return .kycUnderReview
-        default:           return .onboardingResumeAtKYC
+        case .verified:    return .mainTab
+        case .inReview:    return .kycUnderReview
+        case .pending, .rejected, .unknown: return .onboardingResumeAtKYC
         }
     }
 }

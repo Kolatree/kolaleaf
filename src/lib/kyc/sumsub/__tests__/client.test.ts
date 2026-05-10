@@ -114,15 +114,24 @@ describe('SumsubHttpClient', () => {
         new Response(JSON.stringify(mockResponse), { status: 200 })
       )
 
-      const result = await client.getAccessToken('applicant-abc-123')
+      const result = await client.getAccessToken({
+        userId: 'user-001',
+        email: 'test@example.com',
+        applicantId: 'applicant-abc-123',
+      })
 
       expect(result.token).toBe('sdk-token-xyz')
       expect(result.url).toContain('applicant-abc-123')
 
       const fetchCall = vi.mocked(fetch).mock.calls[0]
-      expect(fetchCall[0]).toBe(
-        `${baseUrl}/resources/accessTokens?userId=applicant-abc-123&levelName=basic-kyc-level`
-      )
+      expect(fetchCall[0]).toBe(`${baseUrl}/resources/accessTokens/sdk`)
+      expect(fetchCall[1]?.method).toBe('POST')
+      expect(fetchCall[1]?.body).toBe(JSON.stringify({
+        userId: 'user-001',
+        levelName: 'basic-kyc-level',
+        ttlInSecs: 600,
+        applicantIdentifiers: { email: 'test@example.com' },
+      }))
     })
 
     it('throws ProviderPermanentError on 404', async () => {
@@ -133,7 +142,7 @@ describe('SumsubHttpClient', () => {
       )
 
       await expect(
-        client.getAccessToken('unknown-applicant')
+        client.getAccessToken({ userId: 'unknown-user' })
       ).rejects.toBeInstanceOf(ProviderPermanentError)
     })
 
@@ -143,7 +152,7 @@ describe('SumsubHttpClient', () => {
       )
 
       await expect(
-        client.getAccessToken('applicant-abc-123')
+        client.getAccessToken({ userId: 'user-001', applicantId: 'applicant-abc-123' })
       ).rejects.toThrow('Invalid Sumsub response: missing access token')
     })
   })
@@ -332,7 +341,10 @@ describe('createSumsubClient', () => {
       email: 'demo@example.com',
       fullName: 'Demo User',
     })
-    const access = await client.getAccessToken(applicant.applicantId)
+    const access = await client.getAccessToken({
+      userId: 'user-123',
+      applicantId: applicant.applicantId,
+    })
 
     expect(applicant.applicantId).toBe('mock-sumsub-user-123')
     expect(access.url).toBe(

@@ -15,18 +15,15 @@ import SwiftUI
 @main
 struct KolaleafApp: App {
     @State private var appState = AppState()
-    @State private var apiClient: APIClient = {
-        let urlString = ProcessInfo.processInfo.environment["KOLA_API_BASE_URL"]
-            ?? "https://kolaleaf.com.au"
-        guard let url = URL(string: urlString) else {
-            fatalError("KOLA_API_BASE_URL is invalid: \(urlString)")
-        }
-        return APIClient(baseURL: url)
-    }()
+    @State private var apiClient: APIClient
     @State private var keychain: Keychain
     @State private var referralCapture: ReferralCapture
+    @State private var pushPermissionService: PushPermissionService
 
     @Environment(\.scenePhase) private var scenePhase
+    /// Phase 2 review fix (P1, adversarial adv-003): wire APNs callbacks so
+    /// the device token actually reaches PushPermissionService.register().
+    @UIApplicationDelegateAdaptor(PushNotificationDelegate.self) private var pushDelegate
 
     init() {
         // ReferralCapture (U91) shares the same Keychain instance used elsewhere.
@@ -34,6 +31,26 @@ struct KolaleafApp: App {
         let kc = Keychain()
         _keychain = State(initialValue: kc)
         _referralCapture = State(initialValue: ReferralCapture(keychain: kc))
+        // PushPermissionService is wired against the same APIClient instance
+        // so backend POST /account/push-tokens shares the session cookie jar.
+        // Constructed in init for the same single-source-of-truth reason.
+        let initialClient = Self.makeAPIClient()
+        _apiClient = State(initialValue: initialClient)
+        let pps = PushPermissionService(api: initialClient)
+        _pushPermissionService = State(initialValue: pps)
+        // Bind the AppDelegate so APNs device-token callbacks reach the
+        // service. Done in init so the binding is in place before the first
+        // `registerForRemoteNotifications()` call.
+        Task { @MainActor in PushNotificationDelegate.bind(pps) }
+    }
+
+    private static func makeAPIClient() -> APIClient {
+        let urlString = ProcessInfo.processInfo.environment["KOLA_API_BASE_URL"]
+            ?? "https://kolaleaf.com.au"
+        guard let url = URL(string: urlString) else {
+            fatalError("KOLA_API_BASE_URL is invalid: \(urlString)")
+        }
+        return APIClient(baseURL: url)
     }
 
     var body: some Scene {
@@ -43,6 +60,7 @@ struct KolaleafApp: App {
                 .environment(\.apiClient, apiClient)
                 .environment(\.keychain, keychain)
                 .environment(\.referralCapture, referralCapture)
+                .environment(\.pushPermissionService, pushPermissionService)
                 .task { await wireAPIClientHooks() }
         }
         .onChange(of: scenePhase) { _, newPhase in

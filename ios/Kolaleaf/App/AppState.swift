@@ -212,14 +212,40 @@ public struct CurrentUser: Equatable, Sendable {
     }
 }
 
+/// Mirror of `enum KycStatus` in `prisma/schema.prisma`. Backend rawValues are
+/// authoritative — the original iOS draft invented its own status names
+/// (`NOT_STARTED / PROCESSING / APPROVED / SOFT_REJECTED / UNDER_REVIEW /
+/// HARD_REJECTED`) that never round-tripped through `GET /kyc/status`. Phase 2
+/// fix: align rawValues to the wire contract and use a custom Decodable that
+/// maps unknown strings to `.unknown` for forward-compat (same pattern as
+/// `TransferStatus`).
+///
+/// Wave 1 backend exposes a single REJECTED state — there is no soft/hard
+/// split at the data layer. iOS routes REJECTED to a single retry-able screen
+/// (`KYCSoftRejectionView` / U26) that calls `POST /kyc/retry`; backend
+/// returns 409 if retry is no longer eligible, which is iOS' signal to fall
+/// back to a hard-rejection contact-support screen.
 public enum KycStatus: String, Equatable, Sendable {
-    case unknown
-    case notStarted = "NOT_STARTED"
-    case processing = "PROCESSING"
-    case approved   = "APPROVED"
-    case softRejected = "SOFT_REJECTED"
-    case underReview = "UNDER_REVIEW"
-    case hardRejected = "HARD_REJECTED"
+    case pending  = "PENDING"
+    case inReview = "IN_REVIEW"
+    case verified = "VERIFIED"
+    case rejected = "REJECTED"
+    /// Sentinel for any rawValue not recognized at this iOS build's release.
+    /// The non-colliding rawValue prevents accidental impersonation by a
+    /// future backend literal.
+    case unknown  = "_iOS_UNKNOWN"
+}
+
+extension KycStatus: Codable {
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = KycStatus(rawValue: raw) ?? .unknown
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(self.rawValue)
+    }
 }
 
 /// Tracks the user's currently-in-flight transfer, if any.

@@ -35,6 +35,21 @@ interface RetryKycResult {
   verificationUrl: string
 }
 
+interface KycAccessTokenResult {
+  applicantId: string
+  accessToken: string
+  verificationUrl: string
+}
+
+function getApplicantIdentifiers(
+  identifiers: Array<{ type: string; identifier: string }>,
+): { email?: string; phone?: string } {
+  return {
+    email: identifiers.find((i) => i.type === 'EMAIL')?.identifier,
+    phone: identifiers.find((i) => i.type === 'PHONE')?.identifier,
+  }
+}
+
 export async function initiateKyc(userId: string, client: SumsubClient): Promise<InitiateKycResult> {
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
@@ -68,8 +83,7 @@ export async function initiateKyc(userId: string, client: SumsubClient): Promise
     throw new KycRateLimitError(Math.max(0, retryAfterMs))
   }
 
-  const emailIdentifier = user.identifiers.find((i) => i.type === 'EMAIL')
-  const email = emailIdentifier?.identifier ?? ''
+  const { email = '', phone } = getApplicantIdentifiers(user.identifiers)
 
   const { applicantId } = await client.createApplicant({
     userId: user.id,
@@ -77,7 +91,12 @@ export async function initiateKyc(userId: string, client: SumsubClient): Promise
     fullName: user.fullName,
   })
 
-  const { token, url } = await client.getAccessToken(applicantId)
+  const { token, url } = await client.getAccessToken({
+    userId: user.id,
+    email,
+    phone,
+    applicantId,
+  })
 
   await prisma.user.update({
     where: { id: userId },
@@ -156,6 +175,7 @@ export async function getKycStatus(userId: string): Promise<KycStatusResult> {
 export async function retryKyc(userId: string, client: SumsubClient): Promise<RetryKycResult> {
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
+    include: { identifiers: true },
   })
 
   if (user.kycStatus !== 'REJECTED') {
@@ -166,7 +186,13 @@ export async function retryKyc(userId: string, client: SumsubClient): Promise<Re
     throw new Error('No existing KYC application to retry')
   }
 
-  const { token, url } = await client.getAccessToken(user.kycProviderId)
+  const { email, phone } = getApplicantIdentifiers(user.identifiers)
+  const { token, url } = await client.getAccessToken({
+    userId: user.id,
+    email,
+    phone,
+    applicantId: user.kycProviderId,
+  })
 
   await prisma.user.update({
     where: { id: userId },
@@ -183,6 +209,35 @@ export async function retryKyc(userId: string, client: SumsubClient): Promise<Re
   })
 
   return {
+    accessToken: token,
+    verificationUrl: url,
+  }
+}
+
+export async function getKycAccessToken(userId: string, client: SumsubClient): Promise<KycAccessTokenResult> {
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    include: { identifiers: true },
+  })
+
+  if (user.kycStatus === 'VERIFIED') {
+    throw new Error('KYC already verified')
+  }
+
+  if (user.kycStatus !== 'IN_REVIEW' || !user.kycProviderId) {
+    throw new Error('No KYC application in progress')
+  }
+
+  const { email, phone } = getApplicantIdentifiers(user.identifiers)
+  const { token, url } = await client.getAccessToken({
+    userId: user.id,
+    email,
+    phone,
+    applicantId: user.kycProviderId,
+  })
+
+  return {
+    applicantId: user.kycProviderId,
     accessToken: token,
     verificationUrl: url,
   }

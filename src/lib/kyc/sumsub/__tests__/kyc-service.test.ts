@@ -5,6 +5,7 @@ import {
   handleKycRejected,
   getKycStatus,
   retryKyc,
+  getKycAccessToken,
 } from '../kyc-service'
 
 vi.mock('../../../db/client', () => ({
@@ -79,6 +80,12 @@ describe('KYC Service', () => {
       expect(result.applicantId).toBe('applicant-abc-123')
       expect(result.accessToken).toBe('sdk-token-xyz')
       expect(result.verificationUrl).toContain('applicant-abc-123')
+      expect(mockSumsubClient.getAccessToken).toHaveBeenCalledWith({
+        userId: 'user-001',
+        email: 'test@example.com',
+        phone: undefined,
+        applicantId: 'applicant-abc-123',
+      })
 
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'user-001' },
@@ -206,6 +213,12 @@ describe('KYC Service', () => {
 
       expect(result.accessToken).toBe('sdk-token-new')
       expect(result.verificationUrl).toContain('applicant-abc-123')
+      expect(mockSumsubClient.getAccessToken).toHaveBeenCalledWith({
+        userId: 'user-001',
+        email: 'test@example.com',
+        phone: undefined,
+        applicantId: 'applicant-abc-123',
+      })
 
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'user-001' },
@@ -240,6 +253,44 @@ describe('KYC Service', () => {
 
       await expect(retryKyc('user-001', mockSumsubClient)).rejects.toThrow(
         'No existing KYC application to retry'
+      )
+    })
+  })
+
+  describe('getKycAccessToken', () => {
+    it('generates a fresh WebSDK token for an IN_REVIEW user', async () => {
+      const user = mockUser({
+        kycStatus: 'IN_REVIEW',
+        kycProviderId: 'applicant-abc-123',
+      })
+      vi.mocked(prisma.user.findUniqueOrThrow).mockResolvedValue(user as any)
+
+      mockSumsubClient.getAccessToken.mockResolvedValue({
+        token: 'sdk-token-fresh',
+        url: 'https://api.sumsub.com/idensic/#/applicant/applicant-abc-123',
+      })
+
+      const result = await getKycAccessToken('user-001', mockSumsubClient)
+
+      expect(result).toEqual({
+        applicantId: 'applicant-abc-123',
+        accessToken: 'sdk-token-fresh',
+        verificationUrl: 'https://api.sumsub.com/idensic/#/applicant/applicant-abc-123',
+      })
+      expect(mockSumsubClient.getAccessToken).toHaveBeenCalledWith({
+        userId: 'user-001',
+        email: 'test@example.com',
+        phone: undefined,
+        applicantId: 'applicant-abc-123',
+      })
+    })
+
+    it('throws when there is no KYC application in progress', async () => {
+      const user = mockUser({ kycStatus: 'PENDING', kycProviderId: null })
+      vi.mocked(prisma.user.findUniqueOrThrow).mockResolvedValue(user as any)
+
+      await expect(getKycAccessToken('user-001', mockSumsubClient)).rejects.toThrow(
+        'No KYC application in progress',
       )
     })
   })

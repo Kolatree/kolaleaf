@@ -14,7 +14,7 @@ final class RootRouterTests: XCTestCase {
     }
 
     func test_noSession_overridesAnyKYCStatus() {
-        for status: KycStatus in [.unknown, .notStarted, .processing, .approved, .underReview, .softRejected, .hardRejected] {
+        for status: KycStatus in [.unknown, .pending, .inReview, .verified, .rejected] {
             XCTAssertEqual(
                 RootRouter.route(hasActiveSession: false, kycStatus: status),
                 .onboardingWelcome,
@@ -23,22 +23,27 @@ final class RootRouterTests: XCTestCase {
         }
     }
 
-    func test_session_kycApproved_routesToMainTab() {
-        let r = RootRouter.route(hasActiveSession: true, kycStatus: .approved)
+    func test_session_kycVerified_routesToMainTab() {
+        let r = RootRouter.route(hasActiveSession: true, kycStatus: .verified)
         XCTAssertEqual(r, .mainTab)
     }
 
-    func test_session_kycUnderReview_routesToKYCUnderReview() {
-        let r = RootRouter.route(hasActiveSession: true, kycStatus: .underReview)
+    func test_session_kycInReview_routesToKYCUnderReview() {
+        let r = RootRouter.route(hasActiveSession: true, kycStatus: .inReview)
         XCTAssertEqual(r, .kycUnderReview)
     }
 
-    func test_session_kycPendingStates_routeToOnboardingResumeAtKYC() {
-        for status: KycStatus in [.unknown, .notStarted, .processing, .softRejected, .hardRejected] {
+    func test_session_kycResumeStates_routeToOnboardingResumeAtKYC() {
+        // Phase 2 contract-drift fix: backend's KycStatus enum is
+        // `PENDING | IN_REVIEW | VERIFIED | REJECTED`. .pending and .rejected
+        // route the user back through the onboarding KYC step (they need to
+        // either start the flow or retry it via /kyc/retry); .unknown is the
+        // forward-compat sentinel and routes the same way as a safe default.
+        for status: KycStatus in [.unknown, .pending, .rejected] {
             XCTAssertEqual(
                 RootRouter.route(hasActiveSession: true, kycStatus: status),
                 .onboardingResumeAtKYC,
-                "pending kyc state \(status) should route to onboardingResumeAtKYC"
+                "resumable kyc state \(status) should route to onboardingResumeAtKYC"
             )
         }
     }

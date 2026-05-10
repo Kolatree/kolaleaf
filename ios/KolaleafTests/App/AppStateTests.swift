@@ -93,7 +93,7 @@ final class AppStateTests: XCTestCase {
 
     func test_clearForLogout_nullsAllSessionFields() {
         let s = makeAuthed()
-        s.kycStatus = .approved
+        s.kycStatus = .verified
         s.activeTransfer = ActiveTransfer(
             id: "tx1", status: .awaitingAud,
             audAmount: 100, ngnAmount: 100_000, recipientId: "r1"

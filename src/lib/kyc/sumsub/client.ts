@@ -37,6 +37,13 @@ export interface AccessTokenResult {
   url: string
 }
 
+export interface AccessTokenParams {
+  userId: string
+  email?: string
+  phone?: string
+  applicantId?: string
+}
+
 export interface ApplicantStatusResult {
   status: string
   reviewResult?: {
@@ -47,7 +54,7 @@ export interface ApplicantStatusResult {
 
 export interface SumsubClient {
   createApplicant(params: CreateApplicantParams): Promise<CreateApplicantResult>
-  getAccessToken(applicantId: string): Promise<AccessTokenResult>
+  getAccessToken(params: AccessTokenParams): Promise<AccessTokenResult>
   getApplicantStatus(applicantId: string): Promise<ApplicantStatusResult>
 }
 
@@ -167,10 +174,24 @@ export class SumsubHttpClient implements SumsubClient {
     return { applicantId: data.id }
   }
 
-  async getAccessToken(applicantId: string): Promise<AccessTokenResult> {
-    const path = `/resources/accessTokens?userId=${applicantId}&levelName=${this.levelName}`
+  async getAccessToken(params: AccessTokenParams): Promise<AccessTokenResult> {
+    const path = '/resources/accessTokens/sdk'
+    const applicantIdentifiers: Record<string, string> = {}
+    if (params.email) applicantIdentifiers.email = params.email
+    if (params.phone) applicantIdentifiers.phone = params.phone
+
     const data = await withRetry<{ token?: string }>((signal) =>
-      this.request('POST', path, undefined, signal),
+      this.request(
+        'POST',
+        path,
+        {
+          userId: params.userId,
+          levelName: this.levelName,
+          ttlInSecs: 600,
+          ...(Object.keys(applicantIdentifiers).length > 0 ? { applicantIdentifiers } : {}),
+        },
+        signal,
+      ),
     )
 
     if (!data.token) {
@@ -179,7 +200,7 @@ export class SumsubHttpClient implements SumsubClient {
 
     return {
       token: data.token,
-      url: `https://api.sumsub.com/idensic/#/applicant/${applicantId}`,
+      url: `https://api.sumsub.com/idensic/#/applicant/${params.applicantId ?? params.userId}`,
     }
   }
 
@@ -197,15 +218,35 @@ export class SumsubHttpClient implements SumsubClient {
   }
 }
 
+class SumsubMockClient implements SumsubClient {
+  async createApplicant(params: CreateApplicantParams): Promise<CreateApplicantResult> {
+    return { applicantId: `mock-sumsub-${params.userId}` }
+  }
+
+  async getAccessToken(params: AccessTokenParams): Promise<AccessTokenResult> {
+    const baseUrl = process.env.APP_URL ?? 'http://localhost:3000'
+    const url = new URL('/kyc/mock', baseUrl)
+    const applicantId = params.applicantId ?? `mock-sumsub-${params.userId}`
+    url.searchParams.set('applicantId', applicantId)
+
+    return {
+      token: `mock-token-${applicantId}`,
+      url: url.toString(),
+    }
+  }
+
+  async getApplicantStatus(): Promise<ApplicantStatusResult> {
+    return { status: 'pending' }
+  }
+}
+
 export function createSumsubClient(): SumsubClient {
   // Lazy validation: runs on first factory call, NOT at module import — the
   // build-time env check would otherwise fail `next build` before env vars
   // are wired on the host.
   const { apiUrl, appToken, secretKey, levelName, isMock } = validateSumsubConfig()
   if (isMock) {
-    throw new Error(
-      'Sumsub client requested but one or more of SUMSUB_API_URL, SUMSUB_APP_TOKEN, SUMSUB_SECRET_KEY, SUMSUB_LEVEL_NAME are missing',
-    )
+    return new SumsubMockClient()
   }
   return new SumsubHttpClient(apiUrl, appToken, secretKey, levelName)
 }

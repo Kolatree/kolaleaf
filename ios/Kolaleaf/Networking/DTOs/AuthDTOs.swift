@@ -123,14 +123,27 @@ public struct LoginRequest: Codable, Sendable {
 }
 
 /// Backend 200 response: `{ user: { id, fullName }, requires2FA, twoFactorMethod? }`
+///
+/// API-008: the wire still emits `requires2FA` (changing the wire is
+/// out-of-scope for Phase 3 and would force a synchronised backend
+/// release), but the Swift property reads `requiresTwoFactor` so call
+/// sites don't carry the digit mid-identifier (which Swift naming
+/// conventions discourage and which trips up downstream code-gen).
+/// `CodingKeys` maps the Swift name back to the wire field.
 public struct LoginResponse: Decodable, Sendable {
     public struct User: Decodable, Sendable {
         public let id: String
         public let fullName: String?
     }
     public let user: User
-    public let requires2FA: Bool
+    public let requiresTwoFactor: Bool
     public let twoFactorMethod: String?  // "NONE" | "TOTP" | "SMS"
+
+    private enum CodingKeys: String, CodingKey {
+        case user
+        case requiresTwoFactor = "requires2FA"
+        case twoFactorMethod
+    }
 }
 
 /// Backend 202 response: password OK but email not verified yet — backend issued an
@@ -155,12 +168,24 @@ public struct EmailIdentifierDTO: Decodable, Sendable {
     public let verified: Bool
 }
 
-/// Mirrors Wave 1 AccountMeResponse exactly. Note: backend has NO kycStatus field —
-/// kycStatus comes from /api/v1/kyc/status (separate endpoint, separate DTO).
+/// Mirrors Wave 1 AccountMeResponse exactly.
+///
+/// Phase 3 (U29 / U30 PostKYC) extension: `displayName`, the AU address
+/// columns, and `kycStatus` are now returned by the same `/account/me`
+/// route. PostKYC views read everything from a single GET so they don't
+/// have to compose multiple endpoints. KYC-only screens keep using
+/// `/api/v1/kyc/status` for the polled-status flow.
 public struct MeResponse: Decodable, Sendable {
     public let userId: String
     public let fullName: String?
-    public let email: EmailIdentifierDTO?
+    /// Phase 3 / U29 — user-chosen display name. Optional (UI falls back
+    /// to first token of `fullName` when null).
+    public let displayName: String?
+    /// API-007: server contract names the primary identifier
+    /// `primaryEmail` so the field reads symmetrically with
+    /// `secondaryEmails`. Both lists carry the same shape — a singular
+    /// `email` next to a plural `secondaryEmails` was asymmetric.
+    public let primaryEmail: EmailIdentifierDTO?
     public let secondaryEmails: [EmailIdentifierDTO]
     public let twoFactorMethod: String?       // "NONE" | "TOTP" | "SMS" | nil
     /// ISO-8601 string (always with milliseconds via JS toISOString). Decoded as String
@@ -170,6 +195,20 @@ public struct MeResponse: Decodable, Sendable {
     public let phoneMasked: String?
     public let hasRemainingBackupCodes: Bool
     public let backupCodesRemaining: Int
+    /// Phase 3 / U30 — AU address columns. All optional on the row. The
+    /// `state` field is a String here (not the iOS `AUState` enum) so the
+    /// DTO stays a thin mirror of the wire format; ConfirmAddress VM
+    /// translates to the enum at the use site.
+    public let addressLine1: String?
+    public let addressLine2: String?
+    public let city: String?
+    public let state: String?
+    public let postcode: String?
+    public let country: String?
+    /// Phase 3 / U29 — KYC status from the backend (mirrors prisma/schema.prisma
+    /// KycStatus enum). Lets PostKYC routing read both account + KYC state from
+    /// a single GET.
+    public let kycStatus: KycStatus
 }
 
 // MARK: - Backend error envelope helpers

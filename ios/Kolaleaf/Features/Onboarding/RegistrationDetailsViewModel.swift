@@ -11,16 +11,9 @@
 import Foundation
 import Observation
 
-public enum AUState: String, CaseIterable, Sendable {
-    case nsw = "NSW"
-    case vic = "VIC"
-    case qld = "QLD"
-    case wa  = "WA"
-    case sa  = "SA"
-    case tas = "TAS"
-    case act = "ACT"
-    case nt  = "NT"
-}
+// `AUState` lives in `App/AUState.swift` so PostKYC, Recipients, and any
+// future cross-feature surface can reference the domain enum without
+// importing Onboarding (CA-001).
 
 @MainActor
 @Observable

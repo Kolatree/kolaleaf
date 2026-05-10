@@ -73,11 +73,11 @@ public enum AuthEndpoints {
     }
 
     // MARK: - /account/me
+    //
+    // Backward-compatibility alias. The canonical declaration moved to
+    // `AccountEndpoints.Me` (API-002) so the two `/account/me` verbs
+    // (GET + PATCH) live together. Existing call sites that still read
+    // `AuthEndpoints.Me` keep compiling via the typealias.
 
-    public struct Me: Endpoint {
-        public typealias Response = MeResponse
-        public let path = "/api/v1/account/me"
-        public let method: HTTPMethod = .get
-        public init() {}
-    }
+    public typealias Me = AccountEndpoints.Me
 }

@@ -44,7 +44,7 @@ final class SignInViewModelTests: XCTestCase {
         await api.stageSuccess(
             AuthEndpoints.Login.self,
             LoginResponse(user: .init(id: "u1", fullName: "Ada"),
-                          requires2FA: false,
+                          requiresTwoFactor: false,
                           twoFactorMethod: "NONE")
         )
 
@@ -74,7 +74,7 @@ final class SignInViewModelTests: XCTestCase {
         await api.stageSuccess(
             AuthEndpoints.Login.self,
             LoginResponse(user: .init(id: "u1", fullName: "Ada"),
-                          requires2FA: true,
+                          requiresTwoFactor: true,
                           twoFactorMethod: "TOTP")
         )
 
@@ -171,7 +171,7 @@ final class SignInViewModelTests: XCTestCase {
         let api = FakeAPIClient()
         await api.stageSuccess(
             AuthEndpoints.Login.self,
-            LoginResponse(user: .init(id: "u1", fullName: nil), requires2FA: false, twoFactorMethod: nil)
+            LoginResponse(user: .init(id: "u1", fullName: nil), requiresTwoFactor: false, twoFactorMethod: nil)
         )
         let vm = makeVM(api: api)
         vm.email = "  USER@Example.COM  "

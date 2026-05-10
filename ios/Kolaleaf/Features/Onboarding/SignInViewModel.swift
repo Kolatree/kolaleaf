@@ -72,7 +72,12 @@ public final class SignInViewModel {
             )
             onSignedIn(LoginResult(
                 user: user,
-                requires2FA: response.requires2FA,
+                // API-008: DTO renamed `requiresTwoFactor` (CodingKey
+                // still maps to wire `requires2FA`). Domain
+                // `LoginResult` keeps the legacy name for now — the
+                // public surface change is scoped to the network DTO
+                // per the issue brief.
+                requires2FA: response.requiresTwoFactor,
                 twoFactorMethod: response.twoFactorMethod
             ))
         case .failure(.verificationRequired(let backendEmail, _)):

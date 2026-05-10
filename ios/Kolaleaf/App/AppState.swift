@@ -180,6 +180,30 @@ public final class AppState {
     }
 }
 
+// MARK: - CurrentUserStore conformance (CA-003)
+//
+// `AppState` is the production implementation of `CurrentUserStore`.
+// Lives next to `AppState` itself so the conformance + mutation
+// semantics (preserve legalName / email / phone; update only the
+// display name) stay in one place. PostKYC view models depend on the
+// protocol so they're testable without an `AppState`.
+
+extension AppState: CurrentUserStore {
+    public func updateDisplayName(_ name: String) {
+        guard let user = currentUser else { return }
+        currentUser = CurrentUser(
+            id: user.id,
+            displayName: name,
+            // Legal name is KYC-verified — never mutated through this
+            // surface. The contract is enforced here so callers can't
+            // accidentally drift it via a different code path.
+            legalName: user.legalName,
+            email: user.email,
+            phone: user.phone
+        )
+    }
+}
+
 // MARK: - PendingTwoFactor
 
 /// Captured when sign-in returns `requires2FA: true`. The challenge UI lands in

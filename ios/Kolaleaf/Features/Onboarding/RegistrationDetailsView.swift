@@ -21,6 +21,7 @@ public struct RegistrationDetailsView: View {
             .scrollDismissesKeyboard(.interactively)
         }
         .kolaWallpaper()
+        .sensitiveScreen()   // P1 fix (Phase 1 review): full PII (legal name + AU address)
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { backButton }

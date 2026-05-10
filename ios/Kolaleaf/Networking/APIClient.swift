@@ -54,7 +54,9 @@ public actor APIClient {
         self.onSuccessfulCall = hook
     }
 
-    /// Test-only: clear the private cookie jar (force-logout local-cookie cleanup).
+    /// Clears the private cookie jar. Used by `KolaleafApp.forceReauth()` so a
+    /// stale session cookie cannot be replayed if `/auth/logout` fails (r2 fix #9).
+    /// Also useful in tests for resetting between scenarios.
     public func clearCookies() {
         cookieStorage.cookies?.forEach { cookieStorage.deleteCookie($0) }
     }

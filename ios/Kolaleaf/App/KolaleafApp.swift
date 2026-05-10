@@ -85,6 +85,12 @@ struct KolaleafApp: App {
         // is best-effort.
         try? await keychain.delete(forKey: KeychainKeys.sessionToken)
         try? await keychain.delete(forKey: KeychainKeys.currentUserId)
+        // P3 fix (Phase 1 review): also clear referral state so logout is total.
+        // Pasteboard one-shot flag clears so the next install-fresh user gets
+        // their own referral capture window; keychain referral token vanishes
+        // alongside the session token.
+        try? await keychain.delete(forKey: KeychainKeys.referralToken)
+        UserDefaults.standard.removeObject(forKey: "kola.referralPasteboardScanned")
         await apiClient.clearCookies()
         appState.clearForLogout()
 

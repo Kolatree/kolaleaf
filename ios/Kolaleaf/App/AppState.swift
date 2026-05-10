@@ -25,6 +25,13 @@ public final class AppState {
     public var kycStatus: KycStatus = .unknown
     public var hasActiveSession: Bool { currentUser != nil }
 
+    /// Set by SignInViewModel when backend returns 200 with `requires2FA: true`. The
+    /// backend has NOT issued a session cookie in that case — it's waiting for the
+    /// 2FA challenge to clear. Until U73-U75 (Phase 11) lands the challenge UI, the
+    /// app blocks 2FA-enabled accounts with this state instead of falsely showing
+    /// the user as authenticated. SignInView reads this and renders an inline notice.
+    public var pendingTwoFactor: PendingTwoFactor?
+
     // MARK: - Active flow
 
     public var activeTransfer: ActiveTransfer?
@@ -154,14 +161,36 @@ public final class AppState {
     }
 
     /// Clears all session state on logout.
+    ///
+    /// P1 fix (Phase 1 review): set lastInteractionAt to .distantPast rather than Date().
+    /// A future code path that calls clearForLogout WITHOUT also calling
+    /// KolaleafApp.forceReauth (which clears the cookie jar) would otherwise leave a
+    /// 14-min idle window during which shouldForceReauth returns false even though
+    /// the local session state is gone. distantPast guarantees any subsequent
+    /// hasActiveSession=true rehydration immediately demands re-auth.
     public func clearForLogout() {
         currentUser = nil
         kycStatus = .unknown
         activeTransfer = nil
-        lastInteractionAt = Date()
+        pendingTwoFactor = nil
+        lastInteractionAt = Date.distantPast
         lastBackgroundedAt = nil
         defaults.set(lastInteractionAt, forKey: Self.kLastInteractionAt)
         defaults.removeObject(forKey: Self.kLastBackgroundedAt)
+    }
+}
+
+// MARK: - PendingTwoFactor
+
+/// Captured when sign-in returns `requires2FA: true`. The challenge UI lands in
+/// Phase 11 (U73-U75); until then SignInView surfaces `blockedReason` to the user.
+public struct PendingTwoFactor: Equatable, Sendable {
+    public let method: String           // "TOTP" / "SMS" / "NONE"
+    public let blockedReason: String?
+
+    public init(method: String, blockedReason: String? = nil) {
+        self.method = method
+        self.blockedReason = blockedReason
     }
 }
 

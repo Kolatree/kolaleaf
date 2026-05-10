@@ -7,6 +7,7 @@ import SwiftUI
 public struct SignInView: View {
     @State private var vm: SignInViewModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppState.self) private var appState
     @FocusState private var focus: Field?
     private let onForgotPassword: (() -> Void)?
 
@@ -22,6 +23,7 @@ public struct SignInView: View {
             content
         }
         .kolaWallpaper()
+        .sensitiveScreen()   // P1 fix (Phase 1 review): email visible in switcher snapshot
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { backButton }
@@ -52,6 +54,17 @@ public struct SignInView: View {
                     .font(KolaFont.tagline)
                     .foregroundStyle(KolaColors.coral)
                     .accessibilityLabel("Error: \(error)")
+            }
+            // P0 fix (Phase 1 review): block 2FA-required accounts from entering the
+            // app until U73-U75 lands the challenge UI. SignInViewModel sets
+            // appState.pendingTwoFactor on a 200 with requires2FA: true; we surface
+            // the block here so the user has a clear next step instead of being
+            // stranded mid-flow.
+            if let pending = appState.pendingTwoFactor, let reason = pending.blockedReason {
+                Text(reason)
+                    .font(KolaFont.tagline)
+                    .foregroundStyle(KolaColors.gold)
+                    .accessibilityLabel("Two-factor sign-in unavailable: \(reason)")
             }
             Spacer(minLength: KolaSpacing.card)
             submitButton

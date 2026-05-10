@@ -1,19 +1,29 @@
 // EmailOTPView.swift  (Phase 1 · U21)
 // Screen 05: enter the 6-digit code emailed in U20.
 //
-// TODO Phase 1 merge: replace the inline TextField with the U18 OTPField
-// primitive once Agent A's branch lands. The placeholder field below uses
-// `.numberPad` + `.oneTimeCode` content type so iOS still autofills.
+// P0 fix (Phase 1 review): wired to U18 `OTPField` primitive. Earlier draft
+// used an inline `TextField` whose `onChange` re-fired `vm.submit()` every
+// time the value changed — letting brute-force scripts amplify attempts at
+// backend-rate. `OTPField`'s internal completion latch fires `onComplete`
+// exactly once per fully-filled state, so each new attempt requires a real
+// reset + refill.
 
 import SwiftUI
 
 public struct EmailOTPView: View {
     @State private var vm: EmailOTPViewModel
+    @StateObject private var otpModel: OTPFieldModel
     @Environment(\.dismiss) private var dismiss
-    @FocusState private var codeFocused: Bool
 
     public init(vm: EmailOTPViewModel) {
         self._vm = State(initialValue: vm)
+        // Build the OTPFieldModel here so onComplete captures `vm` directly. The
+        // closure pushes the assembled code into the view model and submits.
+        let captured = vm
+        self._otpModel = StateObject(wrappedValue: OTPFieldModel(length: 6) { code in
+            captured.code = code
+            Task { await captured.submit() }
+        })
     }
 
     public var body: some View {
@@ -21,15 +31,26 @@ public struct EmailOTPView: View {
             content
         }
         .kolaWallpaper()
+        .sensitiveScreen()   // P1 fix (Phase 1 review): OTP visible in switcher snapshot
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { backButton }
         }
         .onAppear {
             vm.startCountdown()
-            codeFocused = true
+            otpModel.beginEditing()
         }
         .onDisappear { vm.cancelCountdown() }
+        .onChange(of: vm.errorMessage) { _, newError in
+            // When the VM clears `code` after a wrong/expired/used backend reason,
+            // mirror the reset into the OTP boxes so the user sees the empty state
+            // and can retype. Also flag error so the boxes glow red briefly.
+            if newError != nil && vm.code.isEmpty {
+                otpModel.reset()
+                otpModel.setError(true)
+                otpModel.beginEditing()
+            }
+        }
     }
 
     // MARK: - Subviews
@@ -75,24 +96,8 @@ public struct EmailOTPView: View {
 
     private var codeField: some View {
         VStack(alignment: .leading, spacing: KolaSpacing.s) {
-            // TODO Phase 1 merge: replace with `OTPField(value: $vm.code, ...)` from Agent A.
-            TextField("000000", text: $vm.code)
-                .keyboardType(.numberPad)
-                .textContentType(.oneTimeCode)
-                .submitLabel(.done)
-                .focused($codeFocused)
-                .font(KolaFont.amountMedium)
-                .kerning(KolaKerning.amount)
-                .foregroundStyle(KolaColors.whiteOnGradient)
-                .padding(.horizontal, KolaSpacing.xl)
-                .padding(.vertical, KolaSpacing.l)
-                .kolaFrosted(.card)
-                .onChange(of: vm.code) { _, newValue in
-                    let digits = newValue.filter(\.isNumber)
-                    let trimmed = String(digits.prefix(6))
-                    if trimmed != newValue { vm.code = trimmed }
-                    if trimmed.count == 6 { Task { await vm.submit() } }
-                }
+            OTPField(model: otpModel, disabled: vm.isSubmitting)
+                .privacySensitive()   // P2 fix (Phase 1 review): redact under AirPlay/screen recording
 
             if let error = vm.errorMessage {
                 Text(error)

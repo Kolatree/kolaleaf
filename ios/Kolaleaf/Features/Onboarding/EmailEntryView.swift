@@ -20,6 +20,7 @@ public struct EmailEntryView: View {
             content
         }
         .kolaWallpaper()
+        .sensitiveScreen()   // P1 fix (Phase 1 review): app-switcher snapshot blur for PII
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { backButton }

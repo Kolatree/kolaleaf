@@ -64,6 +64,34 @@ final class SignInViewModelTests: XCTestCase {
         XCTAssertNil(vm.inlineError)
     }
 
+    /// P1 fix (Phase 1 review): security-critical test asserting the LoginResult
+    /// faithfully carries `requires2FA = true` from the backend. Combined with
+    /// the OnboardingCoordinator P0 fix (which gates `appState.currentUser` on
+    /// `requires2FA == false`), this test guards against a regression that would
+    /// strand 2FA-enabled users on KYC intro with no recovery path.
+    func test_submit_200_with2FARequired_propagatesFlag() async {
+        let api = FakeAPIClient()
+        await api.stageSuccess(
+            AuthEndpoints.Login.self,
+            LoginResponse(user: .init(id: "u1", fullName: "Ada"),
+                          requires2FA: true,
+                          twoFactorMethod: "TOTP")
+        )
+
+        var captured: LoginResult?
+        let vm = makeVM(api: api,
+                        onSignedIn: { captured = $0 },
+                        onVerificationRequired: { _ in XCTFail("should not be called") })
+        vm.email = "user@example.com"
+        vm.password = "Correct-Horse-1234"
+        await vm.submit()
+
+        XCTAssertEqual(captured?.requires2FA, true,
+                       "VM must forward requires2FA so the coordinator can gate appState.currentUser")
+        XCTAssertEqual(captured?.twoFactorMethod, "TOTP")
+        XCTAssertNil(vm.inlineError)
+    }
+
     // MARK: - 202 verification-required
 
     func test_submit_202_verificationRequired_callsOnVerificationRequired_notOnSignedIn() async {

@@ -98,13 +98,20 @@ final class AppStateTests: XCTestCase {
             id: "tx1", status: .awaitingAud,
             audAmount: 100, ngnAmount: 100_000, recipientId: "r1"
         )
+        s.pendingTwoFactor = PendingTwoFactor(method: "TOTP", blockedReason: "test")
 
         s.clearForLogout()
 
         XCTAssertNil(s.currentUser)
         XCTAssertEqual(s.kycStatus, .unknown)
         XCTAssertNil(s.activeTransfer)
+        XCTAssertNil(s.pendingTwoFactor)
         XCTAssertNil(s.lastBackgroundedAt)
+        // P1 fix (Phase 1 review): lastInteractionAt is now distantPast so any
+        // accidental rehydration that sets currentUser without going through
+        // forceReauth still trips shouldForceReauth on the next active scene.
+        XCTAssertEqual(s.lastInteractionAt, .distantPast,
+                       "clearForLogout should mark lastInteractionAt as fully expired")
     }
 
     // MARK: - bumpInteraction persists

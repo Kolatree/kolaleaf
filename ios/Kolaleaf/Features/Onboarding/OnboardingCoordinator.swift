@@ -116,9 +116,22 @@ public struct OnboardingCoordinator: View {
             SignInView(vm: SignInViewModel(
                 api: apiClient,
                 onSignedIn: { result in
+                    // P0 fix (Phase 1 review): when requires2FA is true the backend has
+                    // NOT issued a session cookie — it issued a pendingTwoFactorCookie
+                    // and is waiting for /auth/verify-2fa. If we set currentUser here,
+                    // RootCoordinator routes the user into the authenticated graph but
+                    // every protected request returns 401 — the user gets trapped on
+                    // KYC intro with no recovery path. Surface a clear message and
+                    // leave the session unset until U73-U75 (Phase 11) lands the
+                    // 2FA challenge UI.
+                    if result.requires2FA {
+                        appState.pendingTwoFactor = PendingTwoFactor(
+                            method: result.twoFactorMethod ?? "TOTP",
+                            blockedReason: "Two-factor sign-in arrives in a later release. Please use the web app for now."
+                        )
+                        return
+                    }
                     appState.currentUser = result.user
-                    // 2FA path is Phase 11 (U73-U75). For now the App routes by
-                    // hasActiveSession so post-auth flows pick up automatically.
                 },
                 onVerificationRequired: { email in
                     path.append(OnboardingTransition.fromSignInVerificationRequired(email: email))

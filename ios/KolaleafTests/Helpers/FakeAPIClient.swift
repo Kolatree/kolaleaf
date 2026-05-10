@@ -45,6 +45,33 @@ public actor FakeAPIClient: AuthAPI {
         stage(type, result: .failure(error))
     }
 
+    /// P1 fix (Phase 1 review): delay-injection seam for in-flight assertions.
+    ///
+    /// Without this, tests that need to observe `vm.isFetchingToken == true` mid-call
+    /// race against the fake resolving synchronously. Stage with a small
+    /// `nanoseconds` value (e.g. 50ms) so the in-flight window is observable.
+    /// `stageSuccessWithDelay` is the success variant; `stageFailureWithDelay` mirrors
+    /// it for error paths.
+    private var stagedDelays: [String: UInt64] = [:]
+
+    public func stageSuccessWithDelay<E: Endpoint>(
+        _ type: E.Type,
+        _ value: E.Response,
+        nanoseconds: UInt64
+    ) {
+        stage(type, result: .success(value))
+        stagedDelays[String(describing: type)] = nanoseconds
+    }
+
+    public func stageFailureWithDelay<E: Endpoint>(
+        _ type: E.Type,
+        _ error: APIError,
+        nanoseconds: UInt64
+    ) {
+        stage(type, result: .failure(error))
+        stagedDelays[String(describing: type)] = nanoseconds
+    }
+
     public func send<E: Endpoint>(_ endpoint: E) async -> Result<E.Response, APIError> {
         let key = String(describing: E.self)
         let bodyData: Data? = {
@@ -59,6 +86,11 @@ public actor FakeAPIClient: AuthAPI {
             method: endpoint.method,
             bodyData: bodyData
         ))
+
+        // Honor any staged delay so tests can observe in-flight state.
+        if let delayNs = stagedDelays[key] {
+            try? await Task.sleep(nanoseconds: delayNs)
+        }
 
         guard let staged = stagedResults[key] else {
             return .failure(.transport("FakeAPIClient: no result staged for \(key)"))

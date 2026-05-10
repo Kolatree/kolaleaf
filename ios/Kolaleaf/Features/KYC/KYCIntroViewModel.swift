@@ -7,12 +7,18 @@ import Foundation
 import Observation
 
 /// Compact bag carrying the values U24 needs to initialise the Sumsub flow.
+///
+/// P1 fix (Phase 1 review): added `accessToken`. The backend response carries
+/// three required fields and the native Sumsub SDK (Phase 2 / U24a) needs the
+/// access token to bootstrap. Earlier draft silently dropped it.
 public struct KYCSession: Equatable, Sendable {
     public let applicantId: String
+    public let accessToken: String
     public let verificationUrl: String
 
-    public init(applicantId: String, verificationUrl: String) {
+    public init(applicantId: String, accessToken: String, verificationUrl: String) {
         self.applicantId = applicantId
+        self.accessToken = accessToken
         self.verificationUrl = verificationUrl
     }
 }
@@ -42,6 +48,7 @@ public final class KYCIntroViewModel {
         case .success(let response):
             onAccessToken(KYCSession(
                 applicantId: response.applicantId,
+                accessToken: response.accessToken,
                 verificationUrl: response.verificationUrl
             ))
         case .failure(let error):

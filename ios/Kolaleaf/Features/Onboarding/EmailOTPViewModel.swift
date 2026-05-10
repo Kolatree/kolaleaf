@@ -83,7 +83,13 @@ public final class EmailOTPViewModel {
             onVerified()
         case .failure(let error):
             errorMessage = userFacingMessage(for: error)
-            if case .codeInvalid(let reason) = error, reason == "wrong_code" {
+            // P3 fix (Phase 1 review): clear the code field for any user-recoverable
+            // backend reason so the user can retype cleanly. Previously only
+            // `wrong_code` reset; `expired`/`used` left stale digits in the boxes
+            // and EmailOTPView's onChange-based auto-submit silently dropped the
+            // path because `code` didn't change.
+            if case .codeInvalid(let reason) = error,
+               ["wrong_code", "expired", "used"].contains(reason) {
                 code = ""
             }
         }
@@ -94,6 +100,9 @@ public final class EmailOTPViewModel {
     public func resend() async {
         guard canResend else { return }
 
+        // P3 fix (Phase 1 review): clear the code at the top of resend so the boxes
+        // are visibly empty and the user knows the new code starts fresh.
+        code = ""
         isSubmitting = true
         errorMessage = nil
         defer { isSubmitting = false }

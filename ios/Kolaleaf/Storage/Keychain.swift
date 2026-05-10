@@ -151,6 +151,9 @@ public enum KeychainKeys {
     public static let currentUserId = "session.userId"
     /// Captured referral code from a warm-arrival universal link or clipboard (U91).
     public static let pendingReferralCode = "referral.pendingCode"
+    /// Active referral token captured by `ReferralCapture` (U91). Cleared on `consume()`
+    /// after the token is attached to register / first send for backend attribution.
+    public static let referralToken = "referral.token"
     /// App Attest key ID (U76d). Per-device, generated once.
     public static let appAttestKeyId = "attest.keyId"
 }

@@ -137,6 +137,143 @@ OTP, KYC intro. Phase 1.5 phone OTP path gated on backend SMS provider integrati
 
 ---
 
+### Wave 2a · iOS Phase 1 (onboarding) — REVIEW PENDING
+
+**Date:** 2026-05-10
+**Branch:** `feat/ios-swiftui-app`
+**Commits:** `556a877` → HEAD (12 commits across foundation, registration arc, sign-in, KYC intro, RootCoordinator, OnboardingCoordinator, plus a 6-reviewer code-review fix-up)
+
+**Units shipped (11):**
+
+| U-ID                | Goal                                                                                                        |
+| ------------------- | ----------------------------------------------------------------------------------------------------------- |
+| U76b3               | `KOLA_IDLE_THRESHOLD_SECONDS` launch-arg override on `AppState` (DEBUG-only)                                |
+| U18                 | OTPField primitive — 6-digit input with auto-advance + paste + SMS autofill + completion latch              |
+| U91                 | ReferralCapture service (universal-link / pasteboard one-shot / explicit-prompt)                            |
+| U16                 | WelcomeView (screen 01) with referral capture hook + 2 snapshot tests                                       |
+| U20                 | EmailEntry view + ViewModel (calls `/auth/send-code`)                                                       |
+| U21                 | EmailOTP view + ViewModel (calls `/auth/verify-code`, 60s resend countdown)                                 |
+| U21a (NEW gap-fill) | RegistrationDetails view + ViewModel (calls `/auth/complete-registration` with full AU address)             |
+| U22                 | KYCIntro view + ViewModel (calls `/api/v1/kyc/initiate` for Sumsub access token)                            |
+| U23b (NEW gap-fill) | SignIn view + ViewModel (calls `/auth/login`, handles 200/202/401/422/429)                                  |
+| U15                 | RootCoordinator + AppEntry — pure `RootRouter.route()` decision matrix                                      |
+| U23                 | OnboardingCoordinator — typed `OnboardingRoute` + pure `OnboardingTransition` rules + NavigationStack shell |
+
+**Backend prerequisites consumed (all already live in Wave 1):**
+
+- `POST /api/v1/auth/send-code`
+- `POST /api/v1/auth/verify-code`
+- `POST /api/v1/auth/complete-registration`
+- `POST /api/v1/auth/login` (200 + 202 + 401 + 429)
+- `POST /api/v1/kyc/initiate`
+
+**Verification:** `xcodebuild test -project ios/Kolaleaf.xcodeproj -scheme Kolaleaf
+-destination 'platform=iOS Simulator,name=iPhone 16 Pro'` → **147 tests, 0 failures**.
+Deployment target stays at iOS 17.2; iPhone 15 Pro 17.2 simulator is not installed
+locally so tests run on iPhone 16 Pro 18.6 against the iOS 17.2 binary slice.
+
+**Phase 0 build unblocks bundled (justified by both Phase 1 agents independently):**
+
+- `EmptyResponse` sentinel moved into `Endpoint.swift` (was missing — APIClient's
+  empty-body fast path referenced an undefined symbol).
+- `Environment+Kola.swift` defaults switched from `fatalError` closures to
+  preview-friendly placeholders (the original closures crashed the test runner during
+  scene bootstrap).
+- `APIClient` ISO8601 formatters marked `nonisolated(unsafe)` + decode closure
+  `@Sendable` for Xcode 26 strict-concurrency.
+- `SnapshotTesting` 1.19 migration: `withSnapshotTesting(record:)` API + `@MainActor`
+  on the test base class.
+- `#warning` directive demoted to TODO (warnings-as-errors blocks tests). Now
+  resolved by the canonical `RootCoordinator.swift` landing.
+- `project.yml` test target gains `GENERATE_INFOPLIST_FILE` + `SnapshotTesting` SPM dep.
+
+**Code review pass — 6 reviewers (correctness, security, api-contract, swift-ios,
+testing, adversarial):**
+
+The review surfaced two convergent P0 findings (each flagged by 3 reviewers
+independently):
+
+1. **2FA bypass in OnboardingCoordinator** — `appState.currentUser = result.user`
+   was set unconditionally even when backend returned `requires2FA: true`. Backend
+   explicitly does NOT issue a session cookie in that case → iOS thought user was
+   logged in, every protected request returned 401, user trapped on KYC intro with
+   no recovery path. AUSTRAC-relevant: the iOS UI recorded a successful sign-in
+   not matched by a backend-verified session.
+2. **EmailOTPView used inline TextField with auto-submit** — the U18 OTPField
+   primitive (with completion-fire latch) was built but unwired. Inline TextField's
+   `onChange` re-fired `vm.submit()` on every 6-character value, letting brute-force
+   scripts amplify attempts to backend rate.
+
+Plus 5 P1s and 7 P2/P3s. All P0/P1 fixed in `fix(ios): apply Phase 1 review findings`
+commit. 147/147 tests green after fixes (was 132/133, with the brittle KYCIntroVM
+timing test now fixed via FakeAPIClient delay-injection seam).
+
+**Out-of-scope findings tracked for downstream:**
+
+- 4 backend findings (envelope-shape inconsistency on `/auth/login` 401/429 +
+  `/kyc/initiate` 401/409/500/429 + `retryAfter` units) — will be filed against
+  Wave 1 backend, not addressed here.
+- 1 advisory finding (cookie-commit race against next request) — would need
+  eager `HTTPCookie.cookies(withResponseHeaderFields:)` extraction in APIClient;
+  deferred until evidence from staging shows the race actually fires.
+
+**Verified safe by reviewers (confirmed in artifact):**
+
+- Launch-arg idle-threshold parsing properly DEBUG-gated.
+- send-code enumeration-proof property preserved on iOS.
+- APIClient cookie jar isolated from URLSession.shared.
+- Keychain session token correctly app-private (NOT shared with future Widget).
+- @Observable + @State pattern correctness across all 5 ViewModels.
+- `nonisolated(unsafe)` on ISO8601 formatters justified.
+- prefersReducedMotion respected in OTPField shake animation.
+- `[weak self]` capture in EmailOTPVM countdown task is correct.
+
+**Next:** Phase 1.5 phone OTP path (U17/U17b/U18/U19/U19a) — gated on backend SMS
+provider integration. Then Phase 2 KYC native Sumsub SDK (U24a/b/c + U24-fallback).
+
+---
+
+### Wave 2a · iOS Plan amendment r2.1 (post-Phase-0 review follow-ups)
+
+**Date:** 2026-05-10
+**Plan:** `docs/plans/2026-05-09-001-feat-ios-swiftui-kolaleaf-mobile-app-plan.md`
+**Trigger:** Three deferred items from the Phase 0 11-reviewer code review were only
+recorded in chat. Without proper unit definitions they would not have survived context
+handoff to Phase 1.
+
+**Three new units added:**
+
+- **U14b** (Phase 0) — `ios-smoke.yml` GitHub Actions workflow. Per-PR
+  `xcodebuild build + test` smoke gate. Distinct from Xcode Cloud (which owns the
+  TestFlight pipeline). Catches DTO drift, snapshot regressions, broken builds before
+  review. Files: `.github/workflows/ios-smoke.yml`, `ios/scripts/ci-bootstrap.sh`.
+- **U76b3** (Phase 0) — `KOLA_IDLE_THRESHOLD_SECONDS` launch-arg override on
+  `AppState`. Lets UI tests compress the 14-min idle clock. Debug-only via `#if DEBUG`.
+  Parses `--idle-threshold=<n>` and `--background-idle=<n>` from
+  `ProcessInfo.processInfo.arguments`. Tests inject custom argument arrays.
+- **U76b4** (Phase 10) — Split `APIClient` interaction-bump between user-origin and
+  system-origin endpoints. Closes the Phase-10 gap where APNS background pushes and
+  the 5s ProcessingTimeline poll would have falsely extended the user-touch idle
+  clock. Adds `RequestOrigin = .user | .system` per `Endpoint`; default `.user`. The
+  r2 plan note "idle resets on any successful API call" no longer holds once Phase 10
+  lands; that prose will be updated as part of U76b4.
+
+**Phase totals updated:**
+
+- Phase 0: 18 → 20
+- Phase 10: 12 → 13
+- **Grand total: 145 → 148**
+
+**Why this matters:** Saying "acknowledged, tracked" in chat is not tracking. The
+plan, BUILD-LOG, and git commits are the only persistent surfaces. Anything else is
+context-window vapor.
+
+**Next:** Phase 1 (U15–U23) proceeds as planned. U14b can ship in parallel with Phase 1
+since it only touches CI config. U76b3 can also ship inside Phase 1 (it's a tiny
+extension to `AppState`). U76b4 stays gated on Phase 10 / U72.
+
+---
+
 ### Step 19 -- /api/v1 versioning -- APPROVED (deploy pending)
 
 _Date: 2026-04-17_
@@ -576,7 +713,7 @@ Files changed:
   `src/lib/rates/index.ts` -- re-export the new validators + config
   constants so call-sites and tests can import them from the module
   root.
-- `.env.example` -- added SUMSUB*\*, MONOOVA*_, FLUTTERWAVE\__,
+- `.env.example` -- added SUMSUB*\*, MONOOVA*\_, FLUTTERWAVE\_\_,
   PAYSTACK*\*, FX*\* with per-provider idempotency notes and dev/prod
   behavior documented inline.
 - `tests/lib/http/retry.test.ts` (new) -- 12 tests: first-success,

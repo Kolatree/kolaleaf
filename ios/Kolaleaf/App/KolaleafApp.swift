@@ -88,7 +88,9 @@ struct KolaleafApp: App {
 
 /// Phase 0 root view stub. Replaced by the real `RootCoordinator` in `App/RootCoordinator.swift`
 /// when Phase 1 (U15) lands. Routes by hasActiveSession to a Welcome stub or a "main app" stub.
-#warning("Phase 0 stub — replace with App/RootCoordinator.swift in Phase 1 (U15)")
+// TODO Phase 1 (U15): replace with the dedicated `App/RootCoordinator.swift`. The
+// `#warning` directive was removed because the project builds with
+// `-warnings-as-errors`, which blocks tests until the U15 file lands.
 struct RootCoordinator: View {
     @Environment(AppState.self) private var appState
 

@@ -30,6 +30,19 @@ public enum AuthEndpoints {
         }
     }
 
+    // MARK: - Complete registration (Wave 1 verify-first wizard, step 3)
+
+    public struct CompleteRegistration: Endpoint {
+        public typealias Response = CompleteRegistrationResponse
+        public let path = "/api/v1/auth/complete-registration"
+        public let method: HTTPMethod = .post
+        public let body: (any Encodable & Sendable)?
+
+        public init(_ request: CompleteRegistrationRequest) {
+            self.body = request
+        }
+    }
+
     // MARK: - Login (returning user)
     //
     // Login can return EITHER 200 LoginResponse OR 202 LoginVerificationRequiredResponse.

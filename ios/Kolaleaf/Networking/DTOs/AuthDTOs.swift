@@ -14,7 +14,7 @@ import Foundation
 
 // MARK: - Email OTP (Wave 1 verify-first wizard, step 1: send code)
 
-public struct SendCodeRequest: Encodable, Sendable {
+public struct SendCodeRequest: Codable, Sendable {
     public let email: String
     public init(email: String) { self.email = email }
 }
@@ -27,7 +27,7 @@ public struct SendCodeResponse: Decodable, Sendable {
 
 // MARK: - Email OTP step 2: verify code
 
-public struct VerifyCodeRequest: Encodable, Sendable {
+public struct VerifyCodeRequest: Codable, Sendable {
     public let email: String
     public let code: String
     public init(email: String, code: String) {
@@ -43,20 +43,76 @@ public struct VerifyCodeResponse: Decodable, Sendable {
     public let verified: Bool
 }
 
+// MARK: - Complete registration (verify-first wizard, step 3)
+//
+// Wave 1 Zod schema reference: src/app/api/v1/auth/complete-registration/_schemas.ts.
+// `state` is uppercased server-side; we send the AUState rawValue (already uppercase).
+// `addressLine2` is omitted from the wire payload when empty so the server's optional
+// schema applies cleanly (the route returns 400 on a non-empty < min-length string).
+
+public struct CompleteRegistrationRequest: Codable, Sendable {
+    public let email: String
+    public let fullName: String
+    public let password: String
+    public let addressLine1: String
+    public let addressLine2: String?
+    public let city: String
+    public let state: String
+    public let postcode: String
+
+    public init(
+        email: String,
+        fullName: String,
+        password: String,
+        addressLine1: String,
+        addressLine2: String?,
+        city: String,
+        state: String,
+        postcode: String
+    ) {
+        self.email = email
+        self.fullName = fullName
+        self.password = password
+        self.addressLine1 = addressLine1
+        self.addressLine2 = addressLine2
+        self.city = city
+        self.state = state
+        self.postcode = postcode
+    }
+}
+
+public struct CompleteRegistrationResponse: Decodable, Sendable {
+    public struct User: Decodable, Sendable {
+        public let id: String
+        public let fullName: String
+        public init(id: String, fullName: String) {
+            self.id = id
+            self.fullName = fullName
+        }
+    }
+    public let user: User
+    public init(user: User) { self.user = user }
+}
+
 // MARK: - Login (returning user)
 
 /// Discriminated identifier per src/lib/schemas/common.ts IdentifierInput.
 /// Only `email` is implemented at v1. Apple/Google added in v1.1.
-public struct LoginIdentifier: Encodable, Sendable {
+public struct LoginIdentifier: Codable, Sendable {
     public let type: String  // "email" only at v1
     public let value: String
+
+    public init(type: String, value: String) {
+        self.type = type
+        self.value = value
+    }
 
     public static func email(_ value: String) -> LoginIdentifier {
         LoginIdentifier(type: "email", value: value)
     }
 }
 
-public struct LoginRequest: Encodable, Sendable {
+public struct LoginRequest: Codable, Sendable {
     public let identifier: LoginIdentifier
     public let password: String
 
@@ -114,6 +170,16 @@ public struct MeResponse: Decodable, Sendable {
     public let phoneMasked: String?
     public let hasRemainingBackupCodes: Bool
     public let backupCodesRemaining: Int
+}
+
+// MARK: - Empty response sentinel
+//
+// Some endpoints return no body (Logout today, anything that migrates to 204 tomorrow).
+// APIClient's empty-body fast path matches `E.Response.self == EmptyResponse.self`
+// statically, so the marker type must exist for the cast to succeed.
+
+public struct EmptyResponse: Decodable, Sendable {
+    public init() {}
 }
 
 // MARK: - Backend error envelope helpers

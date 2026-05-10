@@ -9,16 +9,22 @@
 
 import SwiftUI
 
+// Default values for these keys are *placeholder* instances rather than fatalError sentinels.
+// The original "crash loud on missing injection" design (#10) was too aggressive: SwiftUI's
+// runtime enumerates EnvironmentKey defaults during view-graph setup (and the test runner
+// launches the host app even when no test reads the value), so fatalError fires before any
+// real injection point can run.
+//
+// Production callers always inject in `KolaleafApp.body`; missing-injection regressions show
+// up as the placeholder instance hitting the network with a localhost URL or no-op keychain
+// reads — surfaced through normal QA, not a debug-only crash that breaks `xcodebuild test`.
+
 private struct APIClientKey: EnvironmentKey {
-    static let defaultValue: APIClient = {
-        fatalError("APIClient must be injected via .environment(\\.apiClient, ...) in App body")
-    }()
+    static let defaultValue: APIClient = APIClient(baseURL: URL(string: "http://localhost")!)
 }
 
 private struct KeychainKey: EnvironmentKey {
-    static let defaultValue: Keychain = {
-        fatalError("Keychain must be injected via .environment(\\.keychain, ...) in App body")
-    }()
+    static let defaultValue: Keychain = Keychain()
 }
 
 public extension EnvironmentValues {

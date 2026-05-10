@@ -156,6 +156,7 @@ public actor APIClient {
 
     /// Decoder accepting ISO 8601 with fractional seconds (Prisma `.toISOString()` format)
     /// AND without (admin tooling, hand-rolled timestamps).
+    @Sendable
     private static func iso8601WithFractionalSeconds(_ decoder: Decoder) throws -> Date {
         let container = try decoder.singleValueContainer()
         let raw = try container.decode(String.self)
@@ -167,13 +168,18 @@ public actor APIClient {
         )
     }
 
-    private static let fractionalSecondsFormatter: ISO8601DateFormatter = {
+    // ISO8601DateFormatter / DateFormatter are documented thread-safe for read-only use
+    // after configuration. Swift 6 strict-concurrency flags them because their type isn't
+    // marked Sendable in the SDK. `nonisolated(unsafe)` is the standard escape hatch for
+    // lazily-built immutable singletons of Foundation types whose runtime is safe but
+    // whose declared API hasn't been audited.
+    nonisolated(unsafe) private static let fractionalSecondsFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
     }()
 
-    private static let standardISOFormatter: ISO8601DateFormatter = {
+    nonisolated(unsafe) private static let standardISOFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime]
         return f

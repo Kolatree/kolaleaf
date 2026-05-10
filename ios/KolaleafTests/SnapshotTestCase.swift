@@ -11,23 +11,15 @@ import XCTest
 import SnapshotTesting
 import SwiftUI
 
+@MainActor
 open class SnapshotTestCase: XCTestCase {
     /// Set to true to overwrite reference snapshots. Always commit with this back at false.
     open var recordOverride: Bool { false }
 
-    override open func setUp() {
-        super.setUp()
-        // Honor a global env override for CI.
-        if ProcessInfo.processInfo.environment["KOLA_RECORD_SNAPSHOTS"] == "1" {
-            isRecording = true
-        } else {
-            isRecording = recordOverride
-        }
-    }
-
     /// Snapshot a SwiftUI view at iPhone 15 Pro physical resolution.
-    /// Uses `.image(layout: .device(config: .iPhone15Pro))` once we've defined that config;
-    /// for now we use explicit pixel dimensions.
+    /// CI / individual tests can opt into record mode by setting
+    /// `KOLA_RECORD_SNAPSHOTS=1` in the environment, which routes through the
+    /// new `withSnapshotTesting(record:)` API in SnapshotTesting 1.17+.
     public func assertSnapshot<V: View>(of view: V,
                                         named name: String? = nil,
                                         file: StaticString = #file,
@@ -36,14 +28,21 @@ open class SnapshotTestCase: XCTestCase {
         let host = UIHostingController(rootView: view)
         host.view.frame = CGRect(x: 0, y: 0, width: 393, height: 852)
 
-        SnapshotTesting.assertSnapshot(
-            of: host,
-            as: .image(precision: 0.97, perceptualPrecision: 0.97,
-                       size: CGSize(width: 393, height: 852)),
-            named: name,
-            file: file,
-            testName: testName,
-            line: line
-        )
+        let envWantsRecord = ProcessInfo.processInfo.environment["KOLA_RECORD_SNAPSHOTS"] == "1"
+        let recordMode: SnapshotTestingConfiguration.Record = (envWantsRecord || recordOverride)
+            ? .all
+            : .missing
+
+        withSnapshotTesting(record: recordMode) {
+            SnapshotTesting.assertSnapshot(
+                of: host,
+                as: .image(precision: 0.97, perceptualPrecision: 0.97,
+                           size: CGSize(width: 393, height: 852)),
+                named: name,
+                file: file,
+                testName: testName,
+                line: line
+            )
+        }
     }
 }

@@ -36,6 +36,14 @@ public extension Endpoint {
     var extraHeaders: [String: String] { [:] }
 }
 
+/// Sentinel response type for endpoints whose backend returns an empty body
+/// (or `{ success: true }` we don't read). Pair with `APIClient`'s empty-body
+/// fast path: `typealias Response = EmptyResponse` makes 204 + 200-empty both
+/// decode without consuming the body.
+public struct EmptyResponse: Decodable, Sendable, Equatable {
+    public init() {}
+}
+
 // MARK: - Compatibility: AnyEncodable is preserved as a typealias so existing tests
 // and any downstream consumers continue to compile during the migration.
 

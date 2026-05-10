@@ -37,12 +37,32 @@ public final class AppState {
     //
     // Backend session TTL is 15 min sliding (src/lib/auth/sessions.ts:8 SESSION_EXPIRY_MINUTES = 15).
     // iOS idle threshold sits one minute below to align.
+    //
+    // U76b3: per-instance thresholds may be overridden via launch args
+    // (`--idle-threshold=<n>`, `--background-idle=<n>`, `--inflight-idle=<n>`)
+    // for UI tests that need to compress the clock. DEBUG only — release builds
+    // ignore the args.
 
-    public static let idleThresholdSeconds: TimeInterval = 14 * 60
-    public static let backgroundIdleSeconds: TimeInterval = 15 * 60
-    /// While a transfer is in-flight, idle window extends so the user can watch
-    /// the timeline tick without being kicked out.
-    public static let inflightIdleSeconds: TimeInterval = 90 * 60
+    /// Production default: foreground idle window (14 min, one minute below backend TTL).
+    public static let defaultIdleThresholdSeconds: TimeInterval = 14 * 60
+    /// Production default: background idle window (15 min, matches backend TTL).
+    public static let defaultBackgroundIdleSeconds: TimeInterval = 15 * 60
+    /// Production default: extended idle while a transfer is in-flight (90 min).
+    public static let defaultInflightIdleSeconds: TimeInterval = 90 * 60
+
+    /// Legacy aliases preserved for callers that still read static thresholds.
+    /// New code should read instance properties so tests can override via launch args.
+    public static let idleThresholdSeconds: TimeInterval = defaultIdleThresholdSeconds
+    public static let backgroundIdleSeconds: TimeInterval = defaultBackgroundIdleSeconds
+    public static let inflightIdleSeconds: TimeInterval = defaultInflightIdleSeconds
+
+    /// Per-instance foreground idle threshold (seconds). May differ from the static
+    /// default in DEBUG builds when `--idle-threshold=<n>` is passed.
+    public let idleThresholdSeconds: TimeInterval
+    /// Per-instance background idle threshold. DEBUG override: `--background-idle=<n>`.
+    public let backgroundIdleSeconds: TimeInterval
+    /// Per-instance in-flight extended idle threshold. DEBUG override: `--inflight-idle=<n>`.
+    public let inflightIdleSeconds: TimeInterval
 
     private(set) public var lastInteractionAt: Date
     private(set) public var lastBackgroundedAt: Date?
@@ -53,14 +73,45 @@ public final class AppState {
 
     private let defaults: UserDefaults
 
-    public init(defaults: UserDefaults = .standard) {
+    public init(defaults: UserDefaults = .standard,
+                arguments: [String] = ProcessInfo.processInfo.arguments) {
         self.defaults = defaults
+
+        #if DEBUG
+        self.idleThresholdSeconds = Self.parseLaunchArg(
+            arguments, key: "--idle-threshold=",
+            default: Self.defaultIdleThresholdSeconds)
+        self.backgroundIdleSeconds = Self.parseLaunchArg(
+            arguments, key: "--background-idle=",
+            default: Self.defaultBackgroundIdleSeconds)
+        self.inflightIdleSeconds = Self.parseLaunchArg(
+            arguments, key: "--inflight-idle=",
+            default: Self.defaultInflightIdleSeconds)
+        #else
+        self.idleThresholdSeconds = Self.defaultIdleThresholdSeconds
+        self.backgroundIdleSeconds = Self.defaultBackgroundIdleSeconds
+        self.inflightIdleSeconds = Self.defaultInflightIdleSeconds
+        #endif
+
         // Restore persisted state so cold launch after force-quit honors prior idle.
         let restoredInteraction = (defaults.object(forKey: Self.kLastInteractionAt) as? Date)
             ?? Date()
         let restoredBackground = defaults.object(forKey: Self.kLastBackgroundedAt) as? Date
         self.lastInteractionAt = restoredInteraction
         self.lastBackgroundedAt = restoredBackground
+    }
+
+    /// Parses `--<key>=<n>` from a launch-args array. Clamps to `[1, 3600]` seconds.
+    /// Returns `fallback` when the arg is missing, malformed, or out-of-clamp.
+    private static func parseLaunchArg(_ args: [String],
+                                       key: String,
+                                       default fallback: TimeInterval) -> TimeInterval {
+        guard let arg = args.first(where: { $0.hasPrefix(key) }),
+              let value = TimeInterval(arg.dropFirst(key.count)),
+              value.isFinite else {
+            return fallback
+        }
+        return min(max(value, 1), 3600)
     }
 
     // MARK: - Mutations
@@ -91,14 +142,14 @@ public final class AppState {
         let now = Date()
 
         // Background path: any backgrounding longer than 15 min triggers re-auth.
-        if let bg = lastBackgroundedAt, now.timeIntervalSince(bg) >= Self.backgroundIdleSeconds {
+        if let bg = lastBackgroundedAt, now.timeIntervalSince(bg) >= self.backgroundIdleSeconds {
             return true
         }
 
         // Foreground idle path. While a transfer is in-flight, extend window.
         let threshold: TimeInterval = (activeTransfer?.isInFlight == true)
-            ? Self.inflightIdleSeconds
-            : Self.idleThresholdSeconds
+            ? self.inflightIdleSeconds
+            : self.idleThresholdSeconds
         return now.timeIntervalSince(lastInteractionAt) >= threshold
     }
 

@@ -23,9 +23,18 @@ struct KolaleafApp: App {
         }
         return APIClient(baseURL: url)
     }()
-    @State private var keychain = Keychain()
+    @State private var keychain: Keychain
+    @State private var referralCapture: ReferralCapture
 
     @Environment(\.scenePhase) private var scenePhase
+
+    init() {
+        // ReferralCapture (U91) shares the same Keychain instance used elsewhere.
+        // Build both in init so the wiring is single-source-of-truth.
+        let kc = Keychain()
+        _keychain = State(initialValue: kc)
+        _referralCapture = State(initialValue: ReferralCapture(keychain: kc))
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -33,6 +42,7 @@ struct KolaleafApp: App {
                 .environment(appState)
                 .environment(\.apiClient, apiClient)
                 .environment(\.keychain, keychain)
+                .environment(\.referralCapture, referralCapture)
                 .task { await wireAPIClientHooks() }
         }
         .onChange(of: scenePhase) { _, newPhase in
@@ -86,9 +96,9 @@ struct KolaleafApp: App {
     }
 }
 
-/// Phase 0 root view stub. Replaced by the real `RootCoordinator` in `App/RootCoordinator.swift`
-/// when Phase 1 (U15) lands. Routes by hasActiveSession to a Welcome stub or a "main app" stub.
-#warning("Phase 0 stub — replace with App/RootCoordinator.swift in Phase 1 (U15)")
+/// Phase 1 root view. Routes by `hasActiveSession`. The post-auth branch is a
+/// transient stub until U33 (MainTabView) lands; the unauth branch shows the
+/// real `WelcomeView` (U16). The full coordinator (U15) takes over in a follow-up.
 struct RootCoordinator: View {
     @Environment(AppState.self) private var appState
 
@@ -105,17 +115,10 @@ struct RootCoordinator: View {
             }
             .kolaWallpaper()
         } else {
-            // Replaced by WelcomeView in Phase 1 (U16).
-            VStack {
-                (Text("Kola")
-                    + Text("leaf").foregroundColor(KolaColors.greenLight))
-                    .font(KolaFont.headline)
-                Text("Send to Nigeria · Welcome stub")
-                    .font(KolaFont.tagline)
-                    .foregroundStyle(KolaColors.whiteOnGradient)
-                    .padding(.top, KolaSpacing.s)
-            }
-            .kolaWallpaper()
+            WelcomeView(
+                onGetStarted: { /* wired to phone signup in U17 */ },
+                onSignIn: { /* wired to login in U21 */ }
+            )
         }
     }
 }

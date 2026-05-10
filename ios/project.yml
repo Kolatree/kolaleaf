@@ -128,9 +128,11 @@ targets:
       - KolaleafTests
     dependencies:
       - target: Kolaleaf
+      - package: SnapshotTesting
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kolaleaf.app.tests
+        GENERATE_INFOPLIST_FILE: YES
 
   # r2 fix #12: KolaleafUITests had an empty source dir wired into the scheme — would
   # break xcodebuild test. Removed from project until Phase 12's actual UI tests land.

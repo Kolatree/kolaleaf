@@ -1,24 +1,29 @@
 // Environment+Kola.swift  (Phase 0 · U8)
 // Custom EnvironmentValues keys for cross-cutting dependencies.
 //
-// r2-review fix · 2026-05-09 (#10): defaults are fatalError-on-access sentinels rather
-// than fresh detached instances. A view that reads `\.apiClient` without injection now
-// crashes loudly instead of silently producing a separate instance pointed at production.
 // AppState injection uses the iOS 17 `@Environment(AppState.self)` form (Observation
 // framework), so no `\.appState` keypath is provided — that path was dead wiring.
+//
+// Defaults are detached safe sentinel instances. SwiftUI eagerly reads
+// EnvironmentKey defaults during scene bootstrap, so a fatalError default would
+// crash before any `.environment(...)` modifier had a chance to apply. A view
+// that genuinely reads an un-injected client gets a freshly-built instance
+// (pointed at the production base URL / app-private keychain) — wrong, but not
+// a runtime crash. App body wiring still injects the canonical instance.
 
 import SwiftUI
 
 private struct APIClientKey: EnvironmentKey {
     static let defaultValue: APIClient = {
-        fatalError("APIClient must be injected via .environment(\\.apiClient, ...) in App body")
+        let urlString = ProcessInfo.processInfo.environment["KOLA_API_BASE_URL"]
+            ?? "https://kolaleaf.com.au"
+        let url = URL(string: urlString) ?? URL(string: "https://kolaleaf.com.au")!
+        return APIClient(baseURL: url)
     }()
 }
 
 private struct KeychainKey: EnvironmentKey {
-    static let defaultValue: Keychain = {
-        fatalError("Keychain must be injected via .environment(\\.keychain, ...) in App body")
-    }()
+    static let defaultValue: Keychain = Keychain()
 }
 
 public extension EnvironmentValues {

@@ -24,7 +24,7 @@ final class AppStateTests: XCTestCase {
     // MARK: - shouldForceReauth
 
     func test_shouldForceReauth_returnsFalseWithoutSession() {
-        let s = AppState(defaults: defaults)
+        let s = AppState(defaults: defaults, arguments: [])
         XCTAssertFalse(s.shouldForceReauth())
     }
 
@@ -110,7 +110,7 @@ final class AppStateTests: XCTestCase {
     // MARK: - bumpInteraction persists
 
     func test_bumpInteraction_persistsAcrossReinit() {
-        let s = AppState(defaults: defaults)
+        let s = AppState(defaults: defaults, arguments: [])
         s.bumpInteraction()
         let bumpedAt = s.lastInteractionAt
 
@@ -124,7 +124,7 @@ final class AppStateTests: XCTestCase {
     // MARK: - Helpers
 
     private func makeAuthed() -> AppState {
-        let s = AppState(defaults: defaults)
+        let s = AppState(defaults: defaults, arguments: [])
         s.currentUser = CurrentUser(
             id: "user_1", displayName: "Test", legalName: nil,
             email: "test@example.com", phone: nil

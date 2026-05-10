@@ -156,6 +156,7 @@ public actor APIClient {
 
     /// Decoder accepting ISO 8601 with fractional seconds (Prisma `.toISOString()` format)
     /// AND without (admin tooling, hand-rolled timestamps).
+    @Sendable
     private static func iso8601WithFractionalSeconds(_ decoder: Decoder) throws -> Date {
         let container = try decoder.singleValueContainer()
         let raw = try container.decode(String.self)
@@ -167,19 +168,23 @@ public actor APIClient {
         )
     }
 
-    private static let fractionalSecondsFormatter: ISO8601DateFormatter = {
+    // ISO8601DateFormatter / DateFormatter are not Sendable, but the instances
+    // here are immutable after init and Foundation guarantees thread-safe `.date(from:)`.
+    // `nonisolated(unsafe)` documents that we've audited the access pattern.
+    nonisolated(unsafe) private static let fractionalSecondsFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
     }()
 
-    private static let standardISOFormatter: ISO8601DateFormatter = {
+    nonisolated(unsafe) private static let standardISOFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime]
         return f
     }()
 
     /// RFC 7231 IMF-fixdate format used as the HTTP-date variant of Retry-After.
+    /// `DateFormatter` is Sendable in current SDKs.
     private static let httpDateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")

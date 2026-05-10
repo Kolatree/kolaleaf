@@ -37,7 +37,13 @@ private struct KeychainKey: EnvironmentKey {
 }
 
 private struct ReferralCaptureKey: EnvironmentKey {
-    static let defaultValue: ReferralCapture = ReferralCapture(keychain: Keychain())
+    /// Default value: a no-op capture wired to a throwaway keychain + ephemeral
+    /// defaults. Lets SwiftUI previews and tests render without the app root
+    /// having to inject — the no-op never persists anything.
+    static let defaultValue: ReferralCapture = ReferralCapture(
+        keychain: Keychain(service: "com.kolaleaf.previews"),
+        defaults: UserDefaults(suiteName: "kola.previews") ?? .standard
+    )
 }
 
 public extension EnvironmentValues {

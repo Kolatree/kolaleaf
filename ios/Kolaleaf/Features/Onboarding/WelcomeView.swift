@@ -178,19 +178,6 @@ public struct WelcomeView: View {
 
 // MARK: - Environment injection
 
-private struct ReferralCaptureKey: EnvironmentKey {
-    /// Default value: a no-op capture wired to a throwaway keychain + ephemeral
-    /// defaults. Lets SwiftUI previews and tests render without the app root
-    /// having to inject — the no-op never persists anything.
-    static let defaultValue: ReferralCapture = ReferralCapture(
-        keychain: Keychain(service: "com.kolaleaf.previews"),
-        defaults: UserDefaults(suiteName: "kola.previews") ?? .standard
-    )
-}
-
-public extension EnvironmentValues {
-    var referralCapture: ReferralCapture {
-        get { self[ReferralCaptureKey.self] }
-        set { self[ReferralCaptureKey.self] = newValue }
-    }
-}
+// Note: `\.referralCapture` EnvironmentKey lives in App/Environment+Kola.swift
+// alongside `\.apiClient` and `\.keychain`. The preview-friendly default value
+// is defined there.

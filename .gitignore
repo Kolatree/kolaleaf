@@ -66,3 +66,5 @@ ios/**/xcshareddata/IDEWorkspaceChecks.plist
 ios/Pods/
 ios/Podfile.lock
 ios/.swiftpm/
+ios/Kolaleaf/Info.plist
+ios/KolaleafWidgets/Info.plist

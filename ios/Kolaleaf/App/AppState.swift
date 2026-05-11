@@ -25,6 +25,97 @@ public final class AppState {
     public var kycStatus: KycStatus = .unknown
     public var hasActiveSession: Bool { currentUser != nil }
 
+    // MARK: - Active tab (Phase 4 · U33)
+    //
+    // Persisted across cold launches so a kill-and-relaunch returns
+    // the user to the tab they were on. Cleared by `clearForLogout()`
+    // (along with the rest of session state) so a fresh sign-in
+    // always starts on `.send`.
+
+    public var selectedTab: RootTab = .send {
+        didSet {
+            guard selectedTab != oldValue else { return }
+            defaults.set(selectedTab.rawValue, forKey: Self.kSelectedTab)
+        }
+    }
+
+    /// True after the user has completed both PostKYC steps (Confirm
+    /// Profile + Confirm Address). RootRouter uses this together with
+    /// `kycStatus` to choose between PostKYCCoordinator and
+    /// MainTabView. Persisted across cold launches so a kill before
+    /// MainTab loads doesn't trap the user back on PostKYC even
+    /// though they already saved.
+    public var hasCompletedPostKYC: Bool = false {
+        didSet {
+            guard hasCompletedPostKYC != oldValue else { return }
+            defaults.set(hasCompletedPostKYC, forKey: Self.kPostKYCComplete)
+        }
+    }
+
+    /// ADV-008 / CA-006: true once a successful `/account/me` (or
+    /// `/kyc/status`) response has resolved the user's current
+    /// `kycStatus`. Until this flips RootRouter routes to a quiet
+    /// `.loading` shell instead of folding `.unknown` into
+    /// `.onboardingResumeAtKYC` (which causes a one-frame flicker
+    /// to the KYC intro for verified users on cold launch).
+    /// Not persisted — every cold launch starts unloaded.
+    public private(set) var kycStatusLoaded: Bool = false
+
+    private static let kSelectedTab = "kola.selectedTab"
+    private static let kPostKYCComplete = "kola.postKYCComplete"
+
+    /// PostKYCCoordinator's terminal handler. Public so RootCoordinator
+    /// can wire it as the `onPostKYCComplete` closure without exposing
+    /// the persisted-flag implementation detail to the Coordinator.
+    public func markPostKYCComplete() {
+        hasCompletedPostKYC = true
+    }
+
+    /// OO-006: thin wrapper around `markPostKYCComplete` so callers
+    /// (RootCoordinator's PostKYC closure) bind to a method on
+    /// AppState rather than to the persistence-flag setter directly.
+    /// Future side-effects on PostKYC completion (analytics, transient
+    /// in-flight cleanup) compose here without rewiring callers.
+    public func handlePostKYCComplete() {
+        markPostKYCComplete()
+    }
+
+    /// ADV-007: refresh `hasCompletedPostKYC` (and the cached
+    /// `kycStatus`) from the server. Defends against iCloud Restore
+    /// leaking the flag from another user's UserDefaults — local
+    /// cache is best-effort, the server row is the source of truth.
+    ///
+    /// Behaviour:
+    ///   • Success: derive `displayName != nil && addressLine1 != nil`
+    ///     as the completion signal (Phase 3 added these fields), and
+    ///     overwrite the local flag. Also sync `kycStatus` and flip
+    ///     `kycStatusLoaded` so RootRouter exits the `.loading` shell.
+    ///   • Failure: leave the cached flag alone. Network blips on
+    ///     cold launch should not bounce a verified user back through
+    ///     PostKYC.
+    public func refreshPostKYCStateFromServer(api: AuthAPI) async {
+        let result = await api.send(AccountEndpoints.Me())
+        switch result {
+        case .success(let me):
+            let derived = (me.displayName != nil) && (me.addressLine1 != nil)
+            if hasCompletedPostKYC != derived {
+                hasCompletedPostKYC = derived  // didSet persists.
+            }
+            kycStatus = me.kycStatus
+            kycStatusLoaded = true
+        case .failure:
+            return  // best-effort; keep cached flag.
+        }
+    }
+
+    /// ADV-008 / CA-006: explicit setter used by call sites that
+    /// fetch `/kyc/status` directly (e.g. KYCProcessingViewModel)
+    /// so the loaded-bit flips even when the refresh path doesn't go
+    /// through `/account/me`.
+    public func markKycStatusLoaded() {
+        kycStatusLoaded = true
+    }
+
     /// Set by SignInViewModel when backend returns 200 with `requires2FA: true`. The
     /// backend has NOT issued a session cookie in that case — it's waiting for the
     /// 2FA challenge to clear. Until U73-U75 (Phase 11) lands the challenge UI, the
@@ -106,6 +197,19 @@ public final class AppState {
         let restoredBackground = defaults.object(forKey: Self.kLastBackgroundedAt) as? Date
         self.lastInteractionAt = restoredInteraction
         self.lastBackgroundedAt = restoredBackground
+
+        // Phase 4 / U33: restore the last-active tab so cold launch
+        // returns the user where they left off. didSet is suppressed
+        // by direct assignment in init, so no spurious write here.
+        if let raw = defaults.string(forKey: Self.kSelectedTab),
+           let tab = RootTab(rawValue: raw) {
+            self.selectedTab = tab
+        }
+        // Phase 4 / U33: restore the post-KYC-complete flag so a
+        // cold launch after the user finished PostKYC routes
+        // directly to MainTab instead of looping them back through
+        // Confirm Profile.
+        self.hasCompletedPostKYC = defaults.bool(forKey: Self.kPostKYCComplete)
     }
 
     /// Parses `--<key>=<n>` from a launch-args array. Clamps to `[1, 3600]` seconds.
@@ -171,8 +275,22 @@ public final class AppState {
     public func clearForLogout() {
         currentUser = nil
         kycStatus = .unknown
+        // ADV-008 / CA-006: reset so the next session's RootRouter
+        // routes to .loading until the new user's /account/me lands.
+        kycStatusLoaded = false
         activeTransfer = nil
         pendingTwoFactor = nil
+        // Phase 4 / U33: clear the active tab so a fresh sign-in
+        // always starts on `.send`, never on a previous user's
+        // (e.g. Account) tab. didSet would persist `.send` again so
+        // we explicitly drop the key after.
+        selectedTab = .send
+        defaults.removeObject(forKey: Self.kSelectedTab)
+        // Phase 4 / U33: PostKYC completion is per-user; logout
+        // clears it so the next user (or re-onboarding flow) lands
+        // on Confirm Profile / Confirm Address again.
+        hasCompletedPostKYC = false
+        defaults.removeObject(forKey: Self.kPostKYCComplete)
         lastInteractionAt = Date.distantPast
         lastBackgroundedAt = nil
         defaults.set(lastInteractionAt, forKey: Self.kLastInteractionAt)

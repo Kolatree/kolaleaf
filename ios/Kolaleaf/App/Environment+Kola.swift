@@ -23,8 +23,14 @@ import SwiftUI
 // up as the placeholder instance hitting the network with a localhost URL or no-op keychain
 // reads — surfaced through normal QA, not a debug-only crash that breaks `xcodebuild test`.
 
+// CA-001 / CA-005 (iteration-2): the EnvironmentKey is typed against the
+// `AuthAPI` protocol rather than the concrete `APIClient` actor. Production
+// still injects an `APIClient` (which conforms), but tests and previews can
+// substitute a `FakeAPIClient` via `.environment(\.apiClient, FakeAPIClient())`
+// without depending on the concrete type. The default value is a concrete
+// `APIClient` instance so the placeholder remains a real network client.
 private struct APIClientKey: EnvironmentKey {
-    static let defaultValue: APIClient = {
+    static let defaultValue: AuthAPI = {
         let urlString = ProcessInfo.processInfo.environment["KOLA_API_BASE_URL"]
             ?? "https://kolaleaf.com.au"
         let url = URL(string: urlString) ?? URL(string: "https://kolaleaf.com.au")!
@@ -55,8 +61,18 @@ private struct PushPermissionServiceKey: EnvironmentKey {
     )
 }
 
+// CA-002 (iteration-2): BankStore is session-scoped bank list cache. Default
+// value uses the same APIClientKey default so previews/tests render without
+// explicit injection. KolaleafApp wires the canonical instance in body.
+private struct BankStoreKey: EnvironmentKey {
+    // `BankStore.init` is `nonisolated` — see BankStore.swift — so
+    // this default value can be constructed without a MainActor hop
+    // (required for `EnvironmentKey.defaultValue`).
+    static let defaultValue: BankStore = BankStore(api: APIClientKey.defaultValue)
+}
+
 public extension EnvironmentValues {
-    var apiClient: APIClient {
+    var apiClient: AuthAPI {
         get { self[APIClientKey.self] }
         set { self[APIClientKey.self] = newValue }
     }
@@ -71,5 +87,10 @@ public extension EnvironmentValues {
     var pushPermissionService: PushPermissionService {
         get { self[PushPermissionServiceKey.self] }
         set { self[PushPermissionServiceKey.self] = newValue }
+    }
+    @MainActor
+    var bankStore: BankStore {
+        get { self[BankStoreKey.self] }
+        set { self[BankStoreKey.self] = newValue }
     }
 }

@@ -75,6 +75,14 @@ public enum SaveError: Sendable, Equatable {
     case rateLimited(retryAfter: TimeInterval?)
     /// HTTP 422 — schema validation failed server-side.
     case validation(message: String)
+    /// Pre-flight: the user changed the bank or account number after
+    /// the resolve completed but before tapping Save. The previously
+    /// confirmed account holder no longer corresponds to the input,
+    /// so the save was refused locally to prevent routing funds to
+    /// the wrong recipient (ADV-001 fix). UI should re-trigger the
+    /// resolve and re-show the holder card before letting the user
+    /// retry.
+    case detailsChangedWhileSaving
     /// Anything else (5xx, decode errors, unforeseen reason). UI
     /// shows the message verbatim with the per-screen fallback.
     case unknown(message: String)
@@ -110,6 +118,8 @@ public enum SaveError: Sendable, Equatable {
         case .rateLimited(let retryAfter):
             let seconds = Int(retryAfter ?? 5)
             return "Too many attempts. Try again in \(seconds) seconds."
+        case .detailsChangedWhileSaving:
+            return "The bank or account number changed. We'll re-confirm the holder before saving."
         case .validation(let message), .unknown(let message):
             return message
         }

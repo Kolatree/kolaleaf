@@ -114,6 +114,31 @@ final class AppStateTests: XCTestCase {
                        "clearForLogout should mark lastInteractionAt as fully expired")
     }
 
+    // MARK: - selectedTab (Phase 4 · U33)
+
+    func test_selectedTab_defaultsToSend() {
+        let s = AppState(defaults: defaults, arguments: [])
+        XCTAssertEqual(s.selectedTab, .send)
+    }
+
+    func test_selectedTab_persistsAcrossReinit() {
+        let s = AppState(defaults: defaults, arguments: [])
+        s.selectedTab = .recipients
+        // Recreate AppState from same defaults — should restore the persisted tab.
+        let s2 = AppState(defaults: defaults, arguments: [])
+        XCTAssertEqual(s2.selectedTab, .recipients)
+    }
+
+    func test_selectedTab_clearedByLogout() {
+        let s = makeAuthed()
+        s.selectedTab = .account
+        s.clearForLogout()
+        XCTAssertEqual(s.selectedTab, .send)
+        // And the key is dropped so a fresh AppState rehydrates default.
+        let s2 = AppState(defaults: defaults, arguments: [])
+        XCTAssertEqual(s2.selectedTab, .send)
+    }
+
     // MARK: - bumpInteraction persists
 
     func test_bumpInteraction_persistsAcrossReinit() {
@@ -126,6 +151,53 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(s2.lastInteractionAt.timeIntervalSinceReferenceDate,
                        bumpedAt.timeIntervalSinceReferenceDate,
                        accuracy: 0.01)
+    }
+
+    // MARK: - ADV-007: refreshPostKYCStateFromServer
+
+    func test_refreshPostKYCStateFromServer_overwritesLocalFlag_whenServerSaysIncomplete() async {
+        // ADV-007: defends against iCloud Restore leaking the
+        // PostKYC-complete flag from another user. Server response
+        // is the source of truth; a missing displayName means the
+        // user has NOT completed PostKYC and the local flag must
+        // flip back to false.
+        let s = makeAuthed()
+        s.markPostKYCComplete()
+        XCTAssertTrue(s.hasCompletedPostKYC, "precondition: local flag is true")
+
+        let api = FakeAPIClient()
+        await api.stageSuccess(
+            AccountEndpoints.Me.self,
+            MeResponse(
+                userId: "user_1",
+                fullName: "Test User",
+                displayName: nil,
+                primaryEmail: nil,
+                secondaryEmails: [],
+                twoFactorMethod: nil,
+                twoFactorEnabledAt: nil,
+                hasVerifiedPhone: false,
+                phoneMasked: nil,
+                hasRemainingBackupCodes: false,
+                backupCodesRemaining: 0,
+                addressLine1: nil,
+                addressLine2: nil,
+                city: nil,
+                state: nil,
+                postcode: nil,
+                country: nil,
+                kycStatus: .verified
+            )
+        )
+
+        await s.refreshPostKYCStateFromServer(api: api)
+
+        XCTAssertFalse(s.hasCompletedPostKYC,
+                       "server says incomplete (displayName=nil) — local flag must flip false")
+        XCTAssertTrue(s.kycStatusLoaded,
+                      "ADV-008/CA-006: a successful refresh marks status loaded")
+        XCTAssertEqual(s.kycStatus, .verified,
+                       "kycStatus should sync from the server response")
     }
 
     // MARK: - Helpers

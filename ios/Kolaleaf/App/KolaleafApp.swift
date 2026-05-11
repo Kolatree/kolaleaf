@@ -19,6 +19,9 @@ struct KolaleafApp: App {
     @State private var keychain: Keychain
     @State private var referralCapture: ReferralCapture
     @State private var pushPermissionService: PushPermissionService
+    /// CA-002 (iteration-2): session-scoped bank list cache. Wired here
+    /// so a sheet re-open (or NavigationStack re-mount) doesn't refetch.
+    @State private var bankStore: BankStore
 
     @Environment(\.scenePhase) private var scenePhase
     /// Phase 2 review fix (P1, adversarial adv-003): wire APNs callbacks so
@@ -38,6 +41,9 @@ struct KolaleafApp: App {
         _apiClient = State(initialValue: initialClient)
         let pps = PushPermissionService(api: initialClient)
         _pushPermissionService = State(initialValue: pps)
+        // CA-002 (iteration-2): canonical BankStore wired against the
+        // same APIClient so it shares the session cookie jar.
+        _bankStore = State(initialValue: BankStore(api: initialClient))
         // Bind the AppDelegate so APNs device-token callbacks reach the
         // service. Done in init so the binding is in place before the first
         // `registerForRemoteNotifications()` call.
@@ -61,6 +67,7 @@ struct KolaleafApp: App {
                 .environment(\.keychain, keychain)
                 .environment(\.referralCapture, referralCapture)
                 .environment(\.pushPermissionService, pushPermissionService)
+                .environment(\.bankStore, bankStore)
                 .task { await wireAPIClientHooks() }
         }
         .onChange(of: scenePhase) { _, newPhase in

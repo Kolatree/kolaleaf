@@ -31,6 +31,10 @@ public struct Transfer: Equatable, Sendable, Hashable, Identifiable {
     /// Server-supplied PayID expiry; nil for transfers not yet
     /// transitioned to AWAITING_AUD. iOS uses this when present (S16).
     public let payidExpiresAt: Date?
+    /// Server-supplied completion timestamp (Phase 7 iter-2 · S7).
+    /// Optional because the backend doesn't ship it yet; the share
+    /// renderer falls back to `Date()` when nil.
+    public let completedAt: Date?
 
     public init(
         id: String,
@@ -44,7 +48,8 @@ public struct Transfer: Equatable, Sendable, Hashable, Identifiable {
         fee: Decimal,
         payidReference: String? = nil,
         payidProviderRef: String? = nil,
-        payidExpiresAt: Date? = nil
+        payidExpiresAt: Date? = nil,
+        completedAt: Date? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -58,15 +63,73 @@ public struct Transfer: Equatable, Sendable, Hashable, Identifiable {
         self.payidReference = payidReference
         self.payidProviderRef = payidProviderRef
         self.payidExpiresAt = payidExpiresAt
+        self.completedAt = completedAt
     }
+}
+
+/// Decode failure surfaced when a money-field string fails to parse
+/// as Decimal (W9 / ADV-P7-W3). Iter-1 silently coerced a malformed
+/// `sendAmount` to 0, which would render `₦0` on a receipt instead
+/// of failing loudly.
+public struct TransferDecodeError: Error, Equatable {
+    public let field: String
+    public let value: String
 }
 
 extension TransferShape {
     /// Bridge from the wire DTO into the feature-layer Domain model.
     /// Decimal parsing happens once, here. Future wire-shape additions
     /// must be surfaced here too.
-    public func toDomain() -> Transfer {
-        Transfer(
+    ///
+    /// Phase 7 iter-2 (W9 / ADV-P7-W3): `sendAmount` / `exchangeRate`
+    /// must parse cleanly — a malformed wire string is a decode error,
+    /// NOT a silent zero. Use `toDomain()` (throwing) for the strict
+    /// path; the unchecked `toDomainOrZero()` exists as a back-compat
+    /// shim for legacy call sites that haven't been migrated yet.
+    public func toDomain() throws -> Transfer {
+        guard let send = Decimal(string: sendAmount) else {
+            throw TransferDecodeError(field: "sendAmount", value: sendAmount)
+        }
+        guard let rate = Decimal(string: exchangeRate) else {
+            throw TransferDecodeError(field: "exchangeRate", value: exchangeRate)
+        }
+        guard let feeDec = Decimal(string: fee) else {
+            throw TransferDecodeError(field: "fee", value: fee)
+        }
+        // receiveAmount may legitimately be nil (pre-FX-lock). It is
+        // a decode error only when present-but-malformed.
+        let receive: Decimal?
+        if let r = receiveAmount {
+            guard let parsed = Decimal(string: r) else {
+                throw TransferDecodeError(field: "receiveAmount", value: r)
+            }
+            receive = parsed
+        } else {
+            receive = nil
+        }
+        return Transfer(
+            id: id,
+            userId: userId,
+            recipientId: recipientId,
+            corridorId: corridorId,
+            status: status,
+            sendAmount: send,
+            receiveAmount: receive,
+            exchangeRate: rate,
+            fee: feeDec,
+            payidReference: payidReference,
+            payidProviderRef: payidProviderRef,
+            payidExpiresAt: payidExpiresAt,
+            completedAt: completedAt
+        )
+    }
+
+    /// Back-compat shim for call sites that haven't been migrated to
+    /// the throwing bridge yet. Coerces parse failures to 0 just like
+    /// the iter-1 surface; new code MUST use `toDomain()` and handle
+    /// the error.
+    public func toDomainOrZero() -> Transfer {
+        (try? toDomain()) ?? Transfer(
             id: id,
             userId: userId,
             recipientId: recipientId,
@@ -78,7 +141,8 @@ extension TransferShape {
             fee: Decimal(string: fee) ?? 0,
             payidReference: payidReference,
             payidProviderRef: payidProviderRef,
-            payidExpiresAt: payidExpiresAt
+            payidExpiresAt: payidExpiresAt,
+            completedAt: completedAt
         )
     }
 }

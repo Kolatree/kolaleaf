@@ -17,4 +17,13 @@ public extension Recipient {
         }
         return "\(parts[0].prefix(1))\(parts[1].prefix(1))".uppercased()
     }
+
+    /// First-name segment of `fullName`. Used by `ShareReceiptRenderer`
+    /// (W11 / ADV-P7-W5) so the default WhatsApp Status share doesn't
+    /// leak the recipient's last name. Returns the whole name if it
+    /// has no spaces.
+    var firstName: String {
+        let parts = fullName.split(separator: " ", omittingEmptySubsequences: true)
+        return parts.first.map(String.init) ?? fullName
+    }
 }

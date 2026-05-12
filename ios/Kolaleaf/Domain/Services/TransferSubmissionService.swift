@@ -133,7 +133,25 @@ public final class TransferSubmissionService {
         let result = await api.send(TransfersEndpoints.Create(body, idempotencyKey: key))
         switch result {
         case .success(let response):
-            let transfer = response.transfer.toDomain()
+            // Phase 7 iter-2 W9 / ADV-P7-W3: a malformed money field
+            // surfaces as a decode error rather than a silent zero.
+            // The transfer EXISTS server-side (we got 201) but iOS
+            // can't trust the numbers — refuse the success path.
+            let transfer: Transfer
+            do {
+                transfer = try response.transfer.toDomain()
+            } catch let decodeErr as TransferDecodeError {
+                audit.log(.postCreateFailed(reason:
+                    "decode_failed:\(decodeErr.field)=\(decodeErr.value)"))
+                pendingIdempotencyKey = nil
+                return .failed(.decode(
+                    "Couldn't read \(decodeErr.field) from the server response."
+                ))
+            } catch {
+                audit.log(.postCreateFailed(reason: "decode_failed:unknown"))
+                pendingIdempotencyKey = nil
+                return .failed(.decode("Couldn't read the server response."))
+            }
             // Single-write of the real, backend-tracked transfer.
             appState?.activeTransfer = ActiveTransfer(
                 id: transfer.id,

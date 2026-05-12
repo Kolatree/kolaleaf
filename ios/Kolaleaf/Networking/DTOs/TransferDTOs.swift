@@ -33,6 +33,11 @@ public struct TransferShape: Codable, Sendable, Equatable, Hashable, Identifiabl
     /// cleanly. iOS uses server time when present and falls back to a
     /// client-side `issuedAt + 24h` window otherwise.
     public let payidExpiresAt: Date?
+    /// Server-supplied transition timestamp for the COMPLETED / NGN_SENT
+    /// state (Phase 7 iter-2 · S7 / ADV-P7-S2). Optional so older
+    /// backends decode; renderer (`ShareReceiptCard`) falls back to
+    /// `Date()` when nil so the receipt always shows a date.
+    public let completedAt: Date?
 
     /// Memberwise initialiser. `internal` so test fixtures live next
     /// to the type without bleeding the wire-shape constructor into
@@ -49,7 +54,8 @@ public struct TransferShape: Codable, Sendable, Equatable, Hashable, Identifiabl
         fee: String,
         payidReference: String? = nil,
         payidProviderRef: String? = nil,
-        payidExpiresAt: Date? = nil
+        payidExpiresAt: Date? = nil,
+        completedAt: Date? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -63,6 +69,7 @@ public struct TransferShape: Codable, Sendable, Equatable, Hashable, Identifiabl
         self.payidReference = payidReference
         self.payidProviderRef = payidProviderRef
         self.payidExpiresAt = payidExpiresAt
+        self.completedAt = completedAt
     }
 }
 

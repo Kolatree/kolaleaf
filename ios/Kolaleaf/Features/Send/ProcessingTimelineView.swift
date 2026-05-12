@@ -1,7 +1,13 @@
-// ProcessingTimelineView.swift  (Phase 6 · U49)
+// ProcessingTimelineView.swift  (Phase 6 · U49 → iter-2 C1 wiring)
 // Vertical timeline showing where the active transfer is in the
 // state machine. Reads from `ProcessingTimelineViewModel`, which
 // owns the polling loop and the state-only-advances enforcement.
+//
+// Phase 7 iter-2 C1 / ADV-P7-C1: fires `onTerminal(transferId)` when
+// the polled status crosses into a coordinator-terminal state
+// (COMPLETED / NGN_SENT / sad-paths). Parent SendTabRoot uses the
+// callback to push the next destination (Receipt for happy path,
+// stack-pop for sad-path placeholders in Phase 7).
 
 import SwiftUI
 
@@ -10,12 +16,19 @@ public struct ProcessingTimelineView: View {
     @State private var vm: ProcessingTimelineViewModel
     // Iter-2 W20 / ADV-P6-W3: pause polling while backgrounded.
     @Environment(\.scenePhase) private var scenePhase
+    /// C1: fired once per terminal-status transition. Caller looks
+    /// up the matching Recipient + Transfer and routes via the
+    /// SendCoordinator.
+    private let onTerminal: ((String, TransferStatus) -> Void)?
+    /// Guard so we fire `onTerminal` at most once per view lifetime.
+    @State private var didFireTerminal: Bool = false
 
     public init(
         api: AuthAPI,
         transferId: String,
         initialStatus: TransferStatus,
-        appState: AppState? = nil
+        appState: AppState? = nil,
+        onTerminal: ((String, TransferStatus) -> Void)? = nil
     ) {
         _vm = State(initialValue: ProcessingTimelineViewModel(
             api: api,
@@ -23,6 +36,7 @@ public struct ProcessingTimelineView: View {
             initialStatus: initialStatus,
             appState: appState
         ))
+        self.onTerminal = onTerminal
     }
 
     public var body: some View {
@@ -53,6 +67,18 @@ public struct ProcessingTimelineView: View {
             @unknown default:
                 vm.stopPolling()
             }
+        }
+        .onChange(of: vm.currentStatus) { _, newStatus in
+            // C1: route on terminal. The view model already stops
+            // polling on terminal; we just notify the parent so it
+            // can push the next destination.
+            guard let onTerminal,
+                  !didFireTerminal,
+                  TransferTimeline.isTerminal(newStatus)
+                    || newStatus == .ngnSent
+            else { return }
+            didFireTerminal = true
+            onTerminal(vm.transferId, newStatus)
         }
     }
 

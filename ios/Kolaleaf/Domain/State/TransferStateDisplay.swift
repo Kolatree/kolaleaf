@@ -82,3 +82,55 @@ public enum TransferTimeline {
         }
     }
 }
+
+// MARK: - Timeline projection (Phase 7 iter-2 · W3 / OO-005)
+
+/// A single row on the user-visible transfer timeline. Lifted from
+/// `TransactionDetailViewModel` so the Send-flow processing screen
+/// and the Activity detail screen consume the same projection.
+public struct TransferTimelineRow: Equatable, Identifiable, Sendable {
+    public let status: TransferStatus
+    public let isDone: Bool
+    public let isActive: Bool
+
+    public var id: String { status.rawValue }
+
+    public init(status: TransferStatus, isDone: Bool, isActive: Bool) {
+        self.status = status
+        self.isDone = isDone
+        self.isActive = isActive
+    }
+}
+
+public extension TransferTimeline {
+    /// Build the happy-path timeline against a current status. Sad-
+    /// path / terminal statuses (CANCELLED, REFUNDED, …) map every
+    /// row to PENDING — the View renders a sad-path banner in place
+    /// of the timeline (see TransactionDetailView).
+    static func projection(currentStatus: TransferStatus) -> [TransferTimelineRow] {
+        let path = happyPath
+        let currentOrdinal = ordinal(for: currentStatus) ?? -1
+        return path.enumerated().map { (idx, status) in
+            let isDone: Bool
+            let isActive: Bool
+            if currentStatus == .completed {
+                isDone = true
+                isActive = false
+            } else if idx < currentOrdinal {
+                isDone = true
+                isActive = false
+            } else if idx == currentOrdinal {
+                isDone = false
+                isActive = true
+            } else {
+                isDone = false
+                isActive = false
+            }
+            return TransferTimelineRow(
+                status: status,
+                isDone: isDone,
+                isActive: isActive
+            )
+        }
+    }
+}

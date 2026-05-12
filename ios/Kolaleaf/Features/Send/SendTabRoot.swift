@@ -1,12 +1,21 @@
-// SendTabRoot.swift  (Phase 4 · U35 + Phase 6 · U41-U49)
+// SendTabRoot.swift  (Phase 4 · U35 + Phase 6 · U41-U49 + Phase 7 iter-2 C1)
 // Root view for the Send tab. Inspects the recipient list and renders
 // either the empty-state CTA (Phase 4) or the populated Send screen
 // (Phase 6 · U46).
 //
-// Routing forward to PayIDInstructions (U48) and the processing
-// timeline (U49) happens via the per-tab NavigationStack `path`.
-// The transfer object captured at create time rides the destination
-// payload so child screens get the correct transferId / status.
+// Routing forward to PayIDInstructions (U48), the processing
+// timeline (U49), and the receipt (U50) happens via the per-tab
+// NavigationStack `path`. The transfer object captured at create
+// time rides the destination payload so child screens get the
+// correct transferId / status.
+//
+// Phase 7 iter-2 C1 / ADV-P7-C1 wiring:
+//   • Adds `.receipt(transferId, recipientId)` destination.
+//   • ProcessingTimelineView receives an `onTerminal` callback that
+//     looks up the live recipient + transfer, asks the SendCoordinator
+//     to route, and pushes the corresponding destination.
+//   • Sad-path terminal statuses pop back to root (Send) for now —
+//     the placeholder sad-path screens land in a later phase.
 
 import SwiftUI
 
@@ -16,6 +25,9 @@ public struct SendTabRoot: View {
     @State private var recipients: [Recipient] = []
     @State private var isLoading: Bool = true
     @State private var path: [SendDestination] = []
+    /// C1: SendCoordinator state is the source of truth for terminal
+    /// routing. The View mirrors it to the navigation `path`.
+    @State private var coordinator = SendCoordinatorState()
 
     public init() {}
 
@@ -47,7 +59,15 @@ public struct SendTabRoot: View {
                             api: apiClient,
                             transferId: transferId,
                             initialStatus: initialStatus,
-                            appState: appState
+                            appState: appState,
+                            onTerminal: { id, status in
+                                handleTerminal(transferId: id, status: status)
+                            }
+                        )
+                    case .receipt(let transferId, let recipientId):
+                        receiptDestination(
+                            transferId: transferId,
+                            recipientId: recipientId
                         )
                     }
                 }
@@ -70,6 +90,7 @@ public struct SendTabRoot: View {
                 api: apiClient,
                 onAddRecipient: { path.append(.addRecipient) },
                 onCreated: { transfer in
+                    coordinator.advanceFromSending(transfer: transfer)
                     path.append(.payIdInstructions(transfer.id, transfer.status))
                 },
                 onSessionExpired: {
@@ -80,6 +101,93 @@ public struct SendTabRoot: View {
                     path.removeAll()
                 }
             )
+        }
+    }
+
+    // MARK: - Receipt destination
+
+    @ViewBuilder
+    private func receiptDestination(
+        transferId: String,
+        recipientId: String
+    ) -> some View {
+        // Look up the recipient. The recipients list is the source of
+        // truth (it was loaded at tab-enter); a missing id means the
+        // recipient was deleted mid-flow, in which case we fall back
+        // to a minimal placeholder so the share/summary still renders.
+        let recipient = recipients.first(where: { $0.id == recipientId })
+            ?? Recipient(
+                id: recipientId,
+                fullName: "Recipient",
+                bankName: "",
+                bankCode: "",
+                accountNumber: ""
+            )
+        // The transfer payload lives on AppState.activeTransfer (mirrored
+        // by ProcessingTimelineViewModel each poll). Compose a Domain
+        // Transfer from the mirror so the receipt has the latest
+        // amount/status without re-fetching.
+        if let active = appState.activeTransfer,
+           active.id == transferId {
+            let transfer = Transfer(
+                id: active.id,
+                userId: "",
+                recipientId: active.recipientId,
+                corridorId: "",
+                status: active.status,
+                sendAmount: active.audAmount,
+                receiveAmount: active.ngnAmount == 0 ? nil : active.ngnAmount,
+                exchangeRate: 0,
+                fee: 0
+            )
+            ReceiptView(vm: ReceiptViewModel(
+                transfer: transfer,
+                recipient: recipient,
+                onSendAnother: { _ in
+                    coordinator.sendAnother()
+                    path.removeAll()
+                }
+            ))
+        } else {
+            // Defensive: appState was cleared between the terminal
+            // status and the destination push. Pop back to root.
+            Color.clear.onAppear { path.removeAll() }
+        }
+    }
+
+    // MARK: - Terminal status routing (C1)
+
+    private func handleTerminal(transferId: String, status: TransferStatus) {
+        // Find the recipient associated with the active transfer so
+        // we can hand it to the SendCoordinator's happy-path branch.
+        let recipientId = appState.activeTransfer?.recipientId
+        let recipient = recipientId.flatMap { id in
+            recipients.first(where: { $0.id == id })
+        }
+        // Compose a minimal Domain Transfer for the coordinator. Status
+        // is the only field that drives routing; amounts/rates flow
+        // through ReceiptView via AppState.activeTransfer.
+        let transfer = Transfer(
+            id: transferId,
+            userId: "",
+            recipientId: recipientId ?? "",
+            corridorId: "",
+            status: status,
+            sendAmount: appState.activeTransfer?.audAmount ?? 0,
+            receiveAmount: appState.activeTransfer?.ngnAmount,
+            exchangeRate: 0,
+            fee: 0
+        )
+        if let recipient,
+           status == .completed || status == .ngnSent {
+            coordinator.advanceFromProcessingHappy(transfer: transfer, recipient: recipient)
+            path.append(.receipt(transferId: transferId, recipientId: recipient.id))
+        } else {
+            coordinator.advanceFromProcessingSadPath(transfer: transfer)
+            // Sad-path placeholder screens land in Phase 8 (per the
+            // plan's U62/U63/U64). For Phase 7 we pop to root so the
+            // user isn't stranded on the processing screen.
+            path.removeAll()
         }
     }
 
@@ -125,4 +233,8 @@ enum SendDestination: Hashable {
     case addRecipient
     case payIdInstructions(String, TransferStatus)
     case processingTimeline(String, TransferStatus)
+    /// Phase 7 iter-2 C1 / ADV-P7-C1: terminal happy-path destination.
+    /// Carries the transferId + recipientId so the receipt screen can
+    /// look up both records from `recipients` + `AppState.activeTransfer`.
+    case receipt(transferId: String, recipientId: String)
 }

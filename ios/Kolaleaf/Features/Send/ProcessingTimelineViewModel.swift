@@ -20,7 +20,9 @@ public final class ProcessingTimelineViewModel {
 
     private let api: AuthAPI
     private weak var appState: AppState?
-    private let transferId: String
+    /// Iter-2 C1 / ADV-P7-C1: exposed so the parent view can wire the
+    /// terminal-status callback back to the SendCoordinator.
+    public let transferId: String
     private let pollInterval: TimeInterval
 
     public private(set) var currentStatus: TransferStatus

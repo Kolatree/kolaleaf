@@ -168,9 +168,16 @@ public actor APIClient {
 
     /// Parses Retry-After: either delta-seconds (integer or float) OR HTTP-date.
     /// Defaults are caller-side, not here.
+    ///
+    /// Iter-3 (ADV5-IT2-002): every parsed form is clamped to ≥ 0 so a
+    /// buggy/malicious server returning `Retry-After: -5` cannot push
+    /// a negative cooldown to downstream consumers. The retrier
+    /// applies a second clamp (≤ `maxRetryAfter`) so the caller cannot
+    /// blow up its time budget either; this is defense-in-depth at
+    /// the parse boundary.
     private func parseRetryAfter(from http: HTTPURLResponse) -> TimeInterval? {
         guard let raw = http.value(forHTTPHeaderField: "Retry-After") else { return nil }
-        if let secs = TimeInterval(raw) { return secs }
+        if let secs = TimeInterval(raw) { return max(0, secs) }
         if let date = Self.httpDateFormatter.date(from: raw) {
             return max(0, date.timeIntervalSinceNow)
         }

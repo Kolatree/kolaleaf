@@ -1,4 +1,4 @@
-// BankStore.swift  (Phase 4 · iteration-2 · CA-002)
+// BankStore.swift  (Phase 4 · iteration-2 · CA-002 + Phase 5 · CA-003 — iteration 3)
 // Session-scoped cache for the bank list returned by
 // `GET /api/v1/banks?country=NG`. Lives at the App level (one instance
 // per session), injected via `EnvironmentValues.bankStore`. Replaces
@@ -14,9 +14,24 @@
 // sign-in starts from a cold cache. Without that the previous user's
 // list (which is identical anyway, but the contract is per-session)
 // would survive into the new session.
+//
+// Iteration 3 fixes:
+//   • OO-202 / CA-201 — the brand-colour pattern table moved to
+//     `Domain/Recipients/BankBrandTable.swift`. BankStore is now a
+//     thin composer: it knows the bank list (network cache), the
+//     table knows the colour palette (pure function). The store's
+//     `brand(...)` methods are 3-line look-up + dispatch.
+//   • OO-203 — `brand(forCode:)`, `brand(for:)`, and the internal
+//     `bankName(forCode:)` are no longer `nonisolated`. The
+//     `MainActor.assumeIsolated` block they previously needed to
+//     read `banks` was a brittle workaround — any future caller
+//     touching the property from a non-MainActor context would
+//     trap at runtime. SwiftUI bodies are `@MainActor` already, so
+//     callers were already isolated; the assume-isolated dance
+//     was a tell that the API was wrong.
 
 import Foundation
-import Observation
+import SwiftUI
 
 @MainActor
 @Observable
@@ -63,6 +78,42 @@ public final class BankStore {
         banks = []
         lastFetchedAt = nil
         loadState = .idle
+    }
+
+    // MARK: - Brand lookup (CA-003 + iter-3 CA-201/OO-203)
+
+    /// Look up the brand for a bank known by code. Returns `nil` when
+    /// the cache is cold or the code is unknown — callers can fall
+    /// back to whatever sentinel makes sense at the call site (e.g.
+    /// the bare bank code as a diagnostic, per API-006).
+    ///
+    /// MainActor-isolated like the rest of the store; SwiftUI bodies
+    /// run on MainActor so calling this from a `body` is direct.
+    public func brand(forCode code: String) -> BankBrand? {
+        guard !code.isEmpty else { return nil }
+        guard let name = bankName(forCode: code) else { return nil }
+        return BankBrand(
+            code: code,
+            name: name,
+            color: BankBrandTable.color(forBankName: name)
+        )
+    }
+
+    /// Brand for a known `Bank` value. Always non-nil because the
+    /// caller already has the name and code; an unknown name maps to
+    /// the muted-disabled grey via `BankBrandTable` so an unmapped
+    /// bank still renders without a layout shift.
+    public func brand(for bank: Bank) -> BankBrand {
+        BankBrand(
+            code: bank.code,
+            name: bank.name,
+            color: BankBrandTable.color(forBankName: bank.name)
+        )
+    }
+
+    /// Look up the bank name for a code if the cache contains it.
+    private func bankName(forCode code: String) -> String? {
+        banks.first(where: { $0.code == code })?.name
     }
 }
 

@@ -1,10 +1,9 @@
-// AddRecipientView.swift  (Phase 4 · U36 + U37)
+// AddRecipientView.swift  (Phase 4 · U36 + U37 + Phase 5 · U40 — Iteration 2)
 // First-send flow's destination after EmptySendView's CTA. Three
 // rows: Bank picker (opens BankPickerSheet), 10-digit account number
 // field, optional nickname. ResolvedNameCard appears between the
 // account number and nickname rows once the resolve service produces
-// a name (Phase 5 will fill the resolving / notFound / bankDown
-// variants of that card).
+// a name.
 //
 // `onCreated` fires only after a successful POST so a transient
 // network blip can't pop the screen with a half-saved row.
@@ -13,6 +12,22 @@
 // stays referentially transparent and tests can inject any VM
 // without touching environment plumbing — same pattern as
 // ConfirmAddressView in Phase 3.
+//
+// Iteration 2 fixes (ADV5-005, API-001 / OO-103, OO-102 / API-006):
+//   • ADV5-005 — scenePhase pause/resume reacts to .background and
+//     .active ONLY. The previous `.inactive` branch fired on Control
+//     Center and notification banners — transient interruptions
+//     where iOS keeps the app fully alive — which would cancel and
+//     re-arm the retry timer for nothing, losing wait progress.
+//   • API-001 / OO-103 — the View calls screen-domain VM names
+//     (`screenDeactivated()`, `screenActivated()`,
+//     `userTappedRetry()`) so the body reads as prose at the call
+//     site, not implementation mechanics.
+//   • OO-102 / API-006 — `bankName` is passed explicitly to
+//     `ResolvedNameCard` so the card stays a pure function of its
+//     inputs. When the BankStore cache hasn't surfaced a name we
+//     fall back to the bank code (fail loud) rather than a vague
+//     "the bank" sentinel.
 
 import SwiftUI
 
@@ -20,6 +35,11 @@ public struct AddRecipientView: View {
     @State private var vm: AddRecipientViewModel
     @State private var isPickerPresented: Bool = false
     @Environment(\.dismiss) private var dismiss
+    /// API-007: pause/resume the resolve service's auto-retry loop
+    /// with the app lifecycle so a backgrounded app doesn't keep
+    /// firing the 3s/8s/20s retry schedule against the bank
+    /// provider. The transition rules live below (ADV5-005).
+    @Environment(\.scenePhase) private var scenePhase
 
     private let onCreated: (Recipient) -> Void
 
@@ -39,10 +59,22 @@ public struct AddRecipientView: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $isPickerPresented) {
             // API-105: sheet writes the selected bank through the
-            // binding directly. Removes the redundant onSelect closure
-            // whose only job was to flip the same value back into the
-            // VM.
+            // binding directly.
             BankPickerSheet(selection: $vm.selectedBank)
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            // ADV5-005: react to .background / .active ONLY.
+            // .inactive is a transient state (Control Center,
+            // notification banners, app switcher) where iOS keeps
+            // the app fully alive; pausing here would cancel and
+            // re-arm the retry timer for nothing, losing wait
+            // progress.
+            switch newPhase {
+            case .background: vm.screenDeactivated()
+            case .active:     vm.screenActivated()
+            case .inactive:   break
+            @unknown default: break
+            }
         }
     }
 
@@ -51,7 +83,16 @@ public struct AddRecipientView: View {
             heading
             bankRow
             accountNumberRow
-            ResolvedNameCard(state: vm.resolveState)
+            ResolvedNameCard(
+                state: vm.resolveState,
+                // OO-102 / API-006: pass the bank name explicitly so
+                // the card stays a pure function of its inputs. Fall
+                // back to the bank code (fail loud) when the picker
+                // hasn't selected anything yet — diagnosable beats
+                // a vague "the bank" sentinel.
+                bankName: vm.selectedBank?.name ?? vm.selectedBank?.code ?? "—",
+                onRetry: { vm.userTappedRetry() }
+            )
             nicknameRow
             if let error = vm.lastError {
                 Text(error.displayMessage)

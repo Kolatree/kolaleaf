@@ -56,12 +56,12 @@ final class AddRecipientViewModelTests: XCTestCase {
         let svc = RecipientResolveService(api: api)
         await svc.resolve(bankCode: "044", accountNumber: "0123456789")
         try? await Task.sleep(for: .milliseconds(450))
-        XCTAssertEqual(svc.state, .resolved(name: "Holder", forBankCode: "044", forAccountNumber: "0123456789"))
+        XCTAssertEqual(svc.state, .resolved(name: "Holder", bankCode: "044", accountNumber: "0123456789"))
 
         let vm = AddRecipientViewModel(api: api, resolveService: svc)
         // selectedBank still nil → canSave false even though service is resolved.
         XCTAssertNil(vm.selectedBank)
-        XCTAssertEqual(vm.resolveState, .resolved(name: "Holder", forBankCode: "044", forAccountNumber: "0123456789"))
+        XCTAssertEqual(vm.resolveState, .resolved(name: "Holder", bankCode: "044", accountNumber: "0123456789"))
         XCTAssertFalse(vm.canSave)
     }
 
@@ -76,7 +76,7 @@ final class AddRecipientViewModelTests: XCTestCase {
         vm.accountNumber = "0123456789"
         try? await Task.sleep(for: .milliseconds(450))
 
-        XCTAssertEqual(vm.resolveState, .resolved(name: "Holder", forBankCode: "044", forAccountNumber: "0123456789"))
+        XCTAssertEqual(vm.resolveState, .resolved(name: "Holder", bankCode: "044", accountNumber: "0123456789"))
         XCTAssertTrue(vm.canSave)
     }
 
@@ -90,7 +90,7 @@ final class AddRecipientViewModelTests: XCTestCase {
 
         XCTAssertEqual(
             vm.resolveState,
-            .notFound(forBankCode: "044", forAccountNumber: "0123456789")
+            .notFound(bankCode: "044", accountNumber: "0123456789")
         )
         XCTAssertFalse(vm.canSave)
     }
@@ -132,6 +132,30 @@ final class AddRecipientViewModelTests: XCTestCase {
         vm.accountNumber = "0123456789X"
         XCTAssertEqual(vm.accountNumber, "0123456789")
         XCTAssertFalse(vm.wasTruncated)
+    }
+
+    /// Iter-3 ADV5-IT2-005: `wasTruncated` must NOT latch. After a
+    /// paste-truncate-to-10 pass, a subsequent edit that does not
+    /// itself truncate (e.g. typing a letter that gets stripped, or
+    /// any value that produces ≤ 10 digits) must clear the flag so
+    /// the "Truncated to 10 digits" warning doesn't stick around.
+    func test_wasTruncated_clearedAfterNonTruncatingEdit() {
+        let api = FakeAPIClient()
+        let vm = makeVM(api: api)
+
+        // Step 1: paste 12 digits → truncated to 10.
+        vm.accountNumber = "012345678999"
+        XCTAssertEqual(vm.accountNumber, "0123456789")
+        XCTAssertTrue(vm.wasTruncated, "Paste of 12 digits must set the flag.")
+
+        // Step 2: edit produces 10 digits + a letter (letter stripped,
+        // no overflow). Flag must clear — this pass did not truncate.
+        vm.accountNumber = "0123456789X"
+        XCTAssertEqual(vm.accountNumber, "0123456789")
+        XCTAssertFalse(
+            vm.wasTruncated,
+            "Stripping a non-digit is not truncation; flag must clear."
+        )
     }
 
     func test_setAccountNumber_below10_doesNotTriggerResolveAPICall() async {
@@ -245,6 +269,66 @@ final class AddRecipientViewModelTests: XCTestCase {
             calls.allSatisfy { $0.path != "/api/v1/recipients" },
             "Save without a bank must not POST."
         )
+    }
+
+    // MARK: - Phase 5 / U40: retry plumbing
+
+    /// Manual retry must round-trip through the resolve service: a
+    /// stale `.bankDown` becomes `.resolved` once the next staged
+    /// response succeeds. Proves `vm.retryResolve()` actually fires
+    /// the service rather than swallowing the call.
+    func test_userTappedRetry_callsServiceRetryNow() async {
+        let api = FakeAPIClient()
+        // Stage a failed resolve so the service ends in `.bankDown`
+        // (mapErrorToState routes 503 → bankDown). Use a tight retry
+        // schedule so the auto-retry doesn't race the manual retry.
+        await api.stageFailure(
+            RecipientsEndpoints.Resolve.self,
+            .server(status: 503, message: "resolve_unavailable")
+        )
+        let svc = RecipientResolveService(
+            api: api,
+            debounce: .milliseconds(20),
+            retrySchedule: [10, 20, 40] // huge slots so auto-retry waits
+        )
+        await svc.resolve(bankCode: "044", accountNumber: "0123456789")
+        try? await Task.sleep(for: .milliseconds(60))
+        // Sanity: service is now in `.bankDown`.
+        if case .bankDown = svc.state { /* ok */ } else {
+            XCTFail("Expected .bankDown after staged 503, got \(svc.state)")
+        }
+
+        // Stage a success for the manual retry round-trip.
+        await api.stageSuccess(
+            RecipientsEndpoints.Resolve.self,
+            ResolveRecipientResponse(accountName: "Holder")
+        )
+
+        let vm = AddRecipientViewModel(api: api, resolveService: svc)
+        vm.userTappedRetry()
+        try? await Task.sleep(for: .milliseconds(80))
+
+        // The manual retry should have re-fired the resolve and the
+        // staged success should now be the service's terminal state.
+        if case let .resolved(name, bankCode, accountNumber) = svc.state {
+            XCTAssertEqual(name, "Holder")
+            XCTAssertEqual(bankCode, "044")
+            XCTAssertEqual(accountNumber, "0123456789")
+        } else {
+            XCTFail("Expected .resolved after retry, got \(svc.state)")
+        }
+    }
+
+    /// Smoke: pause/resume just forward to the service without
+    /// crashing. The substantive behaviour (timer cancellation, resume
+    /// re-arming the schedule) is covered in BankDownAutoRetryTests
+    /// against the service directly.
+    func test_screenDeactivated_screenActivated_forwardsToService() async {
+        let api = FakeAPIClient()
+        let svc = RecipientResolveService(api: api)
+        let vm = AddRecipientViewModel(api: api, resolveService: svc)
+        vm.screenDeactivated()
+        vm.screenActivated()
     }
 
     func test_save_alwaysSendsResolvedName_asFullName_evenWhenNicknamePresent() async {

@@ -25,6 +25,11 @@ public actor FakeAPIClient: AuthAPI {
     }
 
     private var stagedResults: [String: Any] = [:]
+    /// Per-endpoint sequence queue. When non-empty, takes precedence over
+    /// `stagedResults` for that key. Used by tests that need successive
+    /// `send(_:)` calls to return different outcomes (e.g. the auto-retry
+    /// loop in `RecipientResolveService`: 3 failures then a success).
+    private var stagedSequences: [String: [Any]] = [:]
     private(set) public var calls: [Recorded] = []
 
     public init() {}
@@ -43,6 +48,19 @@ public actor FakeAPIClient: AuthAPI {
     /// Convenience: stage a failure.
     public func stageFailure<E: Endpoint>(_ type: E.Type, _ error: APIError) {
         stage(type, result: .failure(error))
+    }
+
+    /// Stage an ordered queue of results for an endpoint type. The 1st `send`
+    /// call returns the 1st item, the 2nd returns the 2nd, and so on. Once
+    /// the queue drains, the fake falls back to `stagedResults[key]` (so a
+    /// trailing "and then keep returning success" can be expressed with a
+    /// `stageSuccess` after the sequence). When neither is set, `send`
+    /// returns a transport error as before.
+    public func stageSequence<E: Endpoint>(
+        _ type: E.Type,
+        results: [Result<E.Response, APIError>]
+    ) {
+        stagedSequences[String(describing: type)] = results
     }
 
     /// P1 fix (Phase 1 review): delay-injection seam for in-flight assertions.
@@ -90,6 +108,16 @@ public actor FakeAPIClient: AuthAPI {
         // Honor any staged delay so tests can observe in-flight state.
         if let delayNs = stagedDelays[key] {
             try? await Task.sleep(nanoseconds: delayNs)
+        }
+
+        // Sequence queue takes precedence — pop the head when present.
+        if var queue = stagedSequences[key], !queue.isEmpty {
+            let head = queue.removeFirst()
+            stagedSequences[key] = queue
+            guard let typed = head as? Result<E.Response, APIError> else {
+                return .failure(.transport("FakeAPIClient: sequenced result for \(key) has wrong type"))
+            }
+            return typed
         }
 
         guard let staged = stagedResults[key] else {

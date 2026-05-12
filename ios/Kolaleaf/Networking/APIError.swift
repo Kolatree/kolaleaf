@@ -37,6 +37,34 @@ public enum APIError: Error, Equatable, Sendable {
     case verificationRequired(email: String, message: String)
     /// Wrong / expired / used 6-digit code at /verify-code. Backend reasons: "wrong_code", "expired", "used", "no_token".
     case codeInvalid(reason: String)
+
+    // MARK: - Phase 6 iter-2 typed reasons (ADV-P6-C2 / C4)
+    //
+    // These were previously demuxed via substring matching on the
+    // server message inside `SendViewModel.mapAPIError`. That's
+    // brittle (server copy changes break clients) AND can leak
+    // server internals (cuid_… ids) into user-facing banners. With
+    // typed cases, the route's `reason` string is the single
+    // source of truth and presenter code dispatches on the enum.
+    /// HTTP 403 + `reason == "recipient_not_owned"` — recipient is no
+    /// longer attached to the caller (deleted, transferred to another
+    /// user, or a stale id from a prior session).
+    case recipientNotOwned
+    /// HTTP 400 + `reason == "daily_limit_exceeded"`.
+    case dailyLimitExceeded
+    /// HTTP 400 + `reason == "amount_out_of_range"`.
+    case amountOutOfRange
+    /// HTTP 400 + `reason == "invalid_corridor"`.
+    case invalidCorridor
+    /// HTTP 403 + `reason == "email_unverified"`. Distinct from
+    /// `kycRequired` so the UI routes the user to the email-verify
+    /// resend flow rather than the KYC wizard.
+    case emailUnverified
+    /// HTTP 409 + `reason == "idempotency_key_conflict"` — the same
+    /// Idempotency-Key was previously used with a DIFFERENT request
+    /// body. SendView should treat this as a "previous transfer is
+    /// still authoritative; show that one" signal.
+    case idempotencyKeyConflict
 }
 
 extension APIError: LocalizedError {
@@ -63,6 +91,12 @@ extension APIError: LocalizedError {
             case "no_token":   return "Please request a new code first."
             default:           return "Could not verify the code. Please try again."
             }
+        case .recipientNotOwned:        return "This recipient is no longer available."
+        case .dailyLimitExceeded:       return "You've reached today's transfer limit."
+        case .amountOutOfRange:         return "That amount is outside today's limits."
+        case .invalidCorridor:          return "That currency corridor isn't available right now."
+        case .emailUnverified:          return "Please verify your email before sending money."
+        case .idempotencyKeyConflict:   return "We already received an earlier version of this transfer."
         }
     }
 }
@@ -92,6 +126,20 @@ extension APIError {
             return .bankUnreachable
         case "wrong_code", "expired", "used", "no_token":
             return .codeInvalid(reason: reason!)
+        // Phase 6 iter-2 typed reasons (C4 / ADV-P6-C2): every Send-
+        // path error is dispatched on `reason`, never on message text.
+        case "recipient_not_owned":
+            return .recipientNotOwned
+        case "daily_limit_exceeded":
+            return .dailyLimitExceeded
+        case "amount_out_of_range":
+            return .amountOutOfRange
+        case "invalid_corridor":
+            return .invalidCorridor
+        case "email_unverified":
+            return .emailUnverified
+        case "idempotency_key_conflict":
+            return .idempotencyKeyConflict
         default:
             break
         }
@@ -129,6 +177,12 @@ extension APIError {
         case (.verificationRequired(let a1, let a2), .verificationRequired(let b1, let b2)):
             return a1 == b1 && a2 == b2
         case (.codeInvalid(let a), .codeInvalid(let b)):              return a == b
+        case (.recipientNotOwned, .recipientNotOwned):                return true
+        case (.dailyLimitExceeded, .dailyLimitExceeded):              return true
+        case (.amountOutOfRange, .amountOutOfRange):                  return true
+        case (.invalidCorridor, .invalidCorridor):                    return true
+        case (.emailUnverified, .emailUnverified):                    return true
+        case (.idempotencyKeyConflict, .idempotencyKeyConflict):      return true
         default:                                                       return false
         }
     }

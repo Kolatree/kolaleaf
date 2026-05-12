@@ -126,6 +126,13 @@ public final class AppState {
     // MARK: - Active flow
 
     public var activeTransfer: ActiveTransfer?
+    /// Phase 6 iter-2 (C6 / ADV-P6-C4): true while the iOS-side submit
+    /// is in flight, BEFORE a real backend transfer id exists. Idle
+    /// extension logic reads this flag alongside `activeTransfer` so
+    /// the 90-minute in-flight idle window covers the pre-create
+    /// network round-trip too. Replaces the previous sentinel
+    /// `ActiveTransfer(id: "local-pending", …)` hack.
+    public var isSubmittingTransfer: Bool = false
 
     // MARK: - Network
 
@@ -257,8 +264,10 @@ public final class AppState {
             return true
         }
 
-        // Foreground idle path. While a transfer is in-flight, extend window.
-        let threshold: TimeInterval = (activeTransfer?.isInFlight == true)
+        // Foreground idle path. While a transfer is in-flight (either
+        // tracked or mid-submit), extend window.
+        let inFlight = (activeTransfer?.isInFlight == true) || isSubmittingTransfer
+        let threshold: TimeInterval = inFlight
             ? self.inflightIdleSeconds
             : self.idleThresholdSeconds
         return now.timeIntervalSince(lastInteractionAt) >= threshold
@@ -279,6 +288,7 @@ public final class AppState {
         // routes to .loading until the new user's /account/me lands.
         kycStatusLoaded = false
         activeTransfer = nil
+        isSubmittingTransfer = false
         pendingTwoFactor = nil
         // Phase 4 / U33: clear the active tab so a fresh sign-in
         // always starts on `.send`, never on a previous user's
@@ -441,11 +451,35 @@ public enum TransferStatus: String, Equatable, Sendable {
 extension TransferStatus: Codable {
     public init(from decoder: Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)
-        self = TransferStatus(rawValue: raw) ?? .unknown
+        if let status = TransferStatus(rawValue: raw) {
+            self = status
+        } else {
+            // Iter-2 (S12 / ADV-P6-S1): one-shot analytics signal so
+            // a backend release that adds a status literal surfaces
+            // immediately. Production wires `unknownTransferStatusHook`
+            // to the analytics pipe; DEBUG prints to stderr.
+            TransferStatus.notifyUnknown(raw)
+            self = .unknown
+        }
     }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.singleValueContainer()
         try c.encode(self.rawValue)
+    }
+
+    /// Iter-2 (S12 / ADV-P6-S1): analytics hook for unknown wire
+    /// literals. Production wires this to the analytics pipe; in
+    /// DEBUG without a hook configured we print to stderr.
+    public nonisolated(unsafe) static var unknownStatusHook: (@Sendable (String) -> Void)?
+
+    private static func notifyUnknown(_ raw: String) {
+        if let hook = unknownStatusHook {
+            hook(raw)
+            return
+        }
+        #if DEBUG
+        print("[TransferStatus] decoded unknown rawValue: \(raw)")
+        #endif
     }
 }

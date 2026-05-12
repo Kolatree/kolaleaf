@@ -1,14 +1,14 @@
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/db/client'
-import { requireEmailVerified, AuthError } from '@/lib/auth/middleware'
-import { generatePayIdForTransfer } from '@/lib/payments/monoova'
-import { createMonoovaClient } from '@/lib/payments/monoova/client'
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/db/client";
+import { requireEmailVerified, AuthError } from "@/lib/auth/middleware";
+import { generatePayIdForTransfer } from "@/lib/payments/monoova";
+import { createMonoovaClient } from "@/lib/payments/monoova/client";
 import {
   TransferNotFoundError,
   KycNotVerifiedError,
   ConcurrentModificationError,
-} from '@/lib/transfers/errors'
-import './_schemas'
+} from "@/lib/transfers/errors";
+import "./_schemas";
 
 // POST /api/v1/transfers/:id/issue-payid
 //
@@ -26,9 +26,9 @@ export async function POST(
     // checks so an unauthenticated probe can't enumerate transfer
     // ids by 401-vs-404 timing. `requireEmailVerified` internally
     // calls `requireAuth` so a second call is redundant.
-    const { userId } = await requireEmailVerified(request)
+    const { userId } = await requireEmailVerified(request);
 
-    const { id: transferId } = await params
+    const { id: transferId } = await params;
 
     // Ownership check: the transfer must belong to the authenticated
     // user. Returning 403 (not 404) for a non-owned existing transfer
@@ -38,45 +38,71 @@ export async function POST(
     const existing = await prisma.transfer.findUnique({
       where: { id: transferId },
       select: { userId: true },
-    })
+    });
     if (!existing) {
-      return NextResponse.json({ error: 'Transfer not found' }, { status: 404 })
+      return NextResponse.json(
+        { error: "Transfer not found" },
+        { status: 404 },
+      );
     }
     if (existing.userId !== userId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const transfer = await generatePayIdForTransfer(transferId, createMonoovaClient())
+    const transfer = await generatePayIdForTransfer(
+      transferId,
+      createMonoovaClient(),
+    );
 
-    return NextResponse.json({ transfer })
+    // Iter-2 (S16 / ADV-P6-S5): surface the AWAITING_AUD deadline so
+    // the iOS countdown doesn't depend on iOS-side wall-clock drift.
+    // The 24h window matches the backend cleanup cron; we derive it
+    // from the transfer's `updatedAt` (which the state transition
+    // bumped during this request). Defensive null-check so a partial
+    // shape from older mocks doesn't trip the route.
+    const expiryMs = 24 * 60 * 60 * 1000;
+    const baseTimestamp =
+      transfer.updatedAt instanceof Date ? transfer.updatedAt : new Date();
+    const transferWithExpiry = {
+      ...transfer,
+      payidExpiresAt: new Date(
+        baseTimestamp.getTime() + expiryMs,
+      ).toISOString(),
+    };
+
+    return NextResponse.json({ transfer: transferWithExpiry });
   } catch (error) {
     if (error instanceof AuthError) {
-      if (error.message === 'email_unverified') {
+      if (error.message === "email_unverified") {
         return NextResponse.json(
           {
-            error: 'email_unverified',
-            message: 'Please verify your email before issuing a PayID.',
+            error: "email_unverified",
+            message: "Please verify your email before issuing a PayID.",
           },
           { status: 403 },
-        )
+        );
       }
-      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.statusCode },
+      );
     }
 
     if (error instanceof TransferNotFoundError) {
-      return NextResponse.json({ error: error.message }, { status: 404 })
+      return NextResponse.json({ error: error.message }, { status: 404 });
     }
     if (error instanceof KycNotVerifiedError) {
-      return NextResponse.json({ error: error.message }, { status: 403 })
+      return NextResponse.json({ error: error.message }, { status: 403 });
     }
     if (error instanceof ConcurrentModificationError) {
-      return NextResponse.json({ error: error.message }, { status: 409 })
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
     // "Transfer <id> is not in CREATED state" — state mismatch
-    const message = error instanceof Error ? error.message : 'PayID issuance failed'
+    const message =
+      error instanceof Error ? error.message : "PayID issuance failed";
     if (/is not in CREATED state/.test(message)) {
-      return NextResponse.json({ error: message }, { status: 409 })
+      return NextResponse.json({ error: message }, { status: 409 });
     }
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

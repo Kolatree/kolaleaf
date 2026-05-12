@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server'
-import Decimal from 'decimal.js'
+import { NextResponse } from "next/server";
+import Decimal from "decimal.js";
 import {
   createTransfer,
   listTransfers,
@@ -8,12 +8,23 @@ import {
   InvalidCorridorError,
   AmountOutOfRangeError,
   DailyLimitExceededError,
-} from '@/lib/transfers'
-import { requireAuth, requireEmailVerified, AuthError } from '@/lib/auth/middleware'
-import { parseBody } from '@/lib/http/validate'
-import { jsonError } from '@/lib/http/json-error'
-import { extractRequestContext } from '@/lib/security/request-context'
-import { CreateTransferBody } from './_schemas'
+  IdempotencyKeyConflictError,
+} from "@/lib/transfers";
+import {
+  requireAuth,
+  requireEmailVerified,
+  AuthError,
+} from "@/lib/auth/middleware";
+import { parseBody } from "@/lib/http/validate";
+import { jsonError } from "@/lib/http/json-error";
+import { extractRequestContext } from "@/lib/security/request-context";
+import { CreateTransferBody } from "./_schemas";
+
+// Lenient UUID v4-ish accept set. The header is client-generated so
+// we only enforce shape, not version; anything inside a small charset
+// and a sensible length bound counts. Rejects empty / oversized inputs
+// that could attack the unique index.
+const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9_-]{8,128}$/;
 
 export async function POST(request: Request) {
   try {
@@ -25,11 +36,29 @@ export async function POST(request: Request) {
     // verification and progress to the verification wizard afterwards.
     // The KYC gate lives downstream at generatePayIdForTransfer, which
     // is the point where we start collecting AUD.
-    const { userId } = await requireEmailVerified(request)
+    const { userId } = await requireEmailVerified(request);
 
-    const parsed = await parseBody(request, CreateTransferBody)
-    if (!parsed.ok) return parsed.response
-    const { recipientId, corridorId, sendAmount, exchangeRate, fee } = parsed.data
+    const parsed = await parseBody(request, CreateTransferBody);
+    if (!parsed.ok) return parsed.response;
+    const { recipientId, corridorId, sendAmount, exchangeRate, fee } =
+      parsed.data;
+
+    // Idempotency-Key: optional client-generated header (one per slide-
+    // confirm intent). Reject obviously-malformed inputs early — an
+    // empty or arbitrarily-long value would otherwise pollute the
+    // (userId, key) unique index.
+    const rawIdempotencyKey = request.headers.get("idempotency-key");
+    let idempotencyKey: string | undefined;
+    if (rawIdempotencyKey) {
+      if (!IDEMPOTENCY_KEY_RE.test(rawIdempotencyKey)) {
+        return jsonError(
+          "invalid_idempotency_key",
+          "Idempotency-Key header is malformed.",
+          400,
+        );
+      }
+      idempotencyKey = rawIdempotencyKey;
+    }
 
     const transfer = await createTransfer({
       userId,
@@ -37,50 +66,65 @@ export async function POST(request: Request) {
       corridorId,
       sendAmount: new Decimal(sendAmount),
       exchangeRate: new Decimal(exchangeRate),
-      fee: new Decimal(fee ?? '0'),
+      fee: new Decimal(fee ?? "0"),
       securityContext: extractRequestContext(request),
-    })
+      idempotencyKey,
+    });
 
-    return NextResponse.json({ transfer }, { status: 201 })
+    return NextResponse.json({ transfer }, { status: 201 });
   } catch (error) {
     if (error instanceof AuthError) {
-      if (error.message === 'email_unverified') {
-        return jsonError('email_unverified', 'Please verify your email before sending money.', 403)
+      if (error.message === "email_unverified") {
+        return jsonError(
+          "email_unverified",
+          "Please verify your email before sending money.",
+          403,
+        );
       }
-      return jsonError('unauthenticated', error.message, error.statusCode)
+      return jsonError("unauthenticated", error.message, error.statusCode);
     }
-    const message = error instanceof Error ? error.message : 'Transfer creation failed'
+    const message =
+      error instanceof Error ? error.message : "Transfer creation failed";
 
-    if (error instanceof KycNotVerifiedError) return jsonError('kyc_not_verified', message, 403)
-    if (error instanceof RecipientNotOwnedError) return jsonError('recipient_not_owned', message, 403)
-    if (error instanceof InvalidCorridorError) return jsonError('invalid_corridor', message, 400)
-    if (error instanceof AmountOutOfRangeError) return jsonError('amount_out_of_range', message, 400)
-    if (error instanceof DailyLimitExceededError) return jsonError('daily_limit_exceeded', message, 400)
+    if (error instanceof KycNotVerifiedError)
+      return jsonError("kyc_not_verified", message, 403);
+    if (error instanceof RecipientNotOwnedError)
+      return jsonError("recipient_not_owned", message, 403);
+    if (error instanceof InvalidCorridorError)
+      return jsonError("invalid_corridor", message, 400);
+    if (error instanceof AmountOutOfRangeError)
+      return jsonError("amount_out_of_range", message, 400);
+    if (error instanceof DailyLimitExceededError)
+      return jsonError("daily_limit_exceeded", message, 400);
+    if (error instanceof IdempotencyKeyConflictError)
+      return jsonError("idempotency_key_conflict", message, 409);
 
-    return jsonError('transfer_creation_failed', message, 500)
+    return jsonError("transfer_creation_failed", message, 500);
   }
 }
 
 export async function GET(request: Request) {
   try {
-    const { userId } = await requireAuth(request)
+    const { userId } = await requireAuth(request);
 
-    const url = new URL(request.url)
-    const status = url.searchParams.get('status') ?? undefined
-    const limit = url.searchParams.get('limit')
-    const cursor = url.searchParams.get('cursor') ?? undefined
+    const url = new URL(request.url);
+    const status = url.searchParams.get("status") ?? undefined;
+    const limit = url.searchParams.get("limit");
+    const cursor = url.searchParams.get("cursor") ?? undefined;
 
     const result = await listTransfers(userId, {
-      status: status as NonNullable<Parameters<typeof listTransfers>[1]>['status'],
+      status: status as NonNullable<
+        Parameters<typeof listTransfers>[1]
+      >["status"],
       limit: limit ? Math.min(parseInt(limit, 10), 100) : undefined,
       cursor,
-    })
+    });
 
-    return NextResponse.json(result)
+    return NextResponse.json(result);
   } catch (error) {
     if (error instanceof AuthError) {
-      return jsonError('unauthenticated', error.message, error.statusCode)
+      return jsonError("unauthenticated", error.message, error.statusCode);
     }
-    return jsonError('list_transfers_failed', 'Failed to list transfers', 500)
+    return jsonError("list_transfers_failed", "Failed to list transfers", 500);
   }
 }

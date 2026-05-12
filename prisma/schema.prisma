@@ -211,6 +211,31 @@ model TransferEvent {
   transfer   Transfer       @relation(fields: [transferId], references: [id], onDelete: Cascade)
 }
 
+// IdempotencyRecord — money-path duplicate-suppression.
+//
+// Client sends `Idempotency-Key: <uuid>` on POST /api/v1/transfers. If
+// the same (userId, key) pair has already produced a Transfer, the
+// route returns the existing transfer with status 201 (idempotent
+// replay). If the key is reused with a DIFFERENT request body shape,
+// the route returns 409.
+//
+// AUSTRAC note: dedup returns the SAME Transfer row, so the original
+// TransferEvent audit row is preserved — replay never skips audit.
+// Only new transfers cause new events.
+model IdempotencyRecord {
+  id          String   @id @default(cuid())
+  userId      String
+  key         String
+  transferId  String
+  // Hash of the canonical request body (recipientId|corridorId|sendAmount|exchangeRate|fee).
+  // Replays with a mismatched body raise 409 instead of silently aliasing.
+  requestHash String
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, key])
+  @@index([createdAt])
+}
+
 model Corridor {
   id             String     @id @default(cuid())
   baseCurrency   String

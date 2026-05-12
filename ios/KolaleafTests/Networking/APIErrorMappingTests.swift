@@ -112,4 +112,67 @@ final class APIErrorMappingTests: XCTestCase {
             XCTFail("Should map to .server")
         }
     }
+
+    // MARK: - Phase 6 iter-2 (C4 / ADV-P6-C2) typed reasons
+
+    func test_map_recipientNotOwned() {
+        XCTAssertEqual(APIError.map(httpStatus: 403, reason: "recipient_not_owned", message: "x"),
+                       .recipientNotOwned)
+    }
+
+    func test_map_dailyLimitExceeded() {
+        XCTAssertEqual(APIError.map(httpStatus: 400, reason: "daily_limit_exceeded", message: "x"),
+                       .dailyLimitExceeded)
+    }
+
+    func test_map_amountOutOfRange() {
+        XCTAssertEqual(APIError.map(httpStatus: 400, reason: "amount_out_of_range", message: "x"),
+                       .amountOutOfRange)
+    }
+
+    func test_map_invalidCorridor() {
+        XCTAssertEqual(APIError.map(httpStatus: 400, reason: "invalid_corridor", message: "x"),
+                       .invalidCorridor)
+    }
+
+    func test_map_emailUnverified() {
+        XCTAssertEqual(APIError.map(httpStatus: 403, reason: "email_unverified", message: "x"),
+                       .emailUnverified)
+    }
+
+    func test_map_idempotencyKeyConflict() {
+        XCTAssertEqual(APIError.map(httpStatus: 409, reason: "idempotency_key_conflict", message: "x"),
+                       .idempotencyKeyConflict)
+    }
+
+    // MARK: - SendViewModel.mapAPIError: typed-only dispatch
+
+    @MainActor
+    func test_sendError_serverMessageText_doesNotDriveDispatch() {
+        // iter-1 used substring matching on server messages —
+        // "daily_limit" in unrelated server text would have been
+        // misread as dailyLimitExceeded. Iter-2 ignores message text.
+        let err = APIError.server(
+            status: 400,
+            message: "stale daily_limit reference in log line; recipient_not_owned trace"
+        )
+        let mapped = SendViewModel.mapAPIError(err)
+        if case .unknown = mapped { /* ok */ } else {
+            XCTFail("server-message text must not drive dispatch any more; got \(mapped)")
+        }
+    }
+
+    // MARK: - Banner sanitiser (defence in depth)
+
+    func test_sanitizer_redactsCuidLikeIdentifier() {
+        let raw = "Could not resolve recipient cuser_clidnskd0000001abc12345xx in corridor."
+        let sanitized = SendErrorSanitizer.sanitize(raw)
+        XCTAssertFalse(sanitized.contains("clidnskd0000001abc12345"),
+                       "cuid-looking identifier must be redacted; got: \(sanitized)")
+    }
+
+    func test_sanitizer_preservesOrdinaryText() {
+        let raw = "We could not contact the bank. Please try again."
+        XCTAssertEqual(SendErrorSanitizer.sanitize(raw), raw)
+    }
 }

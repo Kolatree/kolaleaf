@@ -55,11 +55,41 @@ public enum TransfersEndpoints {
         }
     }
 
-    /// `GET /api/v1/transfers` — Phase 7 placeholder (S11 / API-012).
-    /// Listed here so the next phase can fill in without a search;
-    /// the actual endpoint conformance lands in Phase 7 with cursor
-    /// pagination + status filter.
-    // public struct List: Endpoint { … }  // Phase 7
+    /// `GET /api/v1/transfers` — cursor-paginated transfer list owned
+    /// by the authenticated user. Backend orders by `createdAt desc`
+    /// (see `src/lib/transfers/queries.ts:listTransfers`).
+    ///
+    /// Phase 8 · U55: shipped with the Activity tab. `status` is the
+    /// raw backend Prisma enum literal (`CREATED`, `COMPLETED`, …) —
+    /// the Activity VM maps user-facing chips (Pending/Completed/Failed)
+    /// to one-or-more wire literals before constructing the endpoint.
+    /// We pass each status as its own query string when bucketing
+    /// multiple states; backend treats `status` as a single literal
+    /// so the VM loops the chip-mapping client-side instead.
+    public struct List: Endpoint {
+        public typealias Response = ListTransfersResponse
+        public let path = "/api/v1/transfers"
+        public let method: HTTPMethod = .get
+        public let query: [URLQueryItem]
+
+        public init(status: TransferStatus? = nil, limit: Int? = nil, cursor: String? = nil) {
+            // Iter-2 (N1): typed status keeps the call site honest —
+            // a future caller can't accidentally pass an unrelated
+            // Prisma literal string. Internally we still emit the
+            // backend wire rawValue.
+            var items: [URLQueryItem] = []
+            if let status, !status.rawValue.isEmpty {
+                items.append(URLQueryItem(name: "status", value: status.rawValue))
+            }
+            if let limit {
+                items.append(URLQueryItem(name: "limit", value: String(limit)))
+            }
+            if let cursor, !cursor.isEmpty {
+                items.append(URLQueryItem(name: "cursor", value: cursor))
+            }
+            self.query = items
+        }
+    }
 }
 
 // Phase 6 iter-2 (W13 / API-004): canonicalise the casing on

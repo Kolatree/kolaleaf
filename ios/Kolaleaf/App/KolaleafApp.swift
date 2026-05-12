@@ -22,6 +22,18 @@ struct KolaleafApp: App {
     /// CA-002 (iteration-2): session-scoped bank list cache. Wired here
     /// so a sheet re-open (or NavigationStack re-mount) doesn't refetch.
     @State private var bankStore: BankStore
+    /// Phase 8 iter-2 (P1): the production SwiftData stack. Constructed
+    /// once at app launch and threaded into every feature via
+    /// `\.swiftDataStack`. The EnvironmentKey default is an in-memory
+    /// stack so previews/tests don't crash; production callers always
+    /// receive THIS instance because the WindowGroup `.environment`
+    /// modifier wins over the default.
+    @State private var swiftDataStack: SwiftDataStack
+    /// Phase 8 iter-2 (P5): one SyncService for the whole app, sharing
+    /// the same SwiftData writer with every feature. Foreground scene
+    /// phase triggers a refresh through this instance so Activity and
+    /// Recipients stay coherent.
+    @State private var syncService: SyncService
 
     @Environment(\.scenePhase) private var scenePhase
     /// Phase 2 review fix (P1, adversarial adv-003): wire APNs callbacks so
@@ -44,6 +56,13 @@ struct KolaleafApp: App {
         // CA-002 (iteration-2): canonical BankStore wired against the
         // same APIClient so it shares the session cookie jar.
         _bankStore = State(initialValue: BankStore(api: initialClient))
+        // Phase 8 iter-2 (P1 + P5): production SwiftData stack and the
+        // single SyncService that writes through it. Both live for the
+        // process lifetime so a tab switch doesn't drop the cache or
+        // race against a half-constructed writer.
+        let stack = SwiftDataStack(inMemory: false)
+        _swiftDataStack = State(initialValue: stack)
+        _syncService = State(initialValue: SyncService(api: initialClient, stack: stack))
         // Bind the AppDelegate so APNs device-token callbacks reach the
         // service. Done in init so the binding is in place before the first
         // `registerForRemoteNotifications()` call.
@@ -68,6 +87,8 @@ struct KolaleafApp: App {
                 .environment(\.referralCapture, referralCapture)
                 .environment(\.pushPermissionService, pushPermissionService)
                 .environment(\.bankStore, bankStore)
+                .environment(\.swiftDataStack, swiftDataStack)
+                .environment(\.syncService, syncService)
                 .task { await wireAPIClientHooks() }
         }
         .onChange(of: scenePhase) { _, newPhase in
@@ -88,6 +109,12 @@ struct KolaleafApp: App {
             appState.markForegrounded()
             if needsReauth && appState.hasActiveSession {
                 Task { await forceReauth() }
+            } else if appState.hasActiveSession {
+                // Phase 8 iter-2 (P5): refresh the SwiftData mirror on
+                // every foreground hop so Activity + Recipients reflect
+                // changes a different device (or web) made while the
+                // app was suspended. Idempotent — upserts only.
+                Task { await syncService.syncAll() }
             }
         case .inactive:
             // Scene resigning active — switcher snapshot moment. SwitcherBlur installs the overlay.
@@ -118,6 +145,18 @@ struct KolaleafApp: App {
         UserDefaults.standard.removeObject(forKey: "kola.referralPasteboardScanned")
         await apiClient.clearCookies()
         appState.clearForLogout()
+        // Phase 8 iter-2 (P2): wipe the SwiftData mirror so the next
+        // sign-in (potentially a different user on the same device)
+        // cannot see the previous user's cached recipients/transfers.
+        // Failure is logged in DEBUG but never blocks logout — a stale
+        // cache on a logged-out app surfaces only as a one-frame
+        // flicker on next sign-in (the live fetch overwrites within ms).
+        try? swiftDataStack.deleteAll()
+        // Phase 8 iter-2 (P4): drop the bank-list cache too so the
+        // next session refetches `/banks` against the new user's
+        // session. Comments on BankStore.reset() previously claimed
+        // logout invoked this — that wiring lives here.
+        bankStore.reset()
 
         // Best-effort network revoke. Note: the local cookie is already gone, so this
         // request goes out cookie-less and the backend will return 401 — that's fine,

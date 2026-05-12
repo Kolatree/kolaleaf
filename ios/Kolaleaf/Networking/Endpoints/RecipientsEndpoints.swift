@@ -33,6 +33,19 @@ public enum RecipientsEndpoints {
         }
     }
 
+    /// `DELETE /api/v1/recipients/:id` — remove a recipient owned by
+    /// the authenticated user. Backend returns 204 No Content on
+    /// success (Phase 8 · U56 long-press menu).
+    public struct Delete: Endpoint {
+        public typealias Response = EmptyResponse
+        public let path: String
+        public let method: HTTPMethod = .delete
+
+        public init(id: String) {
+            self.path = "/api/v1/recipients/\(id)"
+        }
+    }
+
     /// `POST /api/v1/recipients/resolve` — pre-flight bank-account
     /// lookup. Backend returns 200 + `{ accountName }`, 404 on
     /// account-not-found, 503 on provider-down, 429 on rate-limit.

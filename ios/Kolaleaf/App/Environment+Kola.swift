@@ -71,6 +71,15 @@ private struct BankStoreKey: EnvironmentKey {
     static let defaultValue: BankStore = BankStore(api: APIClientKey.defaultValue)
 }
 
+// Phase 8 iter-2 (P5): a single SyncService instance is constructed at
+// KolaleafApp's body and threaded through the environment so every
+// feature shares one SwiftData writer. Default is `nil` — features
+// fall back to a local instance when the env hasn't been wired
+// (previews, tests), matching the AuthAPI placeholder pattern.
+private struct SyncServiceKey: EnvironmentKey {
+    static let defaultValue: SyncService? = nil
+}
+
 public extension EnvironmentValues {
     var apiClient: AuthAPI {
         get { self[APIClientKey.self] }
@@ -92,5 +101,12 @@ public extension EnvironmentValues {
     var bankStore: BankStore {
         get { self[BankStoreKey.self] }
         set { self[BankStoreKey.self] = newValue }
+    }
+    /// Phase 8 iter-2 (P5): app-root SyncService. Nil when not
+    /// injected — features fall back to a local SyncService.
+    @MainActor
+    var syncService: SyncService? {
+        get { self[SyncServiceKey.self] }
+        set { self[SyncServiceKey.self] = newValue }
     }
 }

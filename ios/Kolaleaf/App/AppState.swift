@@ -448,6 +448,50 @@ public enum TransferStatus: String, Equatable, Sendable {
     case unknown           = "_iOS_UNKNOWN"
 }
 
+// MARK: - TransferStatus buckets (Phase 8 iter-2 · A3)
+//
+// Centralised here so Activity, Statements, ActivityRow, and any
+// future surface (Refer stats, Help recent-transfer pill) all map
+// the same Prisma literals to the same UX bucket. Iter-1 had two
+// disagreeing definitions of "completed" — the row label said
+// COMPLETED+NGN_SENT, the filter chip set said COMPLETED+REFUNDED.
+// One audit logged a refund as a completion; the other counted an
+// in-flight transfer as done. Both were wrong.
+//
+// The buckets reflect the Transfer state machine in the project
+// CLAUDE.md:
+//   • inFlight        — anything pre-terminal (CREATED through NGN_RETRY,
+//                       plus FLOAT_INSUFFICIENT pause and NGN_SENT
+//                       on the optimistic-pending path).
+//   • terminalSuccess — COMPLETED only. NGN_SENT is *in-flight* even
+//                       though it commonly resolves within seconds;
+//                       audit + tax math must not conflate it.
+//   • terminalFailure — NGN_FAILED / NEEDS_MANUAL / EXPIRED / CANCELLED
+//                       / REFUNDED. Refunded sits in failure-bucket
+//                       UI because the money came back to the user
+//                       rather than reaching the recipient — never in
+//                       the "completed" bucket.
+public extension TransferStatus {
+    /// Pre-terminal: money is on the move. Pending UI bucket.
+    static var inFlight: Set<TransferStatus> {
+        [
+            .created, .awaitingAud, .audReceived,
+            .processingNgn, .ngnSent, .ngnRetry,
+            .floatInsufficient,
+        ]
+    }
+
+    /// Terminal-success: money reached the recipient. The ONLY status
+    /// that contributes to tax rollups and "this month sent" totals.
+    static var terminalSuccess: Set<TransferStatus> { [.completed] }
+
+    /// Terminal-failure: money never reached the recipient (or came
+    /// back). REFUNDED lives here, not under success.
+    static var terminalFailure: Set<TransferStatus> {
+        [.ngnFailed, .needsManual, .expired, .cancelled, .refunded]
+    }
+}
+
 extension TransferStatus: Codable {
     public init(from decoder: Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)

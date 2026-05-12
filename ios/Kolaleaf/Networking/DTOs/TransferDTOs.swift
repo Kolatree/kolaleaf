@@ -38,6 +38,11 @@ public struct TransferShape: Codable, Sendable, Equatable, Hashable, Identifiabl
     /// backends decode; renderer (`ShareReceiptCard`) falls back to
     /// `Date()` when nil so the receipt always shows a date.
     public let completedAt: Date?
+    /// Server-supplied creation timestamp (Phase 8 · U55 / U59). Needed
+    /// by the Activity tab (for "this month" totals) and the Statements
+    /// FY-grouping. Optional because `GET /transfers/:id` historically
+    /// didn't return it — `listTransfers` does.
+    public let createdAt: Date?
 
     /// Memberwise initialiser. `internal` so test fixtures live next
     /// to the type without bleeding the wire-shape constructor into
@@ -55,7 +60,8 @@ public struct TransferShape: Codable, Sendable, Equatable, Hashable, Identifiabl
         payidReference: String? = nil,
         payidProviderRef: String? = nil,
         payidExpiresAt: Date? = nil,
-        completedAt: Date? = nil
+        completedAt: Date? = nil,
+        createdAt: Date? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -70,6 +76,7 @@ public struct TransferShape: Codable, Sendable, Equatable, Hashable, Identifiabl
         self.payidProviderRef = payidProviderRef
         self.payidExpiresAt = payidExpiresAt
         self.completedAt = completedAt
+        self.createdAt = createdAt
     }
 }
 
@@ -130,3 +137,19 @@ public struct TransferEnvelope: Codable, Sendable, Equatable {
 /// self-documentingly ("issue-payid response") but the underlying
 /// type is the same envelope — Codable conformances stay in lock-step.
 public typealias IssuePayIDResponse = TransferEnvelope
+
+// MARK: - List (Phase 8 · U55)
+
+/// 200-OK response from `GET /api/v1/transfers`. Backend orders by
+/// `createdAt desc` and pages by id cursor (see
+/// `src/lib/transfers/queries.ts:listTransfers`).
+public struct ListTransfersResponse: Codable, Sendable, Equatable {
+    public let transfers: [TransferShape]
+    /// Cursor for the next page. nil when the server has no more rows.
+    public let nextCursor: String?
+
+    public init(transfers: [TransferShape], nextCursor: String? = nil) {
+        self.transfers = transfers
+        self.nextCursor = nextCursor
+    }
+}

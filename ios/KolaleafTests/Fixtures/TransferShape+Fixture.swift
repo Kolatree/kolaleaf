@@ -20,7 +20,9 @@ extension TransferShape {
         fee: String = "0",
         payidReference: String? = nil,
         payidProviderRef: String? = nil,
-        payidExpiresAt: Date? = nil
+        payidExpiresAt: Date? = nil,
+        completedAt: Date? = nil,
+        createdAt: Date? = nil
     ) -> TransferShape {
         TransferShape(
             id: id,
@@ -34,7 +36,9 @@ extension TransferShape {
             fee: fee,
             payidReference: payidReference,
             payidProviderRef: payidProviderRef,
-            payidExpiresAt: payidExpiresAt
+            payidExpiresAt: payidExpiresAt,
+            completedAt: completedAt,
+            createdAt: createdAt
         )
     }
 }

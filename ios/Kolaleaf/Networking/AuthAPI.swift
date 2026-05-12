@@ -34,6 +34,12 @@ public protocol TransferRepository: Sendable {
         -> Result<CreateTransferResponse, APIError>
     func get(id: String) async -> Result<TransferEnvelope, APIError>
     func issuePayId(id: String) async -> Result<IssuePayIDResponse, APIError>
+    /// Phase 8 · U55: cursor-paginated transfer list. nil arguments omit
+    /// the corresponding query item, matching backend defaults.
+    /// Iter-2 (N1): `status` is typed `TransferStatus?` — wire rawValue
+    /// serialisation happens at the endpoint layer.
+    func list(status: TransferStatus?, limit: Int?, cursor: String?) async
+        -> Result<ListTransfersResponse, APIError>
 }
 
 // APIClient conforms naturally — each method routes through the
@@ -57,5 +63,13 @@ extension APIClient: RateQuoteRepository, TransferRepository {
 
     public func issuePayId(id: String) async -> Result<IssuePayIDResponse, APIError> {
         await send(TransfersEndpoints.IssuePayID(id: id))
+    }
+
+    public func list(status: TransferStatus?, limit: Int?, cursor: String?) async
+        -> Result<ListTransfersResponse, APIError>
+    {
+        // Iter-2 (N1): typed enum forwarded straight to the endpoint;
+        // wire rawValue serialisation lives in `TransfersEndpoints.List`.
+        await send(TransfersEndpoints.List(status: status, limit: limit, cursor: cursor))
     }
 }

@@ -37,7 +37,7 @@ public actor FakeAPIClient: AuthAPI {
     /// Stage the next result for an endpoint type. Use the endpoint's metatype
     /// as the key to disambiguate when the same VM hits multiple endpoints.
     public func stage<E: Endpoint>(_ type: E.Type, result: Result<E.Response, APIError>) {
-        stagedResults[String(describing: type)] = result
+        stagedResults[_typeName(type, qualified: true)] = result
     }
 
     /// Convenience: stage a success.
@@ -60,7 +60,7 @@ public actor FakeAPIClient: AuthAPI {
         _ type: E.Type,
         results: [Result<E.Response, APIError>]
     ) {
-        stagedSequences[String(describing: type)] = results
+        stagedSequences[_typeName(type, qualified: true)] = results
     }
 
     /// P1 fix (Phase 1 review): delay-injection seam for in-flight assertions.
@@ -78,7 +78,7 @@ public actor FakeAPIClient: AuthAPI {
         nanoseconds: UInt64
     ) {
         stage(type, result: .success(value))
-        stagedDelays[String(describing: type)] = nanoseconds
+        stagedDelays[_typeName(type, qualified: true)] = nanoseconds
     }
 
     public func stageFailureWithDelay<E: Endpoint>(
@@ -87,11 +87,18 @@ public actor FakeAPIClient: AuthAPI {
         nanoseconds: UInt64
     ) {
         stage(type, result: .failure(error))
-        stagedDelays[String(describing: type)] = nanoseconds
+        stagedDelays[_typeName(type, qualified: true)] = nanoseconds
     }
 
     public func send<E: Endpoint>(_ endpoint: E) async -> Result<E.Response, APIError> {
-        let key = String(describing: E.self)
+        // Use fully-qualified type name for the staged-results lookup
+        // so nested endpoint types with identical leaf names (e.g.
+        // `RecipientsEndpoints.List` vs `TransfersEndpoints.List`)
+        // don't collide. Discovered while writing the Phase 8 iter-2
+        // syncAll test. `Recorded.typeName` keeps the legacy
+        // unqualified form so existing `lastBody(for:)` callers (which
+        // pass `String(describing:)`) keep working.
+        let key = _typeName(E.self, qualified: true)
         let bodyData: Data? = {
             guard let body = endpoint.body else { return nil }
             let encoder = JSONEncoder()
@@ -99,7 +106,7 @@ public actor FakeAPIClient: AuthAPI {
             return try? encoder.encode(body)
         }()
         calls.append(Recorded(
-            typeName: key,
+            typeName: String(describing: E.self),
             path: endpoint.path,
             method: endpoint.method,
             bodyData: bodyData

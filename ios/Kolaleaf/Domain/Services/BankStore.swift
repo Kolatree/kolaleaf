@@ -10,7 +10,8 @@
 // max-age=3600`. The store re-fetches when the cache is empty or
 // older than the TTL; otherwise it short-circuits.
 //
-// `reset()` is called on logout (AppState.clearForLogout) so a fresh
+// `reset()` is called on logout (KolaleafApp.forceReauth +
+// AccountView.performSignOut, Phase 8 iter-2 · P4) so a fresh
 // sign-in starts from a cold cache. Without that the previous user's
 // list (which is identical anyway, but the contract is per-session)
 // would survive into the new session.
@@ -72,8 +73,9 @@ public final class BankStore {
         }
     }
 
-    /// Drop the cached list. Called from `AppState.clearForLogout` so
-    /// the next sign-in starts with a cold cache.
+    /// Drop the cached list. Invoked from `KolaleafApp.forceReauth()`
+    /// and `AccountView.performSignOut()` so the next sign-in starts
+    /// with a cold cache (Phase 8 iter-2 · P4).
     public func reset() {
         banks = []
         lastFetchedAt = nil

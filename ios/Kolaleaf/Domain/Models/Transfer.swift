@@ -35,6 +35,11 @@ public struct Transfer: Equatable, Sendable, Hashable, Identifiable {
     /// Optional because the backend doesn't ship it yet; the share
     /// renderer falls back to `Date()` when nil.
     public let completedAt: Date?
+    /// Server-supplied creation timestamp (Phase 8 · U55 / U59). Used by
+    /// the Activity tab totals card and Statements FY rollup. nil for
+    /// surfaces (e.g. single-transfer GET) that historically didn't
+    /// return it; consumers fall back to `Date()` when nil.
+    public let createdAt: Date?
 
     public init(
         id: String,
@@ -49,7 +54,8 @@ public struct Transfer: Equatable, Sendable, Hashable, Identifiable {
         payidReference: String? = nil,
         payidProviderRef: String? = nil,
         payidExpiresAt: Date? = nil,
-        completedAt: Date? = nil
+        completedAt: Date? = nil,
+        createdAt: Date? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -64,6 +70,7 @@ public struct Transfer: Equatable, Sendable, Hashable, Identifiable {
         self.payidProviderRef = payidProviderRef
         self.payidExpiresAt = payidExpiresAt
         self.completedAt = completedAt
+        self.createdAt = createdAt
     }
 }
 
@@ -74,6 +81,41 @@ public struct Transfer: Equatable, Sendable, Hashable, Identifiable {
 public struct TransferDecodeError: Error, Equatable {
     public let field: String
     public let value: String
+}
+
+// MARK: - Domain → wire adapter (Phase 8 iter-2 · A2)
+//
+// The Storage layer now returns Domain `Transfer` via
+// `SyncService.cachedTransfers()`. Feature code that hasn't migrated
+// off TransferShape uses this thin adapter at the boundary. Money
+// fields go through `Decimal.description` which round-trips the wire
+// string format (no localisation drift) for the values we put into
+// the cache in the first place.
+
+extension Transfer {
+    /// Cache-bridge back to the wire shape. Loss-bearing for fields
+    /// the cache doesn't mirror (`payidExpiresAt` always nil) —
+    /// callers must not treat the result as authoritative; the live
+    /// fetch is the source of truth and overwrites within a few
+    /// hundred ms.
+    public func toWireShape() -> TransferShape {
+        TransferShape(
+            id: id,
+            userId: userId,
+            recipientId: recipientId,
+            corridorId: corridorId,
+            status: status,
+            sendAmount: sendAmount.description,
+            receiveAmount: receiveAmount?.description,
+            exchangeRate: exchangeRate.description,
+            fee: fee.description,
+            payidReference: payidReference,
+            payidProviderRef: payidProviderRef,
+            payidExpiresAt: payidExpiresAt,
+            completedAt: completedAt,
+            createdAt: createdAt
+        )
+    }
 }
 
 extension TransferShape {
@@ -120,7 +162,8 @@ extension TransferShape {
             payidReference: payidReference,
             payidProviderRef: payidProviderRef,
             payidExpiresAt: payidExpiresAt,
-            completedAt: completedAt
+            completedAt: completedAt,
+            createdAt: createdAt
         )
     }
 
@@ -142,7 +185,8 @@ extension TransferShape {
             payidReference: payidReference,
             payidProviderRef: payidProviderRef,
             payidExpiresAt: payidExpiresAt,
-            completedAt: completedAt
+            completedAt: completedAt,
+            createdAt: createdAt
         )
     }
 }

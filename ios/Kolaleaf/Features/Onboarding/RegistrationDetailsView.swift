@@ -92,13 +92,13 @@ public struct RegistrationDetailsView: View {
             }
             errorIfAny(forKey: "password")
 
-            field(label: "Email") {
-                Text(vm.email)
+            field(label: vm.identifier.type == .email ? "Email" : "Phone") {
+                Text(vm.identifier.value)
                     .font(KolaFont.row)
                     .foregroundStyle(KolaColors.whiteOnGradientMuted)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            errorIfAny(forKey: "email")
+            errorIfAny(forKey: vm.identifier.type == .email ? "email" : "phone")
         }
     }
 

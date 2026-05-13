@@ -19,7 +19,11 @@ import Observation
 @Observable
 public final class RegistrationDetailsViewModel {
 
-    public let email: String
+    // D4b: identifier carries the rail (email | phone) selected at
+    // the OTP step. The `email` and `phone` convenience accessors
+    // project the value when callers want the rail-specific surface
+    // (e.g. CurrentUser construction below).
+    public let identifier: LoginIdentifier
     public var fullName: String = ""
     public var password: String = ""
     public var addressLine1: String = ""
@@ -31,7 +35,23 @@ public final class RegistrationDetailsViewModel {
     public private(set) var isSubmitting: Bool = false
     /// Field-keyed error messages. The "form" key carries form-level errors
     /// (claim_expired, transport, etc.) that don't map to a single field.
+    /// The `identifierFieldKey` projection selects which key a 409 lands on
+    /// ("email" or "phone") so the rail-appropriate input shows the error.
     public private(set) var inlineErrors: [String: String] = [:]
+
+    public var email: String? {
+        identifier.type == .email ? identifier.value : nil
+    }
+
+    public var phone: String? {
+        identifier.type == .phone ? identifier.value : nil
+    }
+
+    /// Which inline-errors key receives a 409 (and the field-level Zod
+    /// errors keyed by `value` on the wire). Matches the rail in use.
+    private var identifierFieldKey: String {
+        identifier.type == .email ? "email" : "phone"
+    }
 
     public var canSubmit: Bool {
         guard !isSubmitting else { return false }
@@ -45,10 +65,35 @@ public final class RegistrationDetailsViewModel {
     private let api: AuthAPI
     private let onRegistered: (CurrentUser) -> Void
 
-    public init(email: String, api: AuthAPI, onRegistered: @escaping (CurrentUser) -> Void) {
-        self.email = email
+    public init(
+        identifier: LoginIdentifier,
+        api: AuthAPI,
+        onRegistered: @escaping (CurrentUser) -> Void
+    ) {
+        self.identifier = identifier
         self.api = api
         self.onRegistered = onRegistered
+    }
+
+    // Email-rail convenience. Preserves the call-site shape used by
+    // OnboardingCoordinator.destination(for: .registrationDetails) and
+    // every existing test fixture.
+    public convenience init(
+        email: String,
+        api: AuthAPI,
+        onRegistered: @escaping (CurrentUser) -> Void
+    ) {
+        self.init(identifier: .email(email), api: api, onRegistered: onRegistered)
+    }
+
+    // Phone-rail convenience. Caller supplies the E.164 string —
+    // typically `PhoneNumber.e164` from the post-phone-OTP path.
+    public convenience init(
+        phone: String,
+        api: AuthAPI,
+        onRegistered: @escaping (CurrentUser) -> Void
+    ) {
+        self.init(identifier: .phone(phone), api: api, onRegistered: onRegistered)
     }
 
     public func submit() async {
@@ -73,7 +118,7 @@ public final class RegistrationDetailsViewModel {
         defer { isSubmitting = false }
 
         let body = CompleteRegistrationRequest(
-            email: email,
+            identifier: identifier,
             fullName: trimmedName,
             password: password,
             addressLine1: trimmedAddress1,
@@ -91,7 +136,7 @@ public final class RegistrationDetailsViewModel {
                 displayName: response.user.fullName,
                 legalName: response.user.fullName,
                 email: email,
-                phone: nil
+                phone: phone
             )
             onRegistered(user)
         case .failure(let error):
@@ -114,7 +159,10 @@ public final class RegistrationDetailsViewModel {
             }
 
         case .server(let status, let message) where status == 409:
-            inlineErrors["email"] = message ?? "This email is already registered."
+            inlineErrors[identifierFieldKey] =
+                message ?? (identifier.type == .email
+                    ? "This email is already registered."
+                    : "This phone number is already registered.")
 
         case .server(let status, let message) where status == 400:
             // Business-logic 400 (claim_expired / pending_not_verified / etc.).
@@ -135,9 +183,10 @@ public final class RegistrationDetailsViewModel {
     }
 
     private func recoverableMessage(forReason reason: String) -> String {
+        let railNoun = identifier.type == .email ? "email" : "phone"
         switch reason {
         case "claim_expired":         return "Your verification expired. Please restart sign-up."
-        case "pending_not_verified":  return "Please verify your email before completing sign-up."
+        case "pending_not_verified":  return "Please verify your \(railNoun) before completing sign-up."
         default:                       return "We couldn't complete sign-up. Please try again."
         }
     }

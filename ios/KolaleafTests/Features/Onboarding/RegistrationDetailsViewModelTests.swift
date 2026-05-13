@@ -92,7 +92,8 @@ final class RegistrationDetailsViewModelTests: XCTestCase {
             for: String(describing: AuthEndpoints.CompleteRegistration.self),
             as: CompleteRegistrationRequest.self
         )
-        XCTAssertEqual(body?.email, "user@example.com")
+        XCTAssertEqual(body?.identifier.type, .email)
+        XCTAssertEqual(body?.identifier.value, "user@example.com")
         XCTAssertEqual(body?.fullName, "Ada Lovelace") // trimmed
         XCTAssertEqual(body?.state, "NSW")             // uppercase
         XCTAssertNil(body?.addressLine2)               // empty → nil

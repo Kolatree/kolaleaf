@@ -92,7 +92,10 @@ public struct VerifyCodeResponse: Decodable, Sendable {
 // schema applies cleanly (the route returns 400 on a non-empty < min-length string).
 
 public struct CompleteRegistrationRequest: Codable, Sendable {
-    public let email: String
+    // D4a: discriminated identifier matches the widened backend
+    // schema at src/app/api/v1/auth/complete-registration/_schemas.ts —
+    // either an email or an E.164 phone, never both.
+    public let identifier: LoginIdentifier
     public let fullName: String
     public let password: String
     public let addressLine1: String
@@ -101,6 +104,28 @@ public struct CompleteRegistrationRequest: Codable, Sendable {
     public let state: String
     public let postcode: String
 
+    public init(
+        identifier: LoginIdentifier,
+        fullName: String,
+        password: String,
+        addressLine1: String,
+        addressLine2: String?,
+        city: String,
+        state: String,
+        postcode: String
+    ) {
+        self.identifier = identifier
+        self.fullName = fullName
+        self.password = password
+        self.addressLine1 = addressLine1
+        self.addressLine2 = addressLine2
+        self.city = city
+        self.state = state
+        self.postcode = postcode
+    }
+
+    // Email-rail convenience. Preserves the call-site shape used by
+    // RegistrationDetailsViewModel and the iter-1 baseline.
     public init(
         email: String,
         fullName: String,
@@ -111,14 +136,40 @@ public struct CompleteRegistrationRequest: Codable, Sendable {
         state: String,
         postcode: String
     ) {
-        self.email = email
-        self.fullName = fullName
-        self.password = password
-        self.addressLine1 = addressLine1
-        self.addressLine2 = addressLine2
-        self.city = city
-        self.state = state
-        self.postcode = postcode
+        self.init(
+            identifier: .email(email),
+            fullName: fullName,
+            password: password,
+            addressLine1: addressLine1,
+            addressLine2: addressLine2,
+            city: city,
+            state: state,
+            postcode: postcode
+        )
+    }
+
+    // Phone-rail convenience. Caller supplies the E.164 string —
+    // typically `PhoneNumber.e164` from the post-OTP onboarding flow.
+    public init(
+        phone: String,
+        fullName: String,
+        password: String,
+        addressLine1: String,
+        addressLine2: String?,
+        city: String,
+        state: String,
+        postcode: String
+    ) {
+        self.init(
+            identifier: .phone(phone),
+            fullName: fullName,
+            password: password,
+            addressLine1: addressLine1,
+            addressLine2: addressLine2,
+            city: city,
+            state: state,
+            postcode: postcode
+        )
     }
 }
 

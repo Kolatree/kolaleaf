@@ -35,16 +35,33 @@ import Observation
 public final class BiometricUnlockController {
 
     /// Persisted setting: when on, the lock screen gates every
-    /// foreground entry of an authenticated session.
+    /// foreground entry of an authenticated session. Mutable so
+    /// SwiftUI's `Toggle` can bind, but the explicit
+    /// `setFaceIDUnlockEnabled(_:)` setter is the recommended path
+    /// because its side effects (persist + invalidate
+    /// `unlockedThisSession`) are visible at the call site rather
+    /// than hidden in didSet (4-lens review fix · type-design-analyzer #16).
     public var faceIDUnlockEnabled: Bool {
-        didSet {
-            defaults.set(faceIDUnlockEnabled, forKey: Self.kFaceIDEnabled)
-            // Flipping the setting on resets `unlockedThisSession` so
-            // the next foreground entry presents the lock screen
-            // (otherwise enabling the setting mid-session would only
-            // take effect on the next launch — surprising UX).
-            if faceIDUnlockEnabled { unlockedThisSession = false }
-        }
+        didSet { applyFaceIDPreferenceSideEffects() }
+    }
+
+    /// Explicit setter — equivalent to assigning `faceIDUnlockEnabled`
+    /// but documents the side effects at the call site. Toggle UI
+    /// can still use the binding; programmatic mutations (settings
+    /// migration, debug overrides) should go through here.
+    public func setFaceIDUnlockEnabled(_ value: Bool) {
+        // Direct assignment triggers didSet, which handles the
+        // persistence + per-session invalidation in one place.
+        faceIDUnlockEnabled = value
+    }
+
+    private func applyFaceIDPreferenceSideEffects() {
+        defaults.set(faceIDUnlockEnabled, forKey: Self.kFaceIDEnabled)
+        // Flipping the setting on resets `unlockedThisSession` so
+        // the next foreground entry presents the lock screen
+        // (otherwise enabling the setting mid-session would only
+        // take effect on the next launch — surprising UX).
+        if faceIDUnlockEnabled { unlockedThisSession = false }
     }
 
     /// True once the user has authenticated against Face ID this

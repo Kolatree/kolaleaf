@@ -30,7 +30,14 @@ public struct CountryDialCode: Sendable, Hashable, Identifiable {
 
     public var id: String { isoCode }
 
-    public init(isoCode: String, name: String, dialCode: String, flag: String) {
+    /// 4-lens review fix (type-design-analyzer #17): internal init
+    /// so only `CountryDialCodes.supported` can mint entries. A
+    /// `CountryDialCode(dialCode: "garbage", ...)` minted at a call
+    /// site would silently never match anything via
+    /// `first(matchingDialCode:)`. The curated list is now the
+    /// type's universe; broaden via the (currently nil) failable
+    /// init path when external construction becomes useful.
+    internal init(isoCode: String, name: String, dialCode: String, flag: String) {
         self.isoCode = isoCode
         self.name = name
         self.dialCode = dialCode
@@ -77,6 +84,27 @@ public struct PhoneNumber: Sendable, Hashable {
 
     private init(_ value: String) { self.e164 = value }
 
+    /// 4-lens review fix (type-design-analyzer #15): regex lifted
+    /// to one constant so `parse(...)` and `parseE164(...)` can't
+    /// drift. Mirrors the backend Zod regex at
+    /// `src/lib/schemas/common.ts PhoneE164` and the helper guard
+    /// in `src/lib/auth/pending-phone-verification.ts` byte-for-byte.
+    private static let e164Pattern = "^\\+\\d{7,15}$"
+
+    /// 4-lens review fix (type-design-analyzer #15): only strip a
+    /// leading `0` for countries whose national format uses a `0`
+    /// trunk prefix. AU, NZ, GB, ZA all do; NG / US / most others
+    /// do not. Without this list, the parser would silently drop a
+    /// digit from a NG number like `08012345678` (which is a 11-
+    /// digit local that does NOT have a trunk-0 to strip) and
+    /// produce an invalid 7-digit E.164.
+    private static let trunkPrefixDialCodes: Set<String> = [
+        "+61",  // Australia
+        "+64",  // New Zealand
+        "+44",  // United Kingdom
+        "+27",  // South Africa
+    ]
+
     /// Error states callers surface in the UI.
     public enum ParseError: Error, Equatable, Sendable {
         /// Empty input or whitespace only.
@@ -118,15 +146,21 @@ public struct PhoneNumber: Sendable, Hashable {
         let withoutDialPrefix = digitsOnly.hasPrefix(dialDigits)
             ? String(digitsOnly.dropFirst(dialDigits.count))
             : digitsOnly
-        // Strip the national trunk prefix `0` for AU/NZ/GB convention
-        // when the rest of the number is the right length.
-        let withoutTrunk = withoutDialPrefix.hasPrefix("0")
-            ? String(withoutDialPrefix.dropFirst())
-            : withoutDialPrefix
+        // 4-lens review fix (type-design-analyzer #15): only strip
+        // the national trunk prefix `0` for countries that use one.
+        // Universal stripping silently dropped a digit from numbers
+        // like NG `08012345678` where the leading `0` is a real
+        // digit, not a trunk indicator.
+        let withoutTrunk: String
+        if Self.trunkPrefixDialCodes.contains(dialCode),
+           withoutDialPrefix.hasPrefix("0") {
+            withoutTrunk = String(withoutDialPrefix.dropFirst())
+        } else {
+            withoutTrunk = withoutDialPrefix
+        }
         let candidate = "+" + dialDigits + withoutTrunk
 
-        let pattern = "^\\+\\d{7,15}$"
-        guard candidate.range(of: pattern, options: .regularExpression) != nil else {
+        guard candidate.range(of: Self.e164Pattern, options: .regularExpression) != nil else {
             return .failure(.malformed)
         }
         return .success(PhoneNumber(candidate))
@@ -144,8 +178,7 @@ public struct PhoneNumber: Sendable, Hashable {
             .replacingOccurrences(of: "-", with: "")
             .replacingOccurrences(of: "(", with: "")
             .replacingOccurrences(of: ")", with: "")
-        let pattern = "^\\+\\d{7,15}$"
-        guard stripped.range(of: pattern, options: .regularExpression) != nil else {
+        guard stripped.range(of: Self.e164Pattern, options: .regularExpression) != nil else {
             return .failure(.malformed)
         }
         return .success(PhoneNumber(stripped))

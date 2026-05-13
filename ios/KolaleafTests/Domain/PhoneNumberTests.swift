@@ -45,6 +45,31 @@ final class PhoneNumberTests: XCTestCase {
         XCTAssertEqual(phone.e164, "+2348012345678")
     }
 
+    /// 4-lens review fix (type-design-analyzer #15): NG (and most
+    /// non-AU/NZ/GB/ZA countries) do NOT use a `0` trunk prefix.
+    /// A leading `0` in a NG local number is a real digit. The
+    /// per-country guard must NOT strip it.
+    func test_parseDoesNotStripTrunkForNonTrunkCountries() throws {
+        let result = PhoneNumber.parse(dialCode: "+234", localNumber: "08012345678")
+        guard case .success(let phone) = result else {
+            return XCTFail("expected success, got \(result)")
+        }
+        // The `0` survives — final number is +234 + 08012345678 = 14 digits.
+        XCTAssertEqual(phone.e164, "+23408012345678")
+    }
+
+    func test_parseStripsTrunkForAU() throws {
+        // Smoke test for the existing AU trunk-strip path. Already
+        // covered by test_parseStripsAUNationalTrunkPrefix, but
+        // documented here as the symmetric pair to
+        // test_parseDoesNotStripTrunkForNonTrunkCountries.
+        let result = PhoneNumber.parse(dialCode: "+61", localNumber: "0400000000")
+        guard case .success(let phone) = result else {
+            return XCTFail("expected success, got \(result)")
+        }
+        XCTAssertEqual(phone.e164, "+61400000000")
+    }
+
     func test_parseRejectsEmptyInput() {
         let result = PhoneNumber.parse(dialCode: "+61", localNumber: "   ")
         guard case .failure(.empty) = result else {

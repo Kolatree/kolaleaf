@@ -1,4 +1,5 @@
-// CancelTransferViewModel.swift  (Phase 9 · U62 + iter-2 A1/B4/B8/C1/C5)
+// CancelTransferViewModel.swift  (Phase 9 · U62 + iter-2 A1/B4/B8/C1/C5
+//                                            + iter-3 F4)
 // Drives Screen 39: a single destructive cancel CTA. The screen IS
 // the confirm — there's no second-step sheet — so a tap fires the
 // POST and the VM walks itself through .idle → .cancelling → terminal.
@@ -8,9 +9,11 @@
 //
 // Backend response shape: 200 + `{ transfer: TransferShape }`. 4xx codes:
 //   • 403 NotOwner
-//   • 404 NotFound (iter-2 C5: treated as terminal-success-equivalent —
-//     the row is gone, intent satisfied. Caller pops to Activity with
-//     a one-shot toast.)
+//   • 404 NotFound → .notFound (terminal-success-equivalent: the row
+//     is gone, intent satisfied. Caller renders a one-shot card and
+//     pops to Activity. Iter-3 F4 / ADV-P9-W1 renamed `.gone` to
+//     `.notFound` so the case name mirrors the `APIError.notFound`
+//     it dispatches from.)
 //   • 409 + `reason: "cancel_too_late"` → .tooLate
 //   • 409 + `reason: "invalid_transition"` → .cancelled (idempotent
 //     re-cancel; backend treats already-CANCELLED as success in
@@ -32,8 +35,8 @@ public enum CancelTransferState: Equatable, Sendable {
     /// 404 — the transfer row no longer exists (deleted, expired into
     /// a terminal sweep, etc). Treated as terminal-success-equivalent
     /// because the user's intent (no transfer) is already true. Caller
-    /// pops to Activity with a one-shot toast.
-    case gone
+    /// renders a one-shot card and pops to Activity. (F4 / ADV-P9-W1)
+    case notFound
     /// Error payload carries the typed APIError so the View can render
     /// via `APIErrorPresenter` and tests can assert on the case rather
     /// than localized text. (B4 / OO-904)
@@ -61,12 +64,12 @@ public final class CancelTransferViewModel {
     }
 
     /// Cancel the transfer. Idempotent at the in-flight + terminal-success
-    /// guards: re-tapping while `.cancelling`, `.cancelled` or `.gone` is
-    /// a no-op (no second POST). `.tooLate` and `.error` are recoverable —
-    /// the user can re-tap to retry the request.
+    /// guards: re-tapping while `.cancelling`, `.cancelled` or `.notFound`
+    /// is a no-op (no second POST). `.tooLate` and `.error` are
+    /// recoverable — the user can re-tap to retry the request.
     public func cancel() async {
         switch state {
-        case .cancelling, .cancelled, .gone:
+        case .cancelling, .cancelled, .notFound:
             return
         case .idle, .tooLate, .error:
             break
@@ -109,8 +112,8 @@ public final class CancelTransferViewModel {
             )
             return .cancelled
         case .notFound:
-            // C5 / ADV-P9-W1: the row is gone — caller satisfied.
-            return .gone
+            // F4 / ADV-P9-W1: the row is gone — caller satisfied.
+            return .notFound
         default:
             return .error(err)
         }

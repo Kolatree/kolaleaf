@@ -1,9 +1,10 @@
-// CancelTransferView.swift  (Phase 9 · U62 + iter-2 A1/B4/B6/B8/C1/C5)
+// CancelTransferView.swift  (Phase 9 · U62 + iter-2 A1/B4/B6/B8/C1/C5
+//                                       + iter-3 F4)
 // Screen 39 — destructive cancel CTA with safety reassurance.
 // Single-tap commit (the screen IS the confirm); no second-step
 // sheet. Routes back to Activity on success via `onCancelled`.
 //
-// iter-2 changes:
+// iter-2 / iter-3 changes:
 //  • B4 / OO-904: error case payload is APIError; we render through
 //    `APIErrorPresenter.userFacingMessage(for:fallback:)`.
 //  • B6 / API-904: `onViewTransfer` renamed to `onTrackTransfer` and
@@ -14,10 +15,12 @@
 //    DTO into AppState / SendCoordinator (no stub).
 //  • C1 / ADV-P9-C3: the "AUD never left your bank" reassurance only
 //    appears in the active-decision states (.idle / .cancelling /
-//    .error). Hidden in .cancelled / .tooLate / .gone where the user's
-//    intent is settled.
-//  • C5 / ADV-P9-W1: 404 maps to .gone — render a one-shot toast and
-//    pop to Activity, same callback as cancel-success.
+//    .error). Hidden in .cancelled / .tooLate / .notFound where the
+//    user's intent is settled.
+//  • F4 / ADV-P9-W1: 404 maps to `.notFound` — render a one-shot
+//    "transfer no longer available" card with a single Done CTA that
+//    invokes `onCancelled(nil)` so the parent drops AppState's
+//    activeTransfer mirror and lands on Activity.
 
 import SwiftUI
 
@@ -66,7 +69,7 @@ public struct CancelTransferView: View {
             switch vm.state {
             case .idle, .cancelling, .error:
                 reassurance
-            case .cancelled, .tooLate, .gone:
+            case .cancelled, .tooLate, .notFound:
                 EmptyView()
             }
             Spacer()
@@ -78,16 +81,12 @@ public struct CancelTransferView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(KolaColors.surface.ignoresSafeArea())
         .onChange(of: vm.state) { _, newState in
-            switch newState {
-            case .cancelled:
+            // .cancelled fires the callback automatically (we have the
+            // Domain Transfer in hand). .notFound waits for the user to
+            // tap "Done" on the one-shot card so the disclosure is
+            // explicit (F4) — see `notFoundCard`.
+            if case .cancelled = newState {
                 onCancelled(vm.lastCancelledTransfer)
-            case .gone:
-                // C5: 404 — same UX as cancelled (pop to Activity).
-                // No transfer to thread; parent should drop the
-                // active-transfer mirror.
-                onCancelled(nil)
-            default:
-                break
             }
         }
     }
@@ -120,8 +119,10 @@ public struct CancelTransferView: View {
         switch vm.state {
         case .idle, .cancelling, .error:
             ctaStack
-        case .cancelled, .gone:
+        case .cancelled:
             cancelledNotice
+        case .notFound:
+            notFoundCard
         case .tooLate:
             tooLateCard
         }
@@ -185,13 +186,41 @@ public struct CancelTransferView: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 32))
                 .foregroundStyle(KolaColors.trustGreen)
-            Text(vm.state == .gone
-                 ? "This transfer is no longer available."
-                 : "Transfer cancelled")
+            Text("Transfer cancelled")
                 .font(KolaFont.cta)
                 .foregroundStyle(KolaColors.textPrimary)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private var notFoundCard: some View {
+        // F4 / ADV-P9-W1: explicit disclosure card. The 404 path used
+        // to silently pop to Activity; that left a user who'd tapped
+        // "Cancel" with no acknowledgement of what just happened. The
+        // Done CTA now drives the pop so the user sees the message
+        // before navigating.
+        VStack(spacing: KolaSpacing.m) {
+            KolaErrorCard(
+                tint: KolaColors.warning,
+                iconSystemName: "info.circle.fill",
+                title: "Transfer no longer available",
+                message: "This transfer is no longer available. We've cleared it from your active list.",
+                retry: nil
+            )
+            Button(action: { onCancelled(nil) }) {
+                Text("Done")
+                    .font(KolaFont.cta)
+                    .kerning(KolaKerning.cta)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: KolaSpacing.hitTarget + 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: KolaRadius.cta, style: .continuous)
+                            .fill(KolaColors.kolaGreen)
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("cancel.notFound.done")
+        }
     }
 
     private var tooLateCard: some View {

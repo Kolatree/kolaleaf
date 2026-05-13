@@ -1,4 +1,4 @@
-// FloatPausedView.swift  (Phase 9 · U64)
+// FloatPausedView.swift  (Phase 9 · U64 + iter-3 F3/F8/F9/F13/F14)
 // Screen 41 — the transfer pauses while we top up the rail. Amber
 // holding banner, restated recipient + AUD amount, ETA countdown.
 //
@@ -12,31 +12,38 @@
 // countdown. When the polled status leaves `.floatInsufficient` the
 // VM fires `onResume(status)` and the parent re-routes via the
 // SendCoordinator.
+//
+// iter-3 changes:
+//   • F3 / ADV-P9-W7: scene-phase `.active` now also calls
+//     `vm.resync()` so a backgrounded app re-foregrounding shows the
+//     correct (smaller) remaining-seconds value, not the paused-at
+//     number.
+//   • F8 / OO-905: countdown / AUD formatting routed through
+//     `KolaFormatters`; the duplicated private helpers are gone.
+//   • F9 / API-906: default ETA flows from
+//     `FloatPausedViewModel.defaultRailResumeETASeconds`.
+//   • F13 / OO-903: lifecycle (task / disappear / scene-phase /
+//     timer / pulse-on-appear) factored into `FloatPausedLifecycle`
+//     so the body keeps just visual content.
+//   • F14 / ADV-P9-S1: pulse dot now uses iOS-17 `.symbolEffect`
+//     (we're on iOS 17.2+; project.yml line 9). Reduce-motion users
+//     still get a static dot.
 
 import SwiftUI
 
 public struct FloatPausedView: View {
 
     @State private var vm: FloatPausedViewModel
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.scenePhase) private var scenePhase
 
     private let recipientName: String
     private let audAmount: Decimal
-    /// Local pulse driver for the amber dot. Skipped under
-    /// `accessibilityReduceMotion`.
-    @State private var pulse: Bool = false
 
-    /// Fired when the polled status leaves `.floatInsufficient`.
-    /// Caller composes a Domain Transfer + Recipient and routes via
-    /// the SendCoordinator (happy or sad path depending on the new
-    /// status).
     public init(
         api: AuthAPI,
         transferId: String,
         recipientName: String,
         audAmount: Decimal,
-        etaSeconds: TimeInterval = 240,
+        etaSeconds: TimeInterval = FloatPausedViewModel.defaultRailResumeETASeconds,
         onResume: @escaping (TransferStatus) -> Void
     ) {
         _vm = State(initialValue: FloatPausedViewModel(
@@ -61,35 +68,14 @@ public struct FloatPausedView: View {
         .padding(.bottom, KolaSpacing.homeIndicator)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(KolaColors.surface.ignoresSafeArea())
-        .task { vm.start() }
-        .onDisappear { vm.stop() }
-        .onChange(of: scenePhase) { _, phase in
-            switch phase {
-            case .active:
-                vm.start()
-            case .background, .inactive:
-                vm.stop()
-            @unknown default:
-                vm.stop()
-            }
-        }
-        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
-            vm.tick()
-        }
-        .onAppear {
-            // Kick the pulse animation only when motion is allowed.
-            // Reduce-motion users see a fully-coloured dot, just static.
-            if !reduceMotion {
-                pulse = true
-            }
-        }
+        .modifier(FloatPausedLifecycle(vm: vm))
     }
 
     // MARK: - Subviews
 
     private var holdingBanner: some View {
         HStack(spacing: KolaSpacing.s) {
-            pulseDot
+            PulseDot()
             VStack(alignment: .leading, spacing: 2) {
                 Text("We're holding briefly while we top up.")
                     .font(KolaFont.rowValue)
@@ -114,21 +100,6 @@ public struct FloatPausedView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var pulseDot: some View {
-        // Reduce-motion: static dot. Motion: opacity pulse driven by
-        // a local @State bool flipped on appear.
-        Circle()
-            .fill(KolaColors.warning)
-            .frame(width: 10, height: 10)
-            .opacity(reduceMotion ? 1.0 : (pulse ? 1.0 : 0.4))
-            .animation(
-                reduceMotion ? .linear(duration: 0.001)
-                             : .easeInOut(duration: 0.9).repeatForever(autoreverses: true),
-                value: pulse
-            )
-            .accessibilityHidden(true)
-    }
-
     private var recipientRestatement: some View {
         VStack(alignment: .leading, spacing: KolaSpacing.s) {
             Text("Your transfer")
@@ -136,7 +107,7 @@ public struct FloatPausedView: View {
                 .kerning(KolaKerning.label)
                 .textCase(.uppercase)
                 .foregroundStyle(KolaColors.textSecondary)
-            Text("AU$\(Self.formatAud(audAmount)) to \(recipientName)")
+            Text("AU$\(KolaFormatters.audDisplay(audAmount)) to \(recipientName)")
                 .font(KolaFont.rowTotal)
                 .foregroundStyle(KolaColors.textPrimary)
         }
@@ -156,7 +127,7 @@ public struct FloatPausedView: View {
     private var countdownBlock: some View {
         if vm.remainingSeconds > 0 {
             VStack(spacing: KolaSpacing.xs) {
-                Text(Self.formatCountdown(vm.remainingSeconds))
+                Text(KolaFormatters.countdown(vm.remainingSeconds))
                     .font(KolaFont.amountMedium)
                     .foregroundStyle(KolaColors.textPrimary)
                 Text("Estimated time to resume")
@@ -176,21 +147,52 @@ public struct FloatPausedView: View {
             .frame(maxWidth: .infinity)
         }
     }
+}
 
-    // MARK: - Formatting
+// MARK: - Pulse dot (F14)
 
-    private static func formatCountdown(_ seconds: Int) -> String {
-        let m = seconds / 60
-        let s = seconds % 60
-        return String(format: "%d:%02d", m, s)
+/// Symbol-effect pulse on iOS 17+. Reduce-motion users get a static
+/// filled circle. Kept in a small wrapper so the holding banner
+/// reads as a row of nouns (`PulseDot`) rather than an inline blob.
+private struct PulseDot: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var body: some View {
+        Image(systemName: "circle.fill")
+            .font(.system(size: 10))
+            .foregroundStyle(KolaColors.warning)
+            .symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion)
+            .accessibilityHidden(true)
     }
+}
 
-    private static func formatAud(_ d: Decimal) -> String {
-        let f = NumberFormatter()
-        f.numberStyle = .decimal
-        f.maximumFractionDigits = 2
-        f.minimumFractionDigits = 2
-        f.locale = Locale(identifier: "en_AU")
-        return f.string(from: NSDecimalNumber(decimal: d)) ?? "\(d)"
+// MARK: - Lifecycle modifier (F13)
+
+/// Hoists the four lifecycle hooks (`.task`, `.onDisappear`,
+/// `.onChange(of: scenePhase)`, `.onReceive(Timer.publish)`) into one
+/// modifier so the view body is purely visual. F3: scene-phase active
+/// also calls `resync()` so a backgrounded → foreground transition
+/// snaps the countdown to the wall clock.
+private struct FloatPausedLifecycle: ViewModifier {
+    let vm: FloatPausedViewModel
+    @Environment(\.scenePhase) private var scenePhase
+
+    func body(content: Content) -> some View {
+        content
+            .task { vm.start() }
+            .onDisappear { vm.stop() }
+            .onChange(of: scenePhase) { _, phase in
+                switch phase {
+                case .active:
+                    vm.resync()
+                    vm.start()
+                case .background, .inactive:
+                    vm.stop()
+                @unknown default:
+                    vm.stop()
+                }
+            }
+            .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
+                vm.tick()
+            }
     }
 }

@@ -44,21 +44,40 @@ final class FloatPausedViewModelTests: XCTestCase {
 
     // MARK: - Countdown
 
-    func test_tick_decrementsRemainingSeconds() {
+    func test_tick_recomputesFromWallClockDeadline() {
+        // F3 / ADV-P9-W7: tick() reads `deadline.timeIntervalSinceNow`
+        // rather than naively decrementing. We backdate the deadline
+        // via the test seam so the assertion doesn't have to wait
+        // real wall-clock seconds.
         let api = FakeAPIClient()
-        let vm = FloatPausedViewModel(api: api, transferId: "txn_001", etaSeconds: 10)
+        let nineSecondsOut = Date().addingTimeInterval(9)
+        let vm = FloatPausedViewModel(
+            api: api,
+            transferId: "txn_001",
+            deadlineOverride: nineSecondsOut
+        )
         vm.tick()
-        XCTAssertEqual(vm.remainingSeconds, 9)
-        vm.tick()
-        XCTAssertEqual(vm.remainingSeconds, 8)
+        // Within a sub-second margin (test wall-clock drift), the
+        // recomputed remaining is 8 or 9 depending on scheduling.
+        XCTAssertTrue(
+            vm.remainingSeconds == 9 || vm.remainingSeconds == 8,
+            "Expected ~9s remaining from a 9s deadline, got \(vm.remainingSeconds)"
+        )
     }
 
     func test_tick_clampsAtZero() {
+        // Past the deadline, tick() holds at 0 rather than going
+        // negative. Backdate the deadline so it's already elapsed.
         let api = FakeAPIClient()
-        let vm = FloatPausedViewModel(api: api, transferId: "txn_001", etaSeconds: 2)
+        let elapsed = Date().addingTimeInterval(-5)
+        let vm = FloatPausedViewModel(
+            api: api,
+            transferId: "txn_001",
+            deadlineOverride: elapsed
+        )
         vm.tick(); vm.tick(); vm.tick(); vm.tick()
         XCTAssertEqual(vm.remainingSeconds, 0,
-                       "Past zero we hold at zero rather than going negative.")
+                       "Past the deadline we hold at zero rather than going negative.")
     }
 
     // MARK: - Polling / resume

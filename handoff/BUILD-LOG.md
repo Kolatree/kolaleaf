@@ -6,10 +6,10 @@ _Owned by Architect. Updated by Builder after each step._
 
 ## Current Status
 
-**Active step:** Wave 2a iOS Phase 11 implemented locally; Phase 11.5 reconciliation is next.
-**Last cleared:** Web KYC recovery patch committed locally as `3e439c5`; Phase 11 iOS 2FA/security committed locally on `feat/ios-swiftui-app`.
+**Active step:** Wave 2a iOS Phase 11 complete locally; Phase 11.5 implementation in progress.
+**Last cleared:** Web KYC recovery patch committed locally as `3e439c5`; Phase 11 iOS 2FA/security committed locally as `ac3b0d8`; Phase 11.5 privacy/deep-link slice staged for commit.
 **Pending deploy:** All Pile B + Wave 1 commits local past 6d3db06, plus Wave 2a iOS/mobile commits. Production KYC 500 remains operationally blocked on Railway/Sumsub access.
-**Tests:** Latest validation: 2FA Vitest 32/32, `npx tsc --noEmit`, `npm run build`, physical iPhone Debug build/install/launch.
+**Tests:** Latest validation: AASA Vitest 1/1; `npx tsc --noEmit`; `npm run build`; targeted iOS `DeepLinkRouterTests` 4/4 and `KolaleafTransferAttributesTests` 16/16; physical iPhone Debug build/install/launch.
 
 ### Active recovery todo — 2026-05-14
 
@@ -24,7 +24,9 @@ _Owned by Architect. Updated by Builder after each step._
 - [ ] Clean or intentionally commit the large untracked generated `CLAUDE.md` set and new KYC files.
 - [x] Review and commit web KYC recovery changes; add canonical envelopes for KYC mock and existing 2FA routes.
 - [x] Finish Phase 11 proper: TOTP setup, TOTP verify, backup-code display/regeneration, SMS 2FA setup UI, and sign-in 2FA challenge.
-- [ ] Reconcile Phase 11.5 scope against code already moved earlier (switcher blur, idle timeout primitives, referral capture, Live Activity redaction).
+- [x] Reconcile Phase 11 status: U73-U76 implemented locally in `ac3b0d8`; Phase 11 is complete pending external review.
+- [x] Start Phase 11.5 local implementation: Live Activity lock-screen privacy redaction, HTTPS universal-link transfer routing, referral universal-link capture, and AASA scope for `/transfer/*` + `/refer/*`.
+- [ ] Reconcile remaining Phase 11.5 scope against code already moved earlier (switcher blur, idle timeout primitives, referral capture primitives, Live Activity redaction).
 
 ### Wave 1 commit ledger (closes WAVE-1-AUDIT.md gaps)
 

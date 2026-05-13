@@ -109,3 +109,125 @@ struct LockScreenCard: View {
         return "\(headline). \(amount). \(eta) remaining."
     }
 }
+
+struct LockScreenCardPrivacyGate: View {
+    let attributes: KolaleafTransferAttributes
+    let state: KolaleafTransferAttributes.ContentState
+    var now: Date = Date()
+
+    @Environment(\.redactionReasons) private var redactionReasons
+    @Environment(\.isLuminanceReduced) private var isLuminanceReduced
+
+    var body: some View {
+        if LockScreenPrivacy.shouldRedact(
+            redactionReasons: redactionReasons,
+            isLuminanceReduced: isLuminanceReduced
+        ) {
+            LockScreenCardRedacted(attributes: attributes, state: state, now: now)
+        } else {
+            LockScreenCard(attributes: attributes, state: state, now: now)
+        }
+    }
+}
+
+enum LockScreenPrivacy {
+    static func shouldRedact(
+        redactionReasons: RedactionReasons,
+        isLuminanceReduced: Bool
+    ) -> Bool {
+        isLuminanceReduced || !redactionReasons.isEmpty
+    }
+}
+
+struct LockScreenCardRedacted: View {
+    let attributes: KolaleafTransferAttributes
+    let state: KolaleafTransferAttributes.ContentState
+    var now: Date = Date()
+
+    var body: some View {
+        let descriptor = LiveActivityStyle.descriptor(
+            for: state.state,
+            recipientName: ""
+        )
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                KolaMark(size: 18, tint: descriptor.tint)
+                Text(LiveActivityCopyLint.assertNotForbidden("Kolaleaf"))
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(KolaColors.ink)
+                Spacer(minLength: 0)
+                Text(LiveActivityFormat.elapsed(since: state.lastUpdate, now: now))
+                    .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                    .foregroundColor(KolaColors.muted)
+            }
+
+            HStack(alignment: .center, spacing: 8) {
+                Image(systemName: descriptor.glyph)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(descriptor.tint)
+                    .frame(width: 26, height: 26)
+                    .background(Circle().fill(descriptor.tint.opacity(0.12)))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(LiveActivityCopyLint.assertNotForbidden(
+                        LockScreenRedactedCopy.headline(for: state.state)
+                    ))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(KolaColors.ink)
+                    .lineLimit(1)
+                    Text(redactedDetail)
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundColor(KolaColors.muted)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "lock.shield.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(KolaColors.muted)
+            }
+
+            LiveActivityProgressBar(state: state.state)
+                .frame(height: 4)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(LockScreenRedactedCopy.accessibilityLabel(
+            state: state.state,
+            etaSeconds: state.etaSeconds
+        ))
+    }
+
+    private var redactedDetail: String {
+        LockScreenRedactedCopy.detail(state: state.state, etaSeconds: state.etaSeconds)
+    }
+}
+
+enum LockScreenRedactedCopy {
+    static func headline(for state: LiveActivityState) -> String {
+        switch state {
+        case .awaitingAUD:
+            return "Awaiting your AUD"
+        case .processingNGN:
+            return "Transfer in progress"
+        case .completed:
+            return "Transfer completed"
+        case .floatPaused:
+            return "Catching up — almost there"
+        case .failedRetry:
+            return "Retrying transfer"
+        case .needsAction:
+            return "Action needed — open app"
+        case .unknown:
+            return "Updating"
+        }
+    }
+
+    static func accessibilityLabel(state: LiveActivityState, etaSeconds: Int) -> String {
+        "Kolaleaf transfer update. \(headline(for: state)). \(detail(state: state, etaSeconds: etaSeconds))."
+    }
+
+    static func detail(state: LiveActivityState, etaSeconds: Int) -> String {
+        let eta = LiveActivityFormat.etaCopy(state: state, etaSeconds: etaSeconds)
+        return eta == "—" ? "Open Kolaleaf for details" : "\(eta) remaining"
+    }
+}

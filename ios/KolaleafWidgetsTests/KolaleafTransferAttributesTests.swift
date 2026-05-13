@@ -211,4 +211,49 @@ final class KolaleafTransferAttributesTests: XCTestCase {
         XCTAssertEqual(attrs.ngnAmount,         "₦70,000 NGN")
         XCTAssertEqual(attrs.exchangeRate,      "1 AUD = 700 NGN")
     }
+
+    // MARK: - Lock-screen privacy redaction (Phase 11.5 · U7c)
+
+    func test_lockScreenPrivacy_redactsWhenEnvironmentRequestsRedaction() {
+        XCTAssertTrue(LockScreenPrivacy.shouldRedact(
+            redactionReasons: .placeholder,
+            isLuminanceReduced: false
+        ))
+    }
+
+    func test_lockScreenPrivacy_redactsWhenLuminanceReduced() {
+        XCTAssertTrue(LockScreenPrivacy.shouldRedact(
+            redactionReasons: [],
+            isLuminanceReduced: true
+        ))
+    }
+
+    func test_lockScreenPrivacy_doesNotRedactWithoutPrivacySignals() {
+        XCTAssertFalse(LockScreenPrivacy.shouldRedact(
+            redactionReasons: [],
+            isLuminanceReduced: false
+        ))
+    }
+
+    func test_redactedAccessibilityCopy_excludesAmountsAndRecipient() {
+        let label = LockScreenRedactedCopy.accessibilityLabel(
+            state: .processingNGN,
+            etaSeconds: 240
+        )
+
+        XCTAssertTrue(label.contains("Transfer in progress"))
+        XCTAssertFalse(label.contains("$100"))
+        XCTAssertFalse(label.contains("NGN"))
+        XCTAssertFalse(label.contains("Folasade"))
+    }
+
+    func test_redactedAccessibilityCopy_usesFallbackWhenEtaUnavailable() {
+        let label = LockScreenRedactedCopy.accessibilityLabel(
+            state: .needsAction,
+            etaSeconds: 0
+        )
+
+        XCTAssertTrue(label.contains("Open Kolaleaf for details"))
+        XCTAssertFalse(label.contains("— remaining"))
+    }
 }

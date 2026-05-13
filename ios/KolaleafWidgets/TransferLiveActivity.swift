@@ -19,7 +19,7 @@ public struct TransferLiveActivity: Widget {
     public var body: some WidgetConfiguration {
         ActivityConfiguration(for: KolaleafTransferAttributes.self) { context in
             // Lock-screen / banner presentation.
-            LockScreenCard(attributes: context.attributes, state: context.state)
+            LockScreenCardPrivacyGate(attributes: context.attributes, state: context.state)
                 .activityBackgroundTint(KolaColors.surface)
                 .activitySystemActionForegroundColor(KolaColors.ink)
         } dynamicIsland: { context in

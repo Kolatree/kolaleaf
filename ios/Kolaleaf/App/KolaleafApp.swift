@@ -128,13 +128,16 @@ struct KolaleafApp: App {
                 // a `.task` on the WindowGroup body fires once per
                 // process lifetime.
                 .task { await liveActivityService.reconcileOnLaunch() }
-                // ADV-P10A-C1 (Phase 10A iter-2): handle the
-                // `kolaleaf://` scheme registered in project.yml. The
-                // Live Activity surfaces deep-link into the app via
-                // `kolaleaf://transfer/<id>`; routing logic lives in
-                // `DeepLinkRouter.handle(_:appState:)`.
+                // Handle both the `kolaleaf://` custom scheme and the
+                // scoped HTTPS universal-link routes declared in AASA.
                 .onOpenURL { url in
-                    DeepLinkRouter.handle(url, appState: appState)
+                    Task {
+                        await DeepLinkRouter.handle(
+                            url,
+                            appState: appState,
+                            referralCapture: referralCapture
+                        )
+                    }
                 }
         }
         .onChange(of: scenePhase) { _, newPhase in

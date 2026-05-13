@@ -1,0 +1,22 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": [
+          "5VCH6937XM.com.kolaleaf.app"
+        ],
+        "components": [
+          {
+            "/": "/transfer/*",
+            "comment": "Open a transfer detail in the iOS app."
+          },
+          {
+            "/": "/refer/*",
+            "comment": "Capture referral context from a shared invite."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -212,6 +212,60 @@ final class AppStateTests: XCTestCase {
     }
 }
 
+// MARK: - DeepLinkRouter
+
+@MainActor
+final class DeepLinkRouterTests: XCTestCase {
+
+    private func makeAppState() -> AppState {
+        let defaults = UserDefaults(suiteName: "kola.deeplink.\(UUID().uuidString)")!
+        return AppState(defaults: defaults, arguments: [])
+    }
+
+    func test_customSchemeTransfer_opensActivityDetail() async {
+        let appState = makeAppState()
+        let url = URL(string: "kolaleaf://transfer/tx_123")!
+
+        await DeepLinkRouter.handle(url, appState: appState)
+
+        XCTAssertEqual(appState.selectedTab, .activity)
+        XCTAssertEqual(appState.pendingTransferDetailId, "tx_123")
+    }
+
+    func test_universalLinkTransfer_opensActivityDetail() async {
+        let appState = makeAppState()
+        let url = URL(string: "https://kolaleaf.com.au/transfer/tx_456")!
+
+        await DeepLinkRouter.handle(url, appState: appState)
+
+        XCTAssertEqual(appState.selectedTab, .activity)
+        XCTAssertEqual(appState.pendingTransferDetailId, "tx_456")
+    }
+
+    func test_universalLinkReferral_capturesInviteToken() async throws {
+        let appState = makeAppState()
+        let keychain = Keychain(service: "com.kolaleaf.deeplink.\(UUID().uuidString)")
+        let capture = ReferralCapture(keychain: keychain)
+        let url = URL(string: "https://www.kolaleaf.com.au/refer/kola_a3f9b7c2d8e1")!
+
+        await DeepLinkRouter.handle(url, appState: appState, referralCapture: capture)
+
+        let stored = try await keychain.loadString(forKey: KeychainKeys.referralToken)
+        XCTAssertEqual(stored, "kola_a3f9b7c2d8e1")
+        XCTAssertNil(appState.pendingTransferDetailId)
+    }
+
+    func test_unknownUniversalLink_isIgnored() async {
+        let appState = makeAppState()
+        let url = URL(string: "https://kolaleaf.com.au/admin/transfers")!
+
+        await DeepLinkRouter.handle(url, appState: appState)
+
+        XCTAssertEqual(appState.selectedTab, .send)
+        XCTAssertNil(appState.pendingTransferDetailId)
+    }
+}
+
 // MARK: - TransferStatus Codable
 
 final class TransferStatusCodableTests: XCTestCase {

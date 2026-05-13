@@ -1,3 +1,42 @@
+# Review Request -- Wave 2a Phase 11.5 Privacy + Universal Links Slice
+
+**Ready for Review:** YES for this local slice. External WhatsApp allowlist and deployed AASA verification remain Phase 14/ops blockers.
+**Date:** 2026-05-14
+**Branch / worktree:** `feat/ios-swiftui-app` in `/Users/ao/Documents/projects/Kolaleaf`
+
+## Summary
+
+This Phase 11.5 slice closes the local privacy/deep-link gaps that did not require provider access. Lock-screen Live Activity rendering now gates through a redacted card when SwiftUI reports redaction or reduced luminance, hiding recipient and amount copy. The iOS deep-link router now handles scoped HTTPS universal links for `/transfer/{id}` and `/refer/{token}` in addition to the existing `kolaleaf://transfer/{id}` scheme. Referral universal links feed the existing `ReferralCapture` keychain-backed service. The public AASA file is added with exact `/transfer/*` and `/refer/*` components only.
+
+## Files Changed In This Slice
+
+- `ios/Kolaleaf/App/DeepLinkRouter.swift` — adds HTTPS universal-link dispatch for transfer detail and referral capture.
+- `ios/Kolaleaf/App/KolaleafApp.swift` — passes `ReferralCapture` into the async router from `.onOpenURL`.
+- `ios/KolaleafWidgets/LockScreenCard.swift` — adds `LockScreenCardPrivacyGate`, redacted lock-screen card, and redacted copy helpers.
+- `ios/KolaleafWidgets/TransferLiveActivity.swift` — uses the privacy gate for lock-screen/banner rendering.
+- `ios/KolaleafTests/App/AppStateTests.swift` — adds `DeepLinkRouterTests`.
+- `ios/KolaleafWidgetsTests/KolaleafTransferAttributesTests.swift` — adds lock-screen redaction tests.
+- `public/.well-known/apple-app-site-association` — scoped AASA file.
+- `tests/app/aasa.test.ts` — asserts AASA path scope.
+- `handoff/BUILD-LOG.md` — records Phase 11 closeout and Phase 11.5 slice state.
+
+## Validation
+
+- `npm test -- --run tests/app/aasa.test.ts` — 1 file / 1 test passed.
+- `npx tsc --noEmit` — passed.
+- `npm run build` — passed.
+- `xcodebuild test -project ios/Kolaleaf.xcodeproj -scheme Kolaleaf -destination 'platform=iOS Simulator,id=8E29B537-7E71-44A8-BA8D-F221CF7CBC97' -only-testing:KolaleafTests/DeepLinkRouterTests -only-testing:KolaleafWidgetsTests/KolaleafTransferAttributesTests` — 20 tests passed.
+- `xcodebuild -project ios/Kolaleaf.xcodeproj -scheme Kolaleaf -configuration Debug -destination 'platform=iOS,name=iPhone' -derivedDataPath ios/build/DerivedData build` — passed.
+- `xcrun devicectl device install app --device iPhone.coredevice.local .../Kolaleaf.app` — installed `com.kolaleaf.app`.
+- `xcrun devicectl device process launch --device iPhone.coredevice.local com.kolaleaf.app` — launched.
+
+## Remaining Review Scope
+
+- Phase 11.5 still needs App Attest/device-attestation backend integration, new-device alert UX, Sentry PII scrubber, notification preferences, and compliance-copy review.
+- Phase 14 still needs deployed AASA verification and Meta/WhatsApp allowlist confirmation.
+
+---
+
 # Review Request -- Wave 2a Phase 11 Security / 2FA
 
 **Ready for Review:** YES for local Phase 11 implementation. Production KYC 500 remains operationally blocked on Railway/Sumsub access.

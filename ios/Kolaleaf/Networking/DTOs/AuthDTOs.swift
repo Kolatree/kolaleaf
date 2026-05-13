@@ -195,7 +195,7 @@ public struct CompleteRegistrationResponse: Decodable, Sendable {
 /// so a stringly-typed typo at any call site is unrepresentable.
 /// Construct only via `email(_:)` / `phone(_:)` statics; the
 /// memberwise init takes the enum so the type can't escape.
-public struct LoginIdentifier: Codable, Sendable {
+public struct LoginIdentifier: Codable, Sendable, Hashable {
     public let type: IdentifierKind
     public let value: String
 

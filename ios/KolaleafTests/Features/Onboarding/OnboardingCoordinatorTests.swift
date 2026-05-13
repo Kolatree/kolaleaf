@@ -9,8 +9,8 @@ final class OnboardingTransitionTests: XCTestCase {
 
     // MARK: - From Welcome
 
-    func test_fromWelcome_register_goesToEmailEntry() {
-        XCTAssertEqual(OnboardingTransition.fromWelcome(action: .register), .emailEntry)
+    func test_fromWelcome_register_goesToPhoneEntry() {
+        XCTAssertEqual(OnboardingTransition.fromWelcome(action: .register), .phoneEntry)
     }
 
     func test_fromWelcome_signIn_goesToSignIn() {
@@ -28,7 +28,23 @@ final class OnboardingTransitionTests: XCTestCase {
 
     func test_fromEmailOTP_carriesEmailToRegistrationDetails() {
         let r = OnboardingTransition.fromEmailOTP(verifiedEmail: "user@example.com")
-        XCTAssertEqual(r, .registrationDetails(email: "user@example.com"))
+        XCTAssertEqual(
+            r,
+            .registrationDetails(identifier: LoginIdentifier.email("user@example.com"))
+        )
+    }
+
+    // MARK: - From PhoneOTP
+
+    func test_fromPhoneOTP_carriesPhoneToRegistrationDetails() {
+        guard case .success(let phone) = PhoneNumber.parseE164("+61400000000") else {
+            return XCTFail("PhoneNumber.parseE164 regression for +61400000000")
+        }
+        let r = OnboardingTransition.fromPhoneOTP(verifiedPhone: phone)
+        XCTAssertEqual(
+            r,
+            .registrationDetails(identifier: LoginIdentifier.phone("+61400000000"))
+        )
     }
 
     // MARK: - From SignIn 202
@@ -61,7 +77,7 @@ final class OnboardingTransitionTests: XCTestCase {
         seen.insert(.emailEntry)
         seen.insert(.emailOTP(email: "a@b.com"))
         seen.insert(.emailOTP(email: "a@b.com"))   // duplicate
-        seen.insert(.registrationDetails(email: "a@b.com"))
+        seen.insert(.registrationDetails(identifier: LoginIdentifier.email("a@b.com")))
         seen.insert(.kycIntro)
         XCTAssertEqual(seen.count, 6, "duplicate emailOTP route with same email should collapse")
     }

@@ -84,6 +84,10 @@ public enum AuthEndpoints {
         public let method: HTTPMethod = .post
         public let body: (any Encodable & Sendable)?
 
+        public init(_ request: LoginRequest) {
+            self.body = request
+        }
+
         public init(email: String, password: String) {
             self.body = LoginRequest(email: email, password: password)
         }

@@ -23,7 +23,7 @@ public enum OnboardingRoute: Hashable, Sendable {
     case phoneEntry
     /// Phase 11A-5 phone-first: 6-digit SMS code entry.
     case phoneOTP(phone: PhoneNumber)
-    case registrationDetails(email: String)
+    case registrationDetails(identifier: LoginIdentifier)
     case kycIntro
     /// Phase 2 · U22a — pre-warm shell shown briefly before mounting Sumsub.
     case kycPreWarm(session: KYCSession)
@@ -54,11 +54,14 @@ extension KYCSession: Hashable {
 /// Tested in isolation; SwiftUI views invoke these via the coordinator.
 public enum OnboardingTransition {
 
-    /// Welcome → either Sign-in or Email entry, by user choice.
+    /// Welcome → either Sign-in or Phone entry, by user choice.
+    /// D4c: "Get started" defaults to the phone-first rail; the email
+    /// fallback is reached via PhoneEntryView's "or use email instead"
+    /// link rather than from the Welcome screen.
     public static func fromWelcome(action: WelcomeAction) -> OnboardingRoute {
         switch action {
         case .signIn:    return .signIn
-        case .register:  return .emailEntry
+        case .register:  return .phoneEntry
         }
     }
 
@@ -71,7 +74,7 @@ public enum OnboardingTransition {
 
     /// Email OTP verified → registration details (collect name + password + AU address).
     public static func fromEmailOTP(verifiedEmail email: String) -> OnboardingRoute {
-        .registrationDetails(email: email)
+        .registrationDetails(identifier: LoginIdentifier.email(email))
     }
 
     /// Phone entry → Phone OTP with the typed `PhoneNumber`. The value
@@ -80,6 +83,15 @@ public enum OnboardingTransition {
     /// boundary inside `PhoneOTPViewModel`.
     public static func fromPhoneEntry(codeSentTo phone: PhoneNumber) -> OnboardingRoute {
         .phoneOTP(phone: phone)
+    }
+
+    /// Phone OTP verified → registration details carrying the E.164
+    /// phone identifier. Mirrors `fromEmailOTP` for the SMS rail;
+    /// `RegistrationDetailsViewModel` reads the discriminated
+    /// `LoginIdentifier` to choose the wire shape for
+    /// /auth/complete-registration.
+    public static func fromPhoneOTP(verifiedPhone phone: PhoneNumber) -> OnboardingRoute {
+        .registrationDetails(identifier: LoginIdentifier.phone(phone.e164))
     }
 
     /// Sign-in 202 → bounce to OTP for the given email so the user can verify.
@@ -165,7 +177,7 @@ public struct OnboardingCoordinator: View {
         switch entry {
         case .welcome:
             WelcomeView(
-                onGetStarted: { path.append(.emailEntry) },
+                onGetStarted: { path.append(.phoneEntry) },
                 onSignIn:     { path.append(.signIn) }
             )
         case .kycIntro:
@@ -182,7 +194,7 @@ public struct OnboardingCoordinator: View {
             // Defensive: pushing welcome onto the stack is a no-op shape;
             // we never expect to land here, but render the same view.
             WelcomeView(
-                onGetStarted: { path.append(.emailEntry) },
+                onGetStarted: { path.append(.phoneEntry) },
                 onSignIn:     { path.append(.signIn) }
             )
 
@@ -250,41 +262,13 @@ public struct OnboardingCoordinator: View {
                 phone: phone,
                 api: apiClient,
                 onVerified: {
-                    // 4-lens review fix (silent-failure-hunter +
-                    // code-reviewer): the previous placeholder pushed
-                    // .emailEntry, which would have been a silent UX
-                    // regression for any user who reached this path
-                    // (they'd just verified a phone number and would
-                    // be asked for an email with no explanation). The
-                    // assertionFailure makes the gap LOUD in debug
-                    // and dev builds so QA catches a future Welcome
-                    // flip that accidentally exposes the unfinished
-                    // journey. In release the fallback is still
-                    // .emailEntry — better degraded UX than a crash
-                    // on a real user device.
-                    //
-                    // Closes when:
-                    //   • backend /complete-registration accepts a
-                    //     phone-identified pending claim;
-                    //   • iOS RegistrationDetailsViewModel widens to
-                    //     accept a LoginIdentifier instead of an
-                    //     email-only identifier;
-                    //   • a `.registrationDetailsPhone(phone:)` route
-                    //     (or a single discriminated route) replaces
-                    //     this placeholder.
-                    assertionFailure(
-                        "Phone-first registration is not yet wired. " +
-                        "/complete-registration must accept a phone " +
-                        "identifier before this route can reach a real " +
-                        "next-step. Hold .phoneEntry behind WelcomeView."
-                    )
-                    path.append(.emailEntry)
+                    path.append(OnboardingTransition.fromPhoneOTP(verifiedPhone: phone))
                 }
             ))
 
-        case .registrationDetails(let email):
+        case .registrationDetails(let identifier):
             RegistrationDetailsView(vm: RegistrationDetailsViewModel(
-                email: email,
+                identifier: identifier,
                 api: apiClient,
                 onRegistered: { user in
                     appState.currentUser = user

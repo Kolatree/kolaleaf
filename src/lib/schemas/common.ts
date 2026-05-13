@@ -237,9 +237,18 @@ export const IdentifierTypeValue = z.enum([
   "google",
 ]);
 
+// Phone variant uses the generic E.164 primitive (`PhoneE164`) rather
+// than the AU-only `Phone` to keep the canonical identifier shape
+// aligned with the route-level discriminated identifiers
+// (auth/login _schemas.ts, auth/complete-registration _schemas.ts,
+// auth/send-code/verify-code _schemas.ts). The AU-only check belongs
+// at the application boundary (PhoneNumber.parse, country-aware trunk
+// stripping), not at the shared schema layer — corridor expansion
+// (NZ, GB, ...) is a config change and the shared primitive must not
+// veto it silently.
 export const IdentifierInput = z.discriminatedUnion("type", [
   z.object({ type: z.literal("email"), value: Email }),
-  z.object({ type: z.literal("phone"), value: Phone }),
+  z.object({ type: z.literal("phone"), value: PhoneE164 }),
   z.object({ type: z.literal("apple"), value: z.string().min(1) }),
   z.object({ type: z.literal("google"), value: z.string().min(1) }),
 ]);

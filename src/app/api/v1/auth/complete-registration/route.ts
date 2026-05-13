@@ -41,38 +41,44 @@ const TX_TIMEOUT_MS = 15_000;
 const TX_MAX_WAIT_MS = 5_000;
 
 type Reason = CompleteRegistrationReason;
+type Rail = "email" | "phone";
 
-// Wire-format ('email' | 'phone') → Prisma IdentifierType enum
-// ('EMAIL' | 'PHONE'). Kept tiny and local so the branch sites read
-// cleanly without re-deriving the mapping each time.
-function kindOf(type: "email" | "phone"): "EMAIL" | "PHONE" {
-  return type === "phone" ? "PHONE" : "EMAIL";
+interface RailCopy {
+  /** Returned when no PendingVerification row exists for the rail. */
+  verifyToContinue: string;
+  /** Returned when the row exists but `verifiedAt` is still null. */
+  verifyFirst: string;
+  /** Returned when the claim window (`claimExpiresAt`) has passed. */
+  claimExpired: string;
+  /** Returned on the race-guard / idempotent-retry-mismatch 409s. */
+  alreadyRegistered: string;
 }
 
-// User-facing copy is rail-aware: the verify step is "verify your
-// email" / "verify your phone", and the already-registered conflict
-// surfaces "Email already registered" / "Phone number already
-// registered". Keep the email strings byte-identical to pre-widening
-// so existing client surfaces and audit-log greps don't regress.
-function copyFor(type: "email" | "phone") {
-  if (type === "phone") {
-    return {
-      verifyToContinue: "Verify your phone to continue",
-      verifyFirst: "Please verify your phone first",
-      claimExpired: "Your verification expired. Please start again.",
-      alreadyRegistered: "Phone number already registered",
-    };
-  }
-  return {
+// Rail-keyed user-facing copy. Promoted from an inline object literal
+// to a top-of-file table so new rails (Apple, Google) land as a new
+// row rather than another branch inside copyFor(). Strings are kept
+// byte-identical to pre-widening (D4a) so existing client surfaces,
+// test assertions, and audit-log greps don't regress.
+const RAIL_COPY: Record<Rail, RailCopy> = {
+  email: {
     verifyToContinue: "Verify your email to continue",
     verifyFirst: "Please verify your email first",
     claimExpired: "Your verification expired. Please start again.",
     alreadyRegistered: "Email already registered",
-  };
-}
+  },
+  phone: {
+    verifyToContinue: "Verify your phone to continue",
+    verifyFirst: "Please verify your phone first",
+    claimExpired: "Your verification expired. Please start again.",
+    alreadyRegistered: "Phone number already registered",
+  },
+};
 
-function fail(reason: Reason, message: string, status: number) {
-  return jsonError(reason, message, status);
+// Wire-format ('email' | 'phone') → Prisma IdentifierType enum
+// ('EMAIL' | 'PHONE'). Kept tiny and local so the branch sites read
+// cleanly without re-deriving the mapping each time.
+function kindOf(type: Rail): "EMAIL" | "PHONE" {
+  return type === "phone" ? "PHONE" : "EMAIL";
 }
 
 export async function POST(request: Request) {
@@ -91,13 +97,13 @@ export async function POST(request: Request) {
 
   const identifierValue = identifier.value;
   const dbKind = kindOf(identifier.type);
-  const copy = copyFor(identifier.type);
+  const copy = RAIL_COPY[identifier.type];
 
   // Password complexity (character-class mix) isn't length-only and
   // isn't captured by the Zod schema — keep the existing helper.
   const pwCheck = validatePasswordComplexity(password);
   if (!pwCheck.ok) {
-    return fail("weak_password", pwCheck.error, 400);
+    return jsonError("weak_password" satisfies Reason, pwCheck.error, 400);
   }
 
   // Unicode NFKC + letter-required guard. Rejects zero-width-only
@@ -111,8 +117,8 @@ export async function POST(request: Request) {
     fullNameNormalized.length < 2 ||
     !HAS_LETTER_RE.test(fullNameNormalized)
   ) {
-    return fail(
-      "name_letters_required",
+    return jsonError(
+      "name_letters_required" satisfies Reason,
       "Full name must contain at least one letter",
       400,
     );
@@ -145,7 +151,11 @@ export async function POST(request: Request) {
       !u.passwordHash ||
       !(await verifyPassword(pwCheck.password, u.passwordHash))
     ) {
-      return fail("already_registered", copy.alreadyRegistered, 409);
+      return jsonError(
+        "already_registered" satisfies Reason,
+        copy.alreadyRegistered,
+        409,
+      );
     }
     const session = await prisma.session.create({
       data: buildSessionData(u.id, ip, userAgent),
@@ -164,7 +174,10 @@ export async function POST(request: Request) {
       { user: { id: u.id, fullName: u.fullName } },
       { status: 201 },
     );
-    response.headers.set("Set-Cookie", setSessionCookie(session.token));
+    // .append (not .set): sibling routes (auth/login) emit multiple
+    // Set-Cookie headers so any cookie ops the caller layers on top
+    // don't get silently overwritten.
+    response.headers.append("Set-Cookie", setSessionCookie(session.token));
     return response;
   }
 
@@ -312,11 +325,17 @@ export async function POST(request: Request) {
       { user: { id: result.user.id, fullName: result.user.fullName } },
       { status: 201 },
     );
-    response.headers.set("Set-Cookie", setSessionCookie(result.session.token));
+    // .append (not .set): mirrors auth/login so additional Set-Cookie
+    // headers (e.g. cookie clears layered by middleware) coexist
+    // instead of clobbering the session cookie.
+    response.headers.append(
+      "Set-Cookie",
+      setSessionCookie(result.session.token),
+    );
     return response;
   } catch (err) {
     if (err instanceof CompleteError) {
-      return fail(err.reason, err.message, err.statusCode);
+      return jsonError(err.reason, err.message, err.statusCode);
     }
     // P2002 — unique-constraint violation. Under concurrent requests
     // one tx wins and the other hits P2002 on UserIdentifier.identifier
@@ -326,13 +345,17 @@ export async function POST(request: Request) {
       err instanceof Prisma.PrismaClientKnownRequestError &&
       err.code === "P2002"
     ) {
-      return fail("already_registered", copy.alreadyRegistered, 409);
+      return jsonError(
+        "already_registered" satisfies Reason,
+        copy.alreadyRegistered,
+        409,
+      );
     }
     log("error", "auth.complete-registration.failed", {
       reason: "unexpected",
       error: err instanceof Error ? err.message : String(err),
     });
-    return fail("unexpected", "Registration failed", 500);
+    return jsonError("unexpected" satisfies Reason, "Registration failed", 500);
   }
 }
 

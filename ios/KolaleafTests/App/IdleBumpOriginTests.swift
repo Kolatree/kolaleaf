@@ -65,25 +65,17 @@ final class IdleBumpOriginTests: XCTestCase {
                        "system-success hook must NOT reset the idle clock")
     }
 
-    // MARK: - Endpoint origin spot-checks
-
-    func test_pushTokenRegister_origin_isSystem() {
-        let req = RegisterPushTokenRequest(
-            deviceToken: "ab", kind: .liveActivity,
-            bundleId: "x", device: nil
-        )
-        XCTAssertEqual(PushTokenEndpoints.Register(req).origin, .system)
-    }
-
-    func test_backgroundPoll_origin_isSystem() {
-        XCTAssertEqual(TransfersEndpoints.GetForBackgroundPoll(id: "tx").origin, .system)
-    }
-
-    func test_userDrivenGet_origin_isUser() {
-        XCTAssertEqual(TransfersEndpoints.Get(id: "tx").origin, .user)
-    }
-
     // MARK: - Helpers
+    //
+    // Phase 10C iter-1 · CA-2004 / API-2006: origin is no longer a
+    // property on the endpoint. The deleted spot-checks asserted
+    // `endpoint.origin == .system|.user` against
+    // `PushTokenEndpoints.Register`, `TransfersEndpoints.Get`, and the
+    // (now-removed) `TransfersEndpoints.GetForBackgroundPoll`. Call-
+    // site origin routing is covered by `APIClientOriginTests`
+    // (`test_send_default_isUserOrigin`,
+    //  `test_send_with_system_origin_recordsSystem`,
+    //  `test_get_with_system_origin_firesSystemHook`).
 
     private func makeAuthed() -> AppState {
         let s = AppState(defaults: defaults, arguments: [])

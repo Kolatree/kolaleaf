@@ -22,6 +22,12 @@ public actor FakeAPIClient: AuthAPI {
         public let path: String
         public let method: HTTPMethod
         public let bodyData: Data?
+        /// CA-2004 / API-2006 (Phase 10C iter-1): origin is now
+        /// passed at the call site. Recording it here lets the
+        /// origin-routing tests assert that background pollers /
+        /// PushTokenSync ship `.system` while user-driven flows
+        /// default to `.user`.
+        public let origin: RequestOrigin
     }
 
     private var stagedResults: [String: Any] = [:]
@@ -91,6 +97,13 @@ public actor FakeAPIClient: AuthAPI {
     }
 
     public func send<E: Endpoint>(_ endpoint: E) async -> Result<E.Response, APIError> {
+        await send(endpoint, origin: .user)
+    }
+
+    public func send<E: Endpoint>(
+        _ endpoint: E,
+        origin: RequestOrigin
+    ) async -> Result<E.Response, APIError> {
         // Use fully-qualified type name for the staged-results lookup
         // so nested endpoint types with identical leaf names (e.g.
         // `RecipientsEndpoints.List` vs `TransfersEndpoints.List`)
@@ -109,7 +122,8 @@ public actor FakeAPIClient: AuthAPI {
             typeName: String(describing: E.self),
             path: endpoint.path,
             method: endpoint.method,
-            bodyData: bodyData
+            bodyData: bodyData,
+            origin: origin
         ))
 
         // Honor any staged delay so tests can observe in-flight state.

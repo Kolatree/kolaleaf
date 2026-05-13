@@ -60,13 +60,32 @@ public actor APIClient {
         //     • `HTTPCookieStorage.sharedCookieStorage(forGroupContainerIdentifier:)`
         //        (per-app-group; isolated from .shared and from the
         //        widget's own private jar unless the widget opts in via
-        //        the same identifier — which is fine here since the
-        //        widget is ours and Part B's PushTokenSync wants to
-        //        share the session)
+        //        the same identifier — which is the case here since the
+        //        widget's entitlement file lists `group.com.kolaleaf.shared`)
         //
         //   We pick the App-Group-scoped option using the same identifier
         //   the widget extension already declares
         //   (`group.com.kolaleaf.shared` — see project.yml entitlements).
+        //
+        // ADV-P10B-C9 (Phase 10C iter-1) — threat-model decision:
+        //   The widget extension entitlement declaration means the
+        //   widget *could* read this cookie jar if a future code change
+        //   added networking imports to the widget target. Removing the
+        //   App Group from the widget would force an App Store
+        //   entitlement-profile re-review (see comment in
+        //   `KolaleafWidgets.entitlements`), so we keep the group and
+        //   instead enforce widget purity mechanically:
+        //   `KolaleafTests/Security/WidgetCookieIsolationTests.swift`
+        //   fails the build if any widget Swift file references
+        //   `URLSession`, `URLRequest`, `HTTPCookieStorage`, or
+        //   `URLSessionConfiguration`. With no networking surface
+        //   reachable from the widget process, the theoretical cookie
+        //   exposure is inert — the widget can hold a copy of the
+        //   cookies but has no API to use them.
+        //
+        //   Option (b) — keep App-Group + add per-call user-binding
+        //   token — is heavier and was rejected in favour of the
+        //   mechanical-enforcement approach.
         let cookieStorage = HTTPCookieStorage.sharedCookieStorage(
             forGroupContainerIdentifier: "group.com.kolaleaf.shared"
         )
@@ -106,8 +125,22 @@ public actor APIClient {
         cookieStorage.cookies?.forEach { cookieStorage.deleteCookie($0) }
     }
 
-    /// Sends an endpoint and decodes the response.
+    /// Sends an endpoint and decodes the response. Convenience
+    /// overload — defaults `origin` to `.user`. Background pollers and
+    /// the push-token sync MUST call the `(_:origin:)` overload with
+    /// `.system` so their successes don't reset the user-touch idle
+    /// clock (CA-2004 / API-2006 / ADV-P10B-W7).
     public func send<E: Endpoint>(_ endpoint: E) async -> Result<E.Response, APIError> {
+        await send(endpoint, origin: .user)
+    }
+
+    /// Sends an endpoint and decodes the response. `origin` selects
+    /// which success hook fires on 2xx — `.user` resets the idle
+    /// clock; `.system` does not.
+    public func send<E: Endpoint>(
+        _ endpoint: E,
+        origin: RequestOrigin
+    ) async -> Result<E.Response, APIError> {
         let request: URLRequest
         do {
             request = try builder.makeRequest(for: endpoint)
@@ -171,13 +204,13 @@ public actor APIClient {
             // that fails for non-EmptyResponse types.
             if data.isEmpty {
                 if E.Response.self == EmptyResponse.self {
-                    await fireSuccessHook(origin: endpoint.origin)
+                    await fireSuccessHook(origin: origin)
                     return .success(EmptyResponse() as! E.Response)
                 }
                 // 204 with a non-Empty Response type — try parsing an empty object so
                 // DTOs with all-optional fields decode cleanly.
                 if let empty = try? decoder.decode(E.Response.self, from: Data("{}".utf8)) {
-                    await fireSuccessHook(origin: endpoint.origin)
+                    await fireSuccessHook(origin: origin)
                     return .success(empty)
                 }
                 return .failure(.decode("Empty body for non-EmptyResponse endpoint"))
@@ -185,7 +218,7 @@ public actor APIClient {
 
             do {
                 let decoded = try decoder.decode(E.Response.self, from: data)
-                await fireSuccessHook(origin: endpoint.origin)
+                await fireSuccessHook(origin: origin)
                 return .success(decoded)
             } catch {
                 return .failure(.decode(error.localizedDescription))

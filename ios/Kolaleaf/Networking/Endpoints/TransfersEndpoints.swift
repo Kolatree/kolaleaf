@@ -30,29 +30,21 @@ public enum TransfersEndpoints {
         }
     }
 
-    /// `GET /api/v1/transfers/:id` — single transfer fetch used by
-    /// user-driven flows (transaction-detail open, pull-to-refresh,
-    /// expired-transfer load). Origin defaults to `.user` so the
-    /// success counts as activity for the idle clock.
+    /// `GET /api/v1/transfers/:id` — single transfer fetch.
+    ///
+    /// CA-2004 / API-2006 / ADV-P10B-W7 (Phase 10C iter-1): the
+    /// earlier sibling `GetForBackgroundPoll` is gone — origin now
+    /// rides at the call site (`api.send(Get(id:), origin: .system)`)
+    /// instead of being baked into the endpoint type. User-driven
+    /// flows (transaction-detail open, pull-to-refresh) rely on the
+    /// `.user` default overload; background pollers
+    /// (ProcessingTimelineViewModel, FloatPausedViewModel,
+    /// LiveTransferPollingService, LiveActivityService.reconcile)
+    /// pass `.system` explicitly.
     public struct Get: Endpoint {
         public typealias Response = TransferEnvelope
         public let path: String
         public let method: HTTPMethod = .get
-
-        public init(id: String) {
-            self.path = "/api/v1/transfers/\(id)"
-        }
-    }
-
-    /// Identical to `Get(id:)` but marked `.system` origin (Phase 10 ·
-    /// U76b4) so background polling loops (ProcessingTimelineViewModel,
-    /// FloatPausedViewModel, LiveTransferPollingService) don't reset
-    /// the user-touch idle clock and mask a walked-away user.
-    public struct GetForBackgroundPoll: Endpoint {
-        public typealias Response = TransferEnvelope
-        public let path: String
-        public let method: HTTPMethod = .get
-        public let origin: RequestOrigin = .system
 
         public init(id: String) {
             self.path = "/api/v1/transfers/\(id)"

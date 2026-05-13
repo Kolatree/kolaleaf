@@ -34,6 +34,16 @@ struct KolaleafApp: App {
     /// phase triggers a refresh through this instance so Activity and
     /// Recipients stay coherent.
     @State private var syncService: SyncService
+    /// Phase 10C iter-1 · CA-2007: one LiveActivityService for the
+    /// whole process, owning the `transferId → ActivityKit UUID` map
+    /// and the start / apply / end lifecycle for transfer Live
+    /// Activities. Constructed in init so the WindowGroup body can
+    /// inject it via Environment and call `reconcileOnLaunch()` on
+    /// cold start (ADV-P10B-C3). `forceReauth()` ends every in-flight
+    /// activity BEFORE clearing cookies so a logged-out user can't
+    /// leave activities rendering on the lock screen for the next
+    /// user of a shared device (ADV-P10B-C10).
+    @State private var liveActivityService: LiveActivityService
 
     @Environment(\.scenePhase) private var scenePhase
     /// Phase 2 review fix (P1, adversarial adv-003): wire APNs callbacks so
@@ -63,6 +73,12 @@ struct KolaleafApp: App {
         let stack = SwiftDataStack(inMemory: false)
         _swiftDataStack = State(initialValue: stack)
         _syncService = State(initialValue: SyncService(api: initialClient, stack: stack))
+        // Phase 10C iter-1 · CA-2007: single LiveActivityService for the
+        // whole process. `api` is wired so `reconcileOnLaunch()` can
+        // refetch each survivor activity's current backend status
+        // (ADV-P10B-C3) and end ones that advanced to a terminal state
+        // while the app was suspended.
+        _liveActivityService = State(initialValue: LiveActivityService(api: initialClient))
         // Bind the AppDelegate so APNs device-token callbacks reach the
         // service. Done in init so the binding is in place before the first
         // `registerForRemoteNotifications()` call.
@@ -89,7 +105,18 @@ struct KolaleafApp: App {
                 .environment(\.bankStore, bankStore)
                 .environment(\.swiftDataStack, swiftDataStack)
                 .environment(\.syncService, syncService)
+                .environment(\.liveActivityService, liveActivityService)
                 .task { await wireAPIClientHooks() }
+                // Phase 10C iter-1 · CA-2007 + ADV-P10B-C3: reconcile
+                // the persisted `transferId → activityId` map against
+                // `Activity.activities` on cold start. Drops stale
+                // entries the OS killed while we were suspended and
+                // re-fetches each survivor's backend status so a
+                // transfer that completed-while-suspended ends instead
+                // of staying frozen on the lock screen. Idempotent —
+                // a `.task` on the WindowGroup body fires once per
+                // process lifetime.
+                .task { await liveActivityService.reconcileOnLaunch() }
                 // ADV-P10A-C1 (Phase 10A iter-2): handle the
                 // `kolaleaf://` scheme registered in project.yml. The
                 // Live Activity surfaces deep-link into the app via
@@ -144,6 +171,30 @@ struct KolaleafApp: App {
     }
 
     private func forceReauth() async {
+        // Phase 10C iter-1 · ADV-P10B-C10: end every in-flight Live
+        // Activity BEFORE we destroy keychain / cookies. The OS keeps
+        // Live Activities running until we explicitly dismiss them or
+        // their 8-hour wall-clock TTL elapses — on a shared device,
+        // the next user logging in could otherwise see the previous
+        // user's transfer surfaces stranded on the lock screen.
+        // `endAllActivities()` cancels every pending grace timer up
+        // front so a COMPLETED-grace dismissal can't race the
+        // immediate ends issued here. Backend revocation of the
+        // per-activity APNS tokens is a backend concern — see the
+        // `// TODO(ADV-P10B-C10-backend)` marker in `PushTokenSync.swift`.
+        //
+        // Phase 10C iter-2 · ADV-P10C-W5: race `endAllActivities()`
+        // against a 2-second budget so an ActivityKit hang (observed
+        // on iOS 18.0–18.1 betas) cannot block the keychain / cookie
+        // wipe. If we miss the dismissal window, surfaces TTL out at
+        // the 8-hour boundary at worst — far better than leaving the
+        // user holding a valid session on a shared device.
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await liveActivityService.endAllActivities() }
+            group.addTask { try? await Task.sleep(nanoseconds: 2_000_000_000) }
+            _ = await group.next()
+            group.cancelAll()
+        }
         // r2 fix #9: clear local credentials FIRST so a stale cookie cannot be replayed
         // even if /auth/logout fails (offline, 5xx, captive portal). The network call
         // is best-effort.

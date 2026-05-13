@@ -42,15 +42,17 @@ public enum PushTokenEndpoints {
     /// `POST /api/v1/account/push-tokens` — registers an APNs token (backend
     /// follow-up). EmptyResponse so the call is idempotent and a 204 + 200-empty
     /// both decode cleanly.
+    ///
+    /// CA-2004 / API-2006 / ADV-P10B-W7 (Phase 10C iter-1): origin
+    /// is no longer a property on the endpoint. Call sites
+    /// (`PushTokenSync`, `PushPermissionService`) pass
+    /// `origin: .system` explicitly so push-token registration does
+    /// NOT reset the user-touch idle clock.
     public struct Register: Endpoint {
         public typealias Response = EmptyResponse
         public let path = "/api/v1/account/push-tokens"
         public let method: HTTPMethod = .post
         public let body: (any Encodable & Sendable)?
-        /// Phase 10 · U76b4: push-token registration is background
-        /// plumbing (APNs token roll-over, Live Activity per-activity
-        /// pushTokenUpdates). Must NOT reset the user-touch idle clock.
-        public let origin: RequestOrigin = .system
 
         public init(_ request: RegisterPushTokenRequest) {
             self.body = request

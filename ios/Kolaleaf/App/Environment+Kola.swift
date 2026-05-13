@@ -80,6 +80,17 @@ private struct SyncServiceKey: EnvironmentKey {
     static let defaultValue: SyncService? = nil
 }
 
+// Phase 10C iter-1 · CA-2007: a single LiveActivityService instance is
+// constructed at KolaleafApp's init and threaded through the environment
+// so transfer flows can drive start / apply / end against a shared
+// activity store. Default is `nil` — features that read the env
+// without an injected service must no-op (matches the SyncService
+// pattern). The production wire-up calls `reconcileOnLaunch()` once
+// per cold start from the WindowGroup body.
+private struct LiveActivityServiceKey: EnvironmentKey {
+    static let defaultValue: LiveActivityService? = nil
+}
+
 public extension EnvironmentValues {
     var apiClient: AuthAPI {
         get { self[APIClientKey.self] }
@@ -108,5 +119,13 @@ public extension EnvironmentValues {
     var syncService: SyncService? {
         get { self[SyncServiceKey.self] }
         set { self[SyncServiceKey.self] = newValue }
+    }
+    /// Phase 10C iter-1 · CA-2007: app-root LiveActivityService. Nil
+    /// when not injected — feature code must guard against the
+    /// optional so previews/tests can render without ActivityKit.
+    @MainActor
+    var liveActivityService: LiveActivityService? {
+        get { self[LiveActivityServiceKey.self] }
+        set { self[LiveActivityServiceKey.self] = newValue }
     }
 }

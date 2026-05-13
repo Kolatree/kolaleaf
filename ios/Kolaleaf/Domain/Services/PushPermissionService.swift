@@ -129,7 +129,11 @@ public actor PushPermissionService {
             bundleId: bundleId,
             device: device
         )
-        let result = await api.send(PushTokenEndpoints.Register(req))
+        // CA-2004 / API-2006 / ADV-P10B-W7 (Phase 10C iter-1): push-
+        // token registration is background plumbing — pass `.system`
+        // explicitly so the 2xx success doesn't reset the user-touch
+        // idle clock.
+        let result = await api.send(PushTokenEndpoints.Register(req), origin: .system)
         return result.map { _ in () }
     }
 }

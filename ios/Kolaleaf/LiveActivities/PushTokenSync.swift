@@ -79,6 +79,26 @@ public final class PushTokenSync {
         }
     }
 
+    // TODO(ADV-P10B-C10-backend): when the user signs out, the
+    // per-activity APNS tokens we registered against their session
+    // should be revoked server-side so a future push to a stranded
+    // token can't deliver to a different user on the same device.
+    // The call belongs here so PushTokenSync owns the full token
+    // lifecycle:
+    //
+    //     await api.send(
+    //         PushTokenEndpoints.RevokeAll(kind: .liveActivity),
+    //         origin: .system
+    //     )
+    //
+    // Blocking on: backend endpoint `DELETE /api/v1/account/push-tokens
+    // ?kind=live_activity`. The marker is grep-able so the iOS-side
+    // wire-up lands the moment the backend ships. Until that lands,
+    // `KolaleafApp.forceReauth()` calls
+    // `LiveActivityService.endAllActivities()` to dismiss every
+    // surface locally — the OS stops delivering pushes to ended
+    // activities even if the backend still holds the token.
+
     // MARK: - Internals
 
     /// Hex-encode + POST. Idempotent on the wire (backend dedupes by
@@ -96,7 +116,11 @@ public final class PushTokenSync {
             bundleId: bundleId,
             device: device
         )
-        let result = await api.send(PushTokenEndpoints.Register(req))
+        // CA-2004 / API-2006 / ADV-P10B-W7 (Phase 10C iter-1): push-
+        // token registration is background plumbing — pass `.system`
+        // explicitly so the 2xx success doesn't reset the user-touch
+        // idle clock.
+        let result = await api.send(PushTokenEndpoints.Register(req), origin: .system)
         switch result {
         case .success:
             lastPostedToken[activityId] = hex

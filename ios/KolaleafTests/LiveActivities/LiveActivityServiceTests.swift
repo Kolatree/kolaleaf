@@ -1,11 +1,17 @@
-// LiveActivityServiceTests.swift  (Phase 10B · U71)
+// LiveActivityServiceTests.swift  (Phase 10B · U71 → Phase 10C iter-1
+//                                   · CA-2001)
 //
 // Coverage for the start / update / end orchestration. The real
 // `Activity<KolaleafTransferAttributes>` is unmockable, so the service
 // is exercised against `FakeLiveActivityAdapter` which records every
 // call. ActivityKit is invoked from the production adapter only.
+//
+// CA-2001: the `LiveActivityAdapter` protocol now speaks the service-
+// layer `LiveActivityContent` DTO instead of ActivityKit's
+// `ActivityContent<>`. This test file no longer needs
+// `import ActivityKit` — the inversion is what `LiveActivityContent`
+// exists for.
 
-import ActivityKit
 import XCTest
 @testable import Kolaleaf
 
@@ -223,7 +229,7 @@ actor FakeLiveActivityAdapter: LiveActivityAdapter {
     @MainActor
     func request(
         attributes: KolaleafTransferAttributes,
-        content: ActivityContent<KolaleafTransferAttributes.ContentState>
+        content: LiveActivityContent
     ) async throws -> LiveActivityHandle {
         await bumpRequest()
         let id = "act_\(attributes.transferId)_\(await currentRequestCount())"

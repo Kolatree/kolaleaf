@@ -96,7 +96,7 @@ final class ProcessingTimelineViewModelTests: XCTestCase {
     func test_pollOnce_success_appliesStatus() async {
         let api = FakeAPIClient()
         await api.stageSuccess(
-            TransfersEndpoints.GetForBackgroundPoll.self,
+            TransfersEndpoints.Get.self,
             TransferEnvelope(transfer: makeTransfer(status: .awaitingAud))
         )
         let vm = ProcessingTimelineViewModel(
@@ -112,7 +112,7 @@ final class ProcessingTimelineViewModelTests: XCTestCase {
 
     func test_pollOnce_failure_setsLastError() async {
         let api = FakeAPIClient()
-        await api.stageFailure(TransfersEndpoints.GetForBackgroundPoll.self, .transport("offline"))
+        await api.stageFailure(TransfersEndpoints.Get.self, .transport("offline"))
         let vm = ProcessingTimelineViewModel(
             api: api,
             transferId: "txn_001",
@@ -125,7 +125,7 @@ final class ProcessingTimelineViewModelTests: XCTestCase {
     func test_terminalStatus_stopsPolling() async {
         let api = FakeAPIClient()
         await api.stageSuccess(
-            TransfersEndpoints.GetForBackgroundPoll.self,
+            TransfersEndpoints.Get.self,
             TransferEnvelope(transfer: makeTransfer(status: .completed))
         )
         let vm = ProcessingTimelineViewModel(

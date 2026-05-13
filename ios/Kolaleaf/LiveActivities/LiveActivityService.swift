@@ -1,4 +1,7 @@
-// LiveActivityService.swift  (Phase 10B · U71)
+// LiveActivityService.swift  (Phase 10B · U71 → Phase 10C iter-1 ·
+//                              CA-2001 / CA-2007 / CA-2004 /
+//                              ADV-P10B-C1 / ADV-P10B-C2 / ADV-P10B-C3 /
+//                              ADV-P10B-C10)
 //
 // App-side wrapper around `Activity<KolaleafTransferAttributes>`. Owns
 // the start / update / end lifecycle for transfer Live Activities and
@@ -13,6 +16,12 @@
 // from a fake in tests while the production adapter forwards to the
 // real ActivityKit surface.
 //
+// CA-2001 (Phase 10C iter-1): the service surface speaks a service-
+// layer `LiveActivityContent` DTO instead of ActivityKit's
+// `ActivityContent<>`. `RealLiveActivityAdapter` is the ONLY file
+// that imports ActivityKit; tests can build fakes without depending
+// on the framework.
+//
 // Idempotency contract:
 //   • `start(for:recipient:)` — if an activity already exists for
 //     `transfer.id` (same `attributes.transferId`), the call updates
@@ -22,7 +31,10 @@
 //     invocations after the activity is gone are no-ops.
 //   • `reconcileOnLaunch()` — drops stale UserDefaults entries whose
 //     activity is no longer in `Activity.activities` (the OS killed
-//     it). Survivors are re-indexed.
+//     it). Survivors are re-indexed AND re-fetched against
+//     `GET /api/v1/transfers/:id` (ADV-P10B-C3) so a transfer that
+//     advanced to a terminal state while the app was suspended ends
+//     instead of staying frozen on the lock screen.
 
 @preconcurrency import ActivityKit
 import Foundation
@@ -110,21 +122,28 @@ public actor UserDefaultsActivityIdStore: ActivityIdStoring {
 
 /// Thin Sendable handle for an in-flight Live Activity. Wraps either a
 /// real `Activity<KolaleafTransferAttributes>` or a test fake.
+///
+/// CA-2001: the closure signatures take the service-layer DTO
+/// (`LiveActivityContent`) and `ActivityKitDismissalPolicy` so this
+/// type carries no ActivityKit symbols on its public surface. The
+/// production adapter translates to `ActivityContent<>` /
+/// `ActivityUIDismissalPolicy` inside the closures; tests construct
+/// the handle without importing ActivityKit at all.
 public struct LiveActivityHandle: Sendable {
     public let id: String
     public let transferId: String
     public let pushToken: String?
     /// Boxed update closure — captures a reference to the underlying
     /// activity so callers can push a fresh state.
-    private let _update: @Sendable (ActivityContent<KolaleafTransferAttributes.ContentState>) async -> Void
-    private let _end: @Sendable (ActivityContent<KolaleafTransferAttributes.ContentState>?, ActivityUIDismissalPolicy) async -> Void
+    private let _update: @Sendable (LiveActivityContent) async -> Void
+    private let _end: @Sendable (LiveActivityContent?, ActivityKitDismissalPolicy) async -> Void
 
     public init(
         id: String,
         transferId: String,
         pushToken: String?,
-        update: @escaping @Sendable (ActivityContent<KolaleafTransferAttributes.ContentState>) async -> Void,
-        end: @escaping @Sendable (ActivityContent<KolaleafTransferAttributes.ContentState>?, ActivityUIDismissalPolicy) async -> Void
+        update: @escaping @Sendable (LiveActivityContent) async -> Void,
+        end: @escaping @Sendable (LiveActivityContent?, ActivityKitDismissalPolicy) async -> Void
     ) {
         self.id = id
         self.transferId = transferId
@@ -134,29 +153,39 @@ public struct LiveActivityHandle: Sendable {
     }
 
     @MainActor
-    public func update(_ content: ActivityContent<KolaleafTransferAttributes.ContentState>) async {
+    public func update(_ content: LiveActivityContent) async {
         await _update(content)
     }
 
     @MainActor
-    public func end(_ content: ActivityContent<KolaleafTransferAttributes.ContentState>?, dismissalPolicy: ActivityUIDismissalPolicy) async {
+    public func end(_ content: LiveActivityContent?, dismissalPolicy: ActivityKitDismissalPolicy) async {
         await _end(content, dismissalPolicy)
     }
 }
 
 /// Surface the service depends on. Production wires `RealLiveActivityAdapter`
 /// (forwards to ActivityKit). Tests inject `FakeLiveActivityAdapter`.
+///
+/// CA-2001: `request(...)` takes the service DTO so this protocol
+/// carries no ActivityKit symbols. The production adapter translates
+/// at the boundary.
 public protocol LiveActivityAdapter: Sendable {
     func currentActivities() async -> [LiveActivityHandle]
 
     @MainActor
     func request(
         attributes: KolaleafTransferAttributes,
-        content: ActivityContent<KolaleafTransferAttributes.ContentState>
+        content: LiveActivityContent
     ) async throws -> LiveActivityHandle
 }
 
 /// Production adapter — forwards to `Activity<KolaleafTransferAttributes>`.
+/// CA-2001: this is the ONLY file that should import ActivityKit
+/// outside of `KolaleafTransferAttributes.swift` (which owns the
+/// attribute conformance) and `PushTokenSync.swift` (which subscribes
+/// to `Activity.pushTokenUpdates`). The adapter translates between
+/// the service-layer `LiveActivityContent` and ActivityKit's
+/// `ActivityContent<>` here at the boundary.
 public struct RealLiveActivityAdapter: LiveActivityAdapter {
     public init() {}
 
@@ -167,11 +196,11 @@ public struct RealLiveActivityAdapter: LiveActivityAdapter {
     @MainActor
     public func request(
         attributes: KolaleafTransferAttributes,
-        content: ActivityContent<KolaleafTransferAttributes.ContentState>
+        content: LiveActivityContent
     ) async throws -> LiveActivityHandle {
         let activity = try Activity<KolaleafTransferAttributes>.request(
             attributes: attributes,
-            content: content,
+            content: Self.toAK(content),
             pushType: .token
         )
         return Self.handle(for: activity)
@@ -194,15 +223,23 @@ public struct RealLiveActivityAdapter: LiveActivityAdapter {
                 guard let live = Activity<KolaleafTransferAttributes>.activities.first(where: { $0.id == id }) else {
                     return
                 }
-                await live.update(content)
+                await live.update(Self.toAK(content))
             },
             end: { content, policy in
                 guard let live = Activity<KolaleafTransferAttributes>.activities.first(where: { $0.id == id }) else {
                     return
                 }
-                await live.end(content, dismissalPolicy: policy)
+                await live.end(content.map { Self.toAK($0) }, dismissalPolicy: policy.ui)
             }
         )
+    }
+
+    /// Bridge from the service-layer DTO to ActivityKit. Owned here so
+    /// no other file in the project has to know about the translation.
+    private static func toAK(
+        _ content: LiveActivityContent
+    ) -> ActivityContent<KolaleafTransferAttributes.ContentState> {
+        ActivityContent(state: content.state, staleDate: content.staleDate)
     }
 
     static func hex(from data: Data) -> String {
@@ -219,6 +256,13 @@ public final class LiveActivityService {
     private let store: any ActivityIdStoring
     private let adapter: any LiveActivityAdapter
     private let eta: any ETAProvider
+    /// ADV-P10B-C3: optional API surface used by `reconcileOnLaunch`
+    /// to re-fetch the current backend status of survivor activities
+    /// so a transfer that advanced to a terminal state while the app
+    /// was suspended ends instead of staying frozen on the lock
+    /// screen. nil-safe so previews / tests that don't care about
+    /// reconcile-time refetch can still construct the service.
+    private let api: (any AuthAPI)?
     private let now: @Sendable () -> Date
 
     /// Per-transferId in-memory cache of the last issued handle so we
@@ -236,18 +280,34 @@ public final class LiveActivityService {
     /// next, and lets `end(...)` / `endAllActivities()` cancel pending
     /// timers on logout.
     private var graceTasks: [String: Task<Void, Never>] = [:]
+    /// ADV-P10B-C1 + ADV-P10C-C2 (iter-2): per-transferId in-flight
+    /// `start(...)` Task. The first caller stores its Task here so
+    /// concurrent siblings can `await task.value` directly — they see
+    /// the same token on success AND see the same throw on failure.
+    /// The earlier `Set<String>` + `waitForStart` polling missed both
+    /// "first caller errored" and "first caller returned nil"
+    /// signals, leaving siblings stranded.
+    private var inFlightStarts: [String: Task<LiveActivityToken?, Error>] = [:]
+    /// ADV-P10C-C3 (iter-2): set when `endAllActivities()` is in
+    /// progress. A `start(...)` whose `adapter.request(...)` resumes
+    /// after `endAllActivities` snapshotted state checks this flag
+    /// and ends the just-created activity immediately rather than
+    /// stranding it on the lock screen for the next user.
+    private var isTerminating: Bool = false
 
     public init(
         stateMap: any LiveActivityStateMapping = LiveActivityStateMap.shared,
         store: any ActivityIdStoring = UserDefaultsActivityIdStore(),
         adapter: any LiveActivityAdapter = RealLiveActivityAdapter(),
         eta: any ETAProvider = DefaultETAProvider(),
+        api: (any AuthAPI)? = nil,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.stateMap = stateMap
         self.store = store
         self.adapter = adapter
         self.eta = eta
+        self.api = api
         self.now = now
     }
 
@@ -261,8 +321,39 @@ public final class LiveActivityService {
     /// nil return replaces the earlier empty-string-activityId sentinel
     /// so call sites must explicitly handle "nothing to start" instead
     /// of receiving a token whose `activityId` was the empty string.
+    ///
+    /// ADV-P10B-C1 + ADV-P10C-C2 (iter-2): concurrent `start(...)`
+    /// calls for the same transferId share a single in-flight Task.
+    /// The first caller installs the Task; siblings `await
+    /// task.value`. Both success (LiveActivityToken?) and failure
+    /// (thrown error) propagate to every concurrent sibling.
+    ///
+    /// ADV-P10C-C3 (iter-2): if `endAllActivities()` is in progress
+    /// when `adapter.request(...)` resumes, the freshly-created
+    /// activity is ended immediately so logout cannot strand a
+    /// just-started activity on the lock screen for the next user.
     @discardableResult
     public func start(for transfer: TransferShape, recipient: Recipient) async throws -> LiveActivityToken? {
+        if let existingTask = inFlightStarts[transfer.id] {
+            // Sibling caller — wait for the first caller's Task to
+            // complete. `value` rethrows the original error if the
+            // first caller's `adapter.request(...)` threw.
+            return try await existingTask.value
+        }
+
+        let task: Task<LiveActivityToken?, Error> = Task { [recipient] in
+            try await self.performStart(for: transfer, recipient: recipient)
+        }
+        inFlightStarts[transfer.id] = task
+        defer { inFlightStarts.removeValue(forKey: transfer.id) }
+        return try await task.value
+    }
+
+    /// Body of `start(...)` extracted so the in-flight Task can wrap
+    /// it once and siblings share the result. NEVER call this
+    /// directly — always go through `start(for:recipient:)` which
+    /// owns the dedup contract.
+    private func performStart(for transfer: TransferShape, recipient: Recipient) async throws -> LiveActivityToken? {
         let attributes = KolaleafTransferAttributes(
             transferId: transfer.id,
             recipientName: recipient.fullName,
@@ -295,7 +386,7 @@ public final class LiveActivityService {
             lastUpdate: now(),
             stageLabel: stageLabel
         )
-        let content = ActivityContent(state: contentState, staleDate: nil)
+        let content = LiveActivityContent(state: contentState, staleDate: nil)
 
         // Idempotency: scan currentActivities for an existing one and
         // update instead of double-starting.
@@ -307,6 +398,17 @@ public final class LiveActivityService {
         }
 
         let handle = try await adapter.request(attributes: attributes, content: content)
+
+        // ADV-P10C-C3: if `endAllActivities()` is in progress
+        // (logout fired while we were awaiting ActivityKit), end the
+        // just-created activity immediately rather than storing it.
+        // `endAllActivities` already snapshotted state before we
+        // wrote, so the safety net depends on this check.
+        if isTerminating {
+            await handle.end(nil, dismissalPolicy: .immediate)
+            return nil
+        }
+
         handles[transfer.id] = handle
         await store.set(activityId: handle.id, forTransferId: transfer.id)
         // A fresh start cancels any previous "ended" guard for this id
@@ -317,13 +419,27 @@ public final class LiveActivityService {
 
     /// Apply a backend status update. Routes to `Activity.update(...)`
     /// or `Activity.end(...)` per the `LiveActivityStateMap` table.
+    ///
+    /// ADV-P10B-C2: COMPLETED schedules the 60s grace dismissal ONLY
+    /// after `pushUpdate(...)` confirms it found a handle and pushed
+    /// the update. An apply-without-prior-start is now a no-op end-
+    /// to-end — no orphan grace timer firing a `.end` against a
+    /// non-existent activity.
     public func apply(_ transfer: TransferShape, recipientName: String = "") async {
         switch stateMap.action(for: transfer.status) {
         case .update(let band):
-            await pushUpdate(transferId: transfer.id, band: band, status: transfer.status, recipientName: recipientName)
+            let pushed = await pushUpdate(
+                transferId: transfer.id,
+                band: band,
+                status: transfer.status,
+                recipientName: recipientName
+            )
             // COMPLETED gets a 60-second grace so the user sees the
             // green check before the activity disappears (per spec).
-            if transfer.status == .completed {
+            // ADV-P10B-C2: ONLY schedule grace when pushUpdate
+            // actually found a handle and updated — otherwise grace
+            // would race on a non-existent activity.
+            if transfer.status == .completed && pushed {
                 await endAfterGrace(transferId: transfer.id, seconds: 60)
             }
         case .end:
@@ -354,7 +470,7 @@ public final class LiveActivityService {
             handle = await findExistingHandle(transferId: transferId)
         }
         if let handle {
-            await handle.end(nil, dismissalPolicy: dismissalPolicy.ui)
+            await handle.end(nil, dismissalPolicy: dismissalPolicy)
         }
         handles.removeValue(forKey: transferId)
         await store.remove(transferId: transferId)
@@ -364,22 +480,46 @@ public final class LiveActivityService {
     /// ADV-P10B-C10: invoked from `KolaleafApp.forceReauth()` BEFORE
     /// keychain / cookie clears so a user logging out cannot leave
     /// orphaned activities rendering on the lock screen for the next
-    /// user of a shared device.
+    /// user of a shared device. Cancels every pending grace timer up
+    /// front so a COMPLETED-grace can't race the immediate ends issued
+    /// below.
+    ///
+    /// ADV-P10C-C3 (iter-2): sets `isTerminating = true` and awaits
+    /// any in-flight `start(...)` Tasks so a `start` whose
+    /// `adapter.request(...)` was in flight when logout fired can't
+    /// strand a fresh activity. Each in-flight `start` checks
+    /// `isTerminating` after `adapter.request` resumes and ends the
+    /// just-created activity immediately.
     public func endAllActivities() async {
+        isTerminating = true
+        defer { isTerminating = false }
+
         // Cancel every grace timer up front so a pending COMPLETED
         // grace dismissal can't race the immediate ends we issue below.
         for (_, task) in graceTasks { task.cancel() }
         graceTasks.removeAll()
 
-        // Snapshot persisted ids so iteration isn't invalidated by the
-        // store mutations performed inside `end(...)`.
-        let persisted = await store.all()
-        for (transferId, _) in persisted {
-            await end(transferId: transferId, dismissalPolicy: .immediate)
+        // ADV-P10C-C3: wait for every in-flight `start(...)` Task to
+        // complete before snapshotting state. The Task body sees
+        // `isTerminating == true` after `adapter.request(...)` and
+        // ends the freshly-created activity itself, so by the time
+        // `task.value` returns, the activity is either already ended
+        // (returns nil) or never reached the store. The outer loop
+        // catches starts that began during our await above.
+        while !inFlightStarts.isEmpty {
+            let pending = Array(inFlightStarts.values)
+            for task in pending { _ = try? await task.value }
         }
-        // Defensive: also end any in-memory handle the persisted map
-        // didn't know about.
-        for transferId in handles.keys {
+
+        // Snapshot persisted ids so iteration isn't invalidated by the
+        // store mutations performed inside `end(...)`. Snapshot in-
+        // memory handle ids too — the persisted map may not know
+        // about handles started this session before the mapping was
+        // stored.
+        let persisted = await store.all()
+        let inMemoryIds = Set(handles.keys)
+        let allIds = inMemoryIds.union(persisted.keys)
+        for transferId in allIds {
             await end(transferId: transferId, dismissalPolicy: .immediate)
         }
     }
@@ -387,6 +527,12 @@ public final class LiveActivityService {
     /// Reconcile the persisted `transferId → activityId` map against
     /// the OS's live `Activity.activities` list. Drops stale entries
     /// the OS killed while we were suspended, re-indexes survivors.
+    ///
+    /// ADV-P10B-C3: for each survivor activity, fetch the current
+    /// transfer state from the backend and apply it. A survivor
+    /// whose backend state has advanced to a terminal status while
+    /// the app was suspended is ended via `apply(...)` so the lock-
+    /// screen doesn't keep rendering a stale "still in flight" surface.
     public func reconcileOnLaunch() async {
         let live = await adapter.currentActivities()
         let liveByTransferId = Dictionary(uniqueKeysWithValues: live.map { ($0.transferId, $0) })
@@ -396,6 +542,23 @@ public final class LiveActivityService {
         for (transferId, _) in persisted {
             if let handle = liveByTransferId[transferId] {
                 fresh[transferId] = handle
+            } else if inFlightStarts[transferId] != nil {
+                // ADV-P10C-C1 (iter-2): a concurrent `start(...)` is
+                // mid-flight for this id. Its `adapter.request(...)`
+                // hasn't resumed yet so it isn't in `liveByTransferId`,
+                // but the store may or may not have its mapping (race
+                // with the post-request write). Don't reap — the start
+                // will publish authoritative state when it resumes.
+                if let existing = handles[transferId] {
+                    fresh[transferId] = existing
+                }
+            } else if let existing = handles[transferId] {
+                // ADV-P10C-C1 (iter-2): a `start(...)` that completed
+                // between our `adapter.currentActivities()` and
+                // `store.all()` snapshots is in `handles` but not in
+                // our `live` snapshot. The in-memory handle is
+                // authoritative — keep it rather than reaping.
+                fresh[transferId] = existing
             } else {
                 // OS reaped the activity — drop the stale id mapping.
                 await store.remove(transferId: transferId)
@@ -412,16 +575,64 @@ public final class LiveActivityService {
         // Reset ended guards for survivors so future transitions still
         // run cleanly.
         endedTransferIds = endedTransferIds.intersection(Set(persisted.keys).subtracting(fresh.keys))
+
+        // ADV-P10B-C3: refetch each survivor's backend status. A
+        // survivor whose status advanced to a terminal value while
+        // the app was suspended is ended here via `apply(...)` (the
+        // state-map routes terminal statuses to `.end`).
+        //
+        // ADV-P10C-W1 (iter-2): bound concurrency at 3 so a user with
+        // a large survivor backlog doesn't fire N sequential 15-second
+        // requests on cold start and compete with user-driven traffic
+        // for the HTTP/2 socket. 3 is a heuristic — Apple caps Live
+        // Activities at 8 concurrent per app, so N is bounded but the
+        // tail of slow networks dominates cold-start time.
+        guard let api else {
+            #if DEBUG
+            print("[LiveActivityService] reconcileOnLaunch skipped refetch — api is nil (CA-3002). \(fresh.count) survivor(s) will keep their last-known state until the next backend push.")
+            #endif
+            return
+        }
+        await withTaskGroup(of: Void.self) { group in
+            var inflight = 0
+            let maxConcurrent = 3
+            for (transferId, _) in fresh {
+                if inflight >= maxConcurrent {
+                    await group.next()
+                    inflight -= 1
+                }
+                group.addTask { [api] in
+                    let result = await api.send(
+                        TransfersEndpoints.Get(id: transferId),
+                        origin: .system
+                    )
+                    if case .success(let envelope) = result {
+                        await self.apply(envelope.transfer)
+                    }
+                }
+                inflight += 1
+            }
+        }
     }
 
     // MARK: - Internals
 
+    /// Push a content-state update to the activity for `transferId`.
+    /// Returns `true` when a handle was found and `update(...)` was
+    /// invoked; `false` when no activity exists for this id (e.g.
+    /// `apply(...)` arrived before any `start(...)`, or the OS
+    /// reaped the activity).
+    ///
+    /// ADV-P10B-C2: callers gate side-effects (grace timers, etc.)
+    /// on the return value so an apply-without-prior-start does not
+    /// schedule a phantom dismissal.
+    @discardableResult
     private func pushUpdate(
         transferId: String,
         band: LiveActivityState,
         status: TransferStatus,
         recipientName: String
-    ) async {
+    ) async -> Bool {
         let resolvedHandle: LiveActivityHandle?
         if let cached = handles[transferId] {
             resolvedHandle = cached
@@ -433,7 +644,7 @@ public final class LiveActivityService {
             // it). The first AWAITING_AUD push is supposed to start one
             // via `start(for:recipient:)` — apply(...) without a prior
             // start is a no-op.
-            return
+            return false
         }
         handles[transferId] = handle
 
@@ -447,7 +658,8 @@ public final class LiveActivityService {
             lastUpdate: now(),
             stageLabel: stageLabel
         )
-        await handle.update(ActivityContent(state: contentState, staleDate: nil))
+        await handle.update(LiveActivityContent(state: contentState, staleDate: nil))
+        return true
     }
 
     private func endAfterGrace(transferId: String, seconds: TimeInterval) async {
@@ -473,6 +685,14 @@ public final class LiveActivityService {
         }
         graceTasks[transferId] = task
     }
+
+    // ADV-P10C-C2 (iter-2): the earlier `waitForStart` polling helper
+    // was removed. Concurrent `start(...)` callers now share a single
+    // Task via `inFlightStarts: [String: Task<LiveActivityToken?, Error>]`
+    // and `await task.value` directly — success returns the token,
+    // failure rethrows, and "no surface to start" returns nil
+    // unambiguously (vs the prior conflation of nil ≡ either no
+    // surface OR 1-second timeout).
 
     private func findExistingHandle(transferId: String) async -> LiveActivityHandle? {
         if let cached = handles[transferId] { return cached }

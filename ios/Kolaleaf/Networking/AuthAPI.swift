@@ -12,7 +12,29 @@ import Foundation
 
 public protocol AuthAPI: Sendable {
     func send<E: Endpoint>(_ endpoint: E) async -> Result<E.Response, APIError>
+    /// CA-2004 / API-2006 / ADV-P10B-W7 (Phase 10C iter-1): origin
+    /// is passed at the call site so the same endpoint type can be
+    /// reused by user-driven flows AND background pollers without
+    /// forking the type. The default-arg overload above forwards
+    /// `.user` here.
+    func send<E: Endpoint>(
+        _ endpoint: E,
+        origin: RequestOrigin
+    ) async -> Result<E.Response, APIError>
 }
+
+// ADV-P10C-C4 (Phase 10C iter-2): the default-forwarding extension was
+// removed because it created a silent-divergence hazard. Any future
+// `AuthAPI` conformer that implemented only `send(_:)` would receive a
+// default `send(_:origin:)` that DISCARDS origin and forwards to
+// `send(_:)` — making the origin-routing test pass against a fake
+// while production code via `APIClient` correctly routed the origin.
+// `PushTokenSync` posting with `.system` would silently bump the
+// user-touch idle clock for any non-`APIClient` conformer.
+//
+// Removing the default forces every conformer (production `APIClient`,
+// test `FakeAPIClient`, future fakes) to implement both requirements
+// explicitly — the build breaks loudly when a conformer is incomplete.
 
 extension APIClient: AuthAPI {}
 

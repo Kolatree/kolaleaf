@@ -26,6 +26,13 @@ public enum HTTPMethod: String, Sendable {
 ///   the idle window — otherwise the user could be away and the
 ///   force-reauth at 14 minutes would never fire because polling kept
 ///   the clock fresh.
+///
+/// CA-2004 / API-2006 / ADV-P10B-W7 (Phase 10C iter-1): origin is
+/// passed at the CALL SITE — `api.send(endpoint, origin: .system)`
+/// — instead of being a property on `Endpoint`. The same `Get(id:)`
+/// endpoint can now be used by user-driven flows (which default to
+/// `.user`) and background pollers (which explicitly opt in to
+/// `.system`) without forking the type.
 public enum RequestOrigin: Sendable, Hashable, CaseIterable {
     case user
     case system
@@ -44,20 +51,12 @@ public protocol Endpoint: Sendable {
     var body: (any Encodable & Sendable)? { get }
     /// Headers added on top of `APIClient` defaults (Content-Type, Accept, cookies).
     var extraHeaders: [String: String] { get }
-    /// Whether this call counts as user activity for idle-clock purposes
-    /// (Phase 10 · U76b4). Defaults to `.user`; system endpoints
-    /// (push-token sync, fallback polls) override to `.system`.
-    var origin: RequestOrigin { get }
 }
 
 public extension Endpoint {
     var query: [URLQueryItem] { [] }
     var body: (any Encodable & Sendable)? { nil }
     var extraHeaders: [String: String] { [:] }
-    /// Default: every endpoint is user-driven unless it explicitly
-    /// declares otherwise. New endpoints don't need to think about
-    /// this — only background pollers and push-token registers do.
-    var origin: RequestOrigin { .user }
 }
 
 /// Sentinel response type for endpoints whose backend returns an empty body

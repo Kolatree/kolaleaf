@@ -236,7 +236,14 @@ public struct RealLiveActivityAdapter: LiveActivityAdapter {
 
     /// Bridge from the service-layer DTO to ActivityKit. Owned here so
     /// no other file in the project has to know about the translation.
-    private static func toAK(
+    ///
+    /// API-3004 / OO-3002 (iter-3): exposure raised from `private` to
+    /// `internal` so `RealLiveActivityAdapterTests` can lock the
+    /// round-trip contract for every `LiveActivityContent` field. If a
+    /// future field (e.g. `relevanceScore`, `alertConfiguration`) is
+    /// added to `LiveActivityContent`, the round-trip test fails
+    /// loudly until this translator is updated.
+    static func toAK(
         _ content: LiveActivityContent
     ) -> ActivityContent<KolaleafTransferAttributes.ContentState> {
         ActivityContent(state: content.state, staleDate: content.staleDate)
@@ -271,7 +278,15 @@ public final class LiveActivityService {
     private var handles: [String: LiveActivityHandle] = [:]
     /// Per-transferId guard so `apply(...)` for a terminal status calls
     /// `end(...)` exactly once even if invoked multiple times.
+    ///
+    /// ADV-P10C-S2 (iter-3): bounded to `endedTransferIdsCap` entries
+    /// via FIFO eviction so a multi-day process lifetime can't grow
+    /// the set unboundedly. `endedTransferIdsOrder` carries the
+    /// insertion order; mutate via `markEnded(_:)` / `unmarkEnded(_:)`
+    /// so the two structures stay coherent.
     private var endedTransferIds: Set<String> = []
+    private var endedTransferIdsOrder: [String] = []
+    private static let endedTransferIdsCap = 256
     /// Per-transferId in-flight grace timer (CA-2005). When a transfer
     /// reaches `.completed` we end the activity after a 60-second grace
     /// so the user sees the green check. Multiple back-to-back COMPLETED
@@ -353,6 +368,10 @@ public final class LiveActivityService {
     /// it once and siblings share the result. NEVER call this
     /// directly — always go through `start(for:recipient:)` which
     /// owns the dedup contract.
+    ///
+    /// OO-3001 (iter-3): orchestration only — band resolution and
+    /// content construction live in `resolveBand(for:)` and
+    /// `buildContent(status:recipientName:band:)`.
     private func performStart(for transfer: TransferShape, recipient: Recipient) async throws -> LiveActivityToken? {
         let attributes = KolaleafTransferAttributes(
             transferId: transfer.id,
@@ -363,30 +382,17 @@ public final class LiveActivityService {
             exchangeRate: transfer.exchangeRate
         )
 
-        // Status must map to an updatable band; CREATED / unknown have
-        // no surface yet (the first AWAITING_AUD push starts one).
-        let band: LiveActivityState
-        switch stateMap.action(for: transfer.status) {
-        case .update(let s):
-            band = s
-        case .end, .ignore:
+        guard let band = resolveBand(for: transfer.status) else {
             // Pre-AWAITING_AUD or terminal — there is nothing to start.
             // Caller should drive the activity once the backend
             // transitions the transfer to a renderable band.
             return nil
         }
-
-        let stageLabel = LiveActivityStageLabels.label(
-            for: transfer.status,
-            recipientName: recipient.fullName
+        let content = buildContent(
+            status: transfer.status,
+            recipientName: recipient.fullName,
+            band: band
         )
-        let contentState = KolaleafTransferAttributes.ContentState(
-            state: band,
-            etaSeconds: eta.etaSeconds(for: band),
-            lastUpdate: now(),
-            stageLabel: stageLabel
-        )
-        let content = LiveActivityContent(state: contentState, staleDate: nil)
 
         // Idempotency: scan currentActivities for an existing one and
         // update instead of double-starting.
@@ -413,7 +419,7 @@ public final class LiveActivityService {
         await store.set(activityId: handle.id, forTransferId: transfer.id)
         // A fresh start cancels any previous "ended" guard for this id
         // so a re-started transfer can complete cleanly later.
-        endedTransferIds.remove(transfer.id)
+        unmarkEnded(transfer.id)
         return LiveActivityToken(activityId: handle.id, transferId: transfer.id)
     }
 
@@ -461,7 +467,7 @@ public final class LiveActivityService {
         graceTasks.removeValue(forKey: transferId)?.cancel()
 
         guard !endedTransferIds.contains(transferId) else { return }
-        endedTransferIds.insert(transferId)
+        markEnded(transferId)
 
         let handle: LiveActivityHandle?
         if let cached = handles[transferId] {
@@ -573,8 +579,10 @@ public final class LiveActivityService {
         }
         handles = fresh
         // Reset ended guards for survivors so future transitions still
-        // run cleanly.
+        // run cleanly. ADV-P10C-S2 (iter-3): trim the FIFO order array
+        // to mirror the Set so the bounded structure stays coherent.
         endedTransferIds = endedTransferIds.intersection(Set(persisted.keys).subtracting(fresh.keys))
+        endedTransferIdsOrder = endedTransferIdsOrder.filter { endedTransferIds.contains($0) }
 
         // ADV-P10B-C3: refetch each survivor's backend status. A
         // survivor whose status advanced to a terminal value while
@@ -648,17 +656,15 @@ public final class LiveActivityService {
         }
         handles[transferId] = handle
 
-        let stageLabel = LiveActivityStageLabels.label(
-            for: status,
-            recipientName: recipientName
-        )
-        let contentState = KolaleafTransferAttributes.ContentState(
-            state: band,
-            etaSeconds: eta.etaSeconds(for: band),
-            lastUpdate: now(),
-            stageLabel: stageLabel
-        )
-        await handle.update(LiveActivityContent(state: contentState, staleDate: nil))
+        // OO-3001 (iter-3): content construction goes through the
+        // shared `buildContent` helper so `performStart` and
+        // `pushUpdate` can't drift on the ContentState fields they
+        // populate.
+        await handle.update(buildContent(
+            status: status,
+            recipientName: recipientName,
+            band: band
+        ))
         return true
     }
 
@@ -698,5 +704,71 @@ public final class LiveActivityService {
         if let cached = handles[transferId] { return cached }
         let live = await adapter.currentActivities()
         return live.first { $0.transferId == transferId }
+    }
+
+    // MARK: - Pure helpers (OO-3001 / ADV-P10C-S2)
+
+    /// Resolve a `TransferStatus` to the Live Activity band that
+    /// should drive its surface. Returns `nil` for statuses that
+    /// don't carry a renderable band (`.created`, `.unknown`,
+    /// terminal). Pure — no I/O, no state mutation.
+    private func resolveBand(for status: TransferStatus) -> LiveActivityState? {
+        switch stateMap.action(for: status) {
+        case .update(let band): return band
+        case .end, .ignore:     return nil
+        }
+    }
+
+    /// Build a `LiveActivityContent` payload from the projected
+    /// fields. Used by both `performStart(...)` (fresh start) and
+    /// `pushUpdate(...)` (subsequent transitions) so neither path
+    /// drifts on the ContentState fields it populates. Pure —
+    /// reads `eta`, `now`, and `LiveActivityStageLabels`.
+    ///
+    /// `staleDate: nil` matches `ActivityContent`'s "never stale"
+    /// default; if/when the service surfaces a stale-after policy,
+    /// it lands here at the single source of truth.
+    private func buildContent(
+        status: TransferStatus,
+        recipientName: String,
+        band: LiveActivityState
+    ) -> LiveActivityContent {
+        let stageLabel = LiveActivityStageLabels.label(
+            for: status,
+            recipientName: recipientName
+        )
+        let contentState = KolaleafTransferAttributes.ContentState(
+            state: band,
+            etaSeconds: eta.etaSeconds(for: band),
+            lastUpdate: now(),
+            stageLabel: stageLabel
+        )
+        return LiveActivityContent(state: contentState, staleDate: nil)
+    }
+
+    /// Record that `transferId`'s activity has been ended, with FIFO
+    /// eviction once the bounded cap is reached. ADV-P10C-S2 (iter-3).
+    /// `endedTransferIdsOrder` carries insertion order; `Set` carries
+    /// the O(1) membership check. The two structures are coherent
+    /// only when mutated through this helper.
+    private func markEnded(_ transferId: String) {
+        // Re-marking an already-ended id is a no-op (preserves the
+        // earlier insertion-order position so it's not bumped to the
+        // back of the FIFO queue by redundant calls).
+        guard !endedTransferIds.contains(transferId) else { return }
+        endedTransferIds.insert(transferId)
+        endedTransferIdsOrder.append(transferId)
+        while endedTransferIdsOrder.count > Self.endedTransferIdsCap {
+            let evicted = endedTransferIdsOrder.removeFirst()
+            endedTransferIds.remove(evicted)
+        }
+    }
+
+    /// Forget that `transferId`'s activity was ended — used when
+    /// a fresh `start(...)` re-opens an id that was previously
+    /// terminal. Keeps `endedTransferIdsOrder` in sync with the Set.
+    private func unmarkEnded(_ transferId: String) {
+        guard endedTransferIds.remove(transferId) != nil else { return }
+        endedTransferIdsOrder.removeAll { $0 == transferId }
     }
 }

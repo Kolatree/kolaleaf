@@ -1,38 +1,43 @@
-import bcrypt from 'bcrypt'
-import { prisma } from '@/lib/db/client'
-import { verifyPassword } from './password'
-import { createSession } from './sessions'
-import { logAuthEvent } from './audit'
-import { issuePendingTwoFactorChallenge, issueSmsChallenge } from './two-factor-challenge'
-import { recordSecurityAnomalyCheck } from '@/lib/security/anomaly'
-import type { RequestContext } from '@/lib/security/request-context'
+import bcrypt from "bcrypt";
+import { prisma } from "@/lib/db/client";
+import { verifyPassword } from "./password";
+import { createSession } from "./sessions";
+import { logAuthEvent } from "./audit";
+import {
+  issuePendingTwoFactorChallenge,
+  issueSmsChallenge,
+} from "./two-factor-challenge";
+import { recordSecurityAnomalyCheck } from "@/lib/security/anomaly";
+import type { RequestContext } from "@/lib/security/request-context";
 
 // Pre-computed hash to burn CPU time on failed lookups, preventing timing attacks
-const DUMMY_HASH = bcrypt.hashSync('timing-attack-dummy', 12)
+const DUMMY_HASH = bcrypt.hashSync("timing-attack-dummy", 12);
 
 interface LoginParams {
-  identifier: string
-  password: string
-  ip?: string
-  userAgent?: string
+  identifier: string;
+  password: string;
+  ip?: string;
+  userAgent?: string;
   // Optional enrichment from extractRequestContext(). When provided,
   // country + deviceFingerprintHash are persisted into the LOGIN
   // AuthEvent metadata and the anomaly detector runs after a
   // successful login (fire-and-forget — a broken compliance sink
   // cannot fail a real user login).
-  securityContext?: RequestContext
+  securityContext?: RequestContext;
 }
 
 // Narrow User — loginUser always returns a real user (throws if not found),
 // so the nullable Prisma return type is not propagated to callers.
-type LoggedInUser = NonNullable<Awaited<ReturnType<typeof prisma.user.findUnique>>>
+type LoggedInUser = NonNullable<
+  Awaited<ReturnType<typeof prisma.user.findUnique>>
+>;
 
 interface LoginResult {
-  user: LoggedInUser
-  session?: Awaited<ReturnType<typeof createSession>>
-  requires2FA: boolean
-  twoFactorMethod: 'NONE' | 'TOTP' | 'SMS'
-  challengeId?: string
+  user: LoggedInUser;
+  session?: Awaited<ReturnType<typeof createSession>>;
+  requires2FA: boolean;
+  twoFactorMethod: "NONE" | "TOTP" | "SMS";
+  challengeId?: string;
 }
 
 // Thrown when credentials are valid but the email identifier hasn't been
@@ -44,126 +49,147 @@ interface LoginResult {
 // attacker can't use it to enumerate which emails exist (wrong password
 // always returns 'Invalid credentials' from earlier in the flow).
 export class EmailNotVerifiedError extends Error {
-  readonly userId: string
-  readonly email: string
-  readonly fullName: string
+  readonly userId: string;
+  readonly email: string;
+  readonly fullName: string;
 
   constructor(opts: { userId: string; email: string; fullName: string }) {
-    super('Email not verified')
-    this.name = 'EmailNotVerifiedError'
-    this.userId = opts.userId
-    this.email = opts.email
-    this.fullName = opts.fullName
+    super("Email not verified");
+    this.name = "EmailNotVerifiedError";
+    this.userId = opts.userId;
+    this.email = opts.email;
+    this.fullName = opts.fullName;
   }
 }
 
 export async function loginUser(params: LoginParams): Promise<LoginResult> {
-  const { identifier, password, ip, userAgent, securityContext } = params
+  const { identifier, password, ip, userAgent, securityContext } = params;
 
   // Find the identifier record
   const identRecord = await prisma.userIdentifier.findUnique({
     where: { identifier },
     include: { user: true },
-  })
+  });
 
   if (!identRecord) {
     // Burn time equivalent to a real bcrypt comparison to prevent identifier enumeration
-    await bcrypt.compare(password, DUMMY_HASH)
-    throw new Error('Invalid credentials')
+    await bcrypt.compare(password, DUMMY_HASH);
+    throw new Error("Invalid credentials");
   }
 
-  const user = identRecord.user
+  const user = identRecord.user;
 
   if (!user.passwordHash) {
-    throw new Error('Invalid credentials')
+    throw new Error("Invalid credentials");
   }
 
-  const passwordValid = await verifyPassword(password, user.passwordHash)
+  const passwordValid = await verifyPassword(password, user.passwordHash);
   if (!passwordValid) {
     await logAuthEvent({
       userId: user.id,
-      event: 'LOGIN_FAILED',
+      event: "LOGIN_FAILED",
       ip,
-      metadata: { identifier, reason: 'wrong password' },
-    })
-    throw new Error('Invalid credentials')
+      metadata: { identifier, reason: "wrong password" },
+    });
+    throw new Error("Invalid credentials");
   }
 
-  // Verify-then-login gate. Password is valid AND the identifier is an
-  // unverified email → throw a typed error. The route catches it, sends a
-  // fresh code, and bounces the user to the verify screen. Only EMAIL
-  // identifiers gate; phone-only logins (when we add them) bypass.
-  if (identRecord.type === 'EMAIL' && !identRecord.verified) {
+  // Verify-then-login gate. Password is valid AND the identifier is
+  // unverified → reject. EMAIL gets a typed error so the route can
+  // 202-bounce the user to /verify-email with a fresh code. Other
+  // identifier types fail closed with the generic 'Invalid credentials'
+  // — they have no analogous post-login resend-OTP flow yet.
+  //
+  // D5 (phone-first): a PHONE UserIdentifier row only exists after
+  // /add-phone completes OTP verification, so verified:false here
+  // indicates a bug or a partial migration. Fail closed — never
+  // enumerate the identifier's existence or admit a session.
+  if (!identRecord.verified) {
+    if (identRecord.type === "EMAIL") {
+      await logAuthEvent({
+        userId: user.id,
+        event: "LOGIN_FAILED",
+        ip,
+        metadata: { identifier, reason: "email_not_verified" },
+      });
+      throw new EmailNotVerifiedError({
+        userId: user.id,
+        email: identRecord.identifier,
+        fullName: user.fullName,
+      });
+    }
     await logAuthEvent({
       userId: user.id,
-      event: 'LOGIN_FAILED',
+      event: "LOGIN_FAILED",
       ip,
-      metadata: { identifier, reason: 'email_not_verified' },
-    })
-    throw new EmailNotVerifiedError({
-      userId: user.id,
-      email: identRecord.identifier,
-      fullName: user.fullName,
-    })
+      metadata: {
+        identifier,
+        reason: "identifier_not_verified",
+        type: identRecord.type,
+      },
+    });
+    throw new Error("Invalid credentials");
   }
 
-  const method = user.twoFactorMethod
-  const requires2FA = method !== 'NONE'
+  const method = user.twoFactorMethod;
+  const requires2FA = method !== "NONE";
 
-  let challengeId: string | undefined
-  if (method === 'SMS') {
+  let challengeId: string | undefined;
+  if (method === "SMS") {
     const primaryPhone = await prisma.userIdentifier.findFirst({
-      where: { userId: user.id, type: 'PHONE', verified: true },
-      orderBy: { createdAt: 'asc' },
-    })
+      where: { userId: user.id, type: "PHONE", verified: true },
+      orderBy: { createdAt: "asc" },
+    });
     if (!primaryPhone) {
       // Enabled SMS 2FA but phone removed out-of-band — fail closed rather
       // than silently downgrade to no-2FA. User must recover via backup code.
       await logAuthEvent({
         userId: user.id,
-        event: 'LOGIN_FAILED',
+        event: "LOGIN_FAILED",
         ip,
-        metadata: { identifier, reason: 'sms_2fa_enabled_without_phone' },
-      })
-      throw new Error('2FA misconfigured — contact support')
+        metadata: { identifier, reason: "sms_2fa_enabled_without_phone" },
+      });
+      throw new Error("2FA misconfigured — contact support");
     }
-    const issued = await issueSmsChallenge(user.id, primaryPhone.identifier)
-    challengeId = issued.challengeId
-  } else if (method === 'TOTP') {
-    const issued = await issuePendingTwoFactorChallenge(user.id, 'TOTP')
-    challengeId = issued.challengeId
+    const issued = await issueSmsChallenge(user.id, primaryPhone.identifier);
+    challengeId = issued.challengeId;
+  } else if (method === "TOTP") {
+    const issued = await issuePendingTwoFactorChallenge(user.id, "TOTP");
+    challengeId = issued.challengeId;
   }
 
   if (requires2FA) {
     await logAuthEvent({
       userId: user.id,
-      event: 'LOGIN_PENDING_2FA',
+      event: "LOGIN_PENDING_2FA",
       ip,
       metadata: {
         identifier,
         twoFactorMethod: method,
-        ...(securityContext?.country ? { country: securityContext.country } : {}),
+        ...(securityContext?.country
+          ? { country: securityContext.country }
+          : {}),
         ...(securityContext?.deviceFingerprintHash
           ? { deviceFingerprintHash: securityContext.deviceFingerprintHash }
           : {}),
       },
-    })
+    });
 
-    return { user, requires2FA, twoFactorMethod: method, challengeId }
+    return { user, requires2FA, twoFactorMethod: method, challengeId };
   }
 
-  const session = await createSession(user.id, ip, userAgent)
+  const session = await createSession(user.id, ip, userAgent);
 
   // Capture the observation time BEFORE the AuthEvent write. The
   // anomaly detector uses this to filter its history query so the
   // LOGIN row we're about to write is not part of its own baseline.
   // (AUTHENTICATION_EVENT is the trigger event, it must not also be
   // the event under evaluation.)
-  const observedAt = new Date()
+  const observedAt = new Date();
 
   await logAuthEvent({
     userId: user.id,
-    event: 'LOGIN',
+    event: "LOGIN",
     ip,
     metadata: {
       identifier,
@@ -176,7 +202,7 @@ export async function loginUser(params: LoginParams): Promise<LoginResult> {
         ? { deviceFingerprintHash: securityContext.deviceFingerprintHash }
         : {}),
     },
-  })
+  });
 
   // Fire-and-forget anomaly check. `.catch` is belt-and-braces
   // against a synchronous throw that escapes the function's own
@@ -185,12 +211,12 @@ export async function loginUser(params: LoginParams): Promise<LoginResult> {
     void recordSecurityAnomalyCheck({
       userId: user.id,
       context: securityContext,
-      event: 'LOGIN',
+      event: "LOGIN",
       observedAt,
     }).catch(() => {
       /* logged inside recordSecurityAnomalyCheck */
-    })
+    });
   }
 
-  return { user, session, requires2FA, twoFactorMethod: method, challengeId }
+  return { user, session, requires2FA, twoFactorMethod: method, challengeId };
 }

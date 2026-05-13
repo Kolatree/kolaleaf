@@ -51,9 +51,15 @@ function makeRequest(body: unknown): Request {
   });
 }
 
-// Step 21: identifier is now a discriminated union, email-only today.
+// Step 21: identifier is now a discriminated union.
+// 2026-05-13 (D5): phone variant is wired end-to-end.
 const validBody = (email = "a@b.com", password = "TestPass123!") => ({
   identifier: { type: "email", value: email },
+  password,
+});
+
+const validPhoneBody = (phone = "+61400000000", password = "TestPass123!") => ({
+  identifier: { type: "phone", value: phone },
   password,
 });
 
@@ -247,5 +253,64 @@ describe("POST /api/v1/auth/login", () => {
     expect(res.status).toBe(202);
     const json = await res.json();
     expect(json.requiresVerification).toBe(true);
+  });
+
+  // -- D5: phone-branch coverage -------------------------------------
+  //
+  // The route extracts identifier.value from the discriminated union and
+  // hands a generic string to loginUser, which is polymorphic across
+  // identifier types via the UserIdentifier table's unique-value index.
+  // These tests lock the route plumbing for the phone variant: the
+  // E.164 value reaches loginUser unchanged, a successful phone login
+  // mints a session cookie, and the rate-limit / failure paths fire
+  // against the phone value the same way they do for email.
+
+  it("passes the E.164 phone (identifier.value) into loginUser", async () => {
+    mockLogin.mockResolvedValue({
+      user: { id: "u1", fullName: "Test" } as never,
+      session: { token: "tok" } as never,
+      requires2FA: false,
+      twoFactorMethod: "NONE",
+    });
+    await POST(makeRequest(validPhoneBody("+61400000000")));
+    expect(mockLogin).toHaveBeenCalledWith(
+      expect.objectContaining({ identifier: "+61400000000" }),
+    );
+  });
+
+  it("mints a session cookie on successful phone login", async () => {
+    mockLogin.mockResolvedValue({
+      user: { id: "u1", fullName: "Test" } as never,
+      session: { token: "tok" } as never,
+      requires2FA: false,
+      twoFactorMethod: "NONE",
+    });
+    const res = await POST(makeRequest(validPhoneBody()));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.user.id).toBe("u1");
+    expect(json.requires2FA).toBe(false);
+    expect(res.headers.get("Set-Cookie")).toContain("kolaleaf_session");
+  });
+
+  it("returns 401 invalid_credentials and records failure against the phone value", async () => {
+    mockLogin.mockRejectedValue(new Error("Invalid credentials"));
+    const res = await POST(
+      makeRequest(validPhoneBody("+61400000000", "wrong")),
+    );
+    expect(res.status).toBe(401);
+    const json = await res.json();
+    expect(json.reason).toBe("invalid_credentials");
+    expect(mockRecordFailure).toHaveBeenCalledWith("+61400000000", undefined);
+  });
+
+  it("returns 422 for a phone value that fails E.164 validation", async () => {
+    const res = await POST(
+      makeRequest({
+        identifier: { type: "phone", value: "0400000000" }, // no +country
+        password: "x",
+      }),
+    );
+    expect(res.status).toBe(422);
   });
 });

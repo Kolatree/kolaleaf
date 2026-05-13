@@ -104,6 +104,17 @@ public enum AuthEndpoints {
         }
     }
 
+    public struct DeviceAttestation: Endpoint {
+        public typealias Response = DeviceAttestationResponse
+        public let path = "/api/v1/auth/device-attestation"
+        public let method: HTTPMethod = .post
+        public let body: (any Encodable & Sendable)?
+
+        public init(_ request: DeviceAttestationRequest) {
+            self.body = request
+        }
+    }
+
     // MARK: - Logout
 
     /// Logout uses EmptyResponse so APIClient's empty-body fast-path applies even when

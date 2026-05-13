@@ -10,6 +10,12 @@
 // been attached to a register/first-send call.
 
 import Foundation
+#if canImport(DeviceCheck)
+import DeviceCheck
+#endif
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Test seam for `UIPasteboard`. Implementations are isolated as actors so the
 /// service stays Sendable under -strict-concurrency=complete.
@@ -137,4 +143,112 @@ public final class ReferralCapture: @unchecked Sendable {
         guard (try? tokenRegex.wholeMatch(in: candidate)) != nil else { return nil }
         return candidate
     }
+}
+
+// MARK: - Device attestation
+
+/// Registers the app's App Attest key with the authenticated backend so login
+/// events can be correlated to a stable, hashed device key.
+public final class DeviceAttestationService: @unchecked Sendable {
+    private let api: AuthAPI
+    private let keychain: Keychain
+
+    public init(api: AuthAPI, keychain: Keychain) {
+        self.api = api
+        self.keychain = keychain
+    }
+
+    public func registerCurrentDevice() async -> Result<DeviceAttestationResponse, APIError> {
+        let descriptor = await Self.deviceDescriptor()
+        let request: DeviceAttestationRequest
+
+        #if canImport(DeviceCheck)
+        let attest = DCAppAttestService.shared
+        if attest.isSupported {
+            do {
+                let keyId = try await appAttestKeyId(using: attest)
+                request = DeviceAttestationRequest(
+                    supported: true,
+                    appAttestKeyId: keyId,
+                    environment: Self.appAttestEnvironment,
+                    bundleId: Self.bundleId,
+                    osVersion: descriptor.osVersion,
+                    deviceModel: descriptor.deviceModel
+                )
+            } catch {
+                return .failure(.transport("App Attest key unavailable"))
+            }
+        } else {
+            request = unsupportedRequest(descriptor: descriptor)
+        }
+        #else
+        request = unsupportedRequest(descriptor: descriptor)
+        #endif
+
+        return await api.send(AuthEndpoints.DeviceAttestation(request), origin: .system)
+    }
+
+    #if canImport(DeviceCheck)
+    private func appAttestKeyId(using attest: DCAppAttestService) async throws -> String {
+        if let existing = try? await keychain.loadString(forKey: KeychainKeys.appAttestKeyId) {
+            return existing
+        }
+        let keyId = try await withCheckedThrowingContinuation { continuation in
+            attest.generateKey { keyId, error in
+                if let keyId {
+                    continuation.resume(returning: keyId)
+                } else {
+                    continuation.resume(throwing: error ?? DeviceAttestationError.keyGenerationFailed)
+                }
+            }
+        }
+        try await keychain.saveString(keyId, forKey: KeychainKeys.appAttestKeyId)
+        return keyId
+    }
+    #endif
+
+    private func unsupportedRequest(descriptor: DeviceDescriptor) -> DeviceAttestationRequest {
+        DeviceAttestationRequest(
+            supported: false,
+            appAttestKeyId: nil,
+            environment: "unsupported",
+            bundleId: Self.bundleId,
+            osVersion: descriptor.osVersion,
+            deviceModel: descriptor.deviceModel
+        )
+    }
+
+    private struct DeviceDescriptor: Sendable {
+        let osVersion: String?
+        let deviceModel: String?
+    }
+
+    private static func deviceDescriptor() async -> DeviceDescriptor {
+        #if canImport(UIKit)
+        await MainActor.run {
+            DeviceDescriptor(
+                osVersion: UIDevice.current.systemVersion,
+                deviceModel: UIDevice.current.model
+            )
+        }
+        #else
+        DeviceDescriptor(osVersion: nil, deviceModel: nil)
+        #endif
+    }
+
+    private static var bundleId: String {
+        Bundle.main.bundleIdentifier ?? "com.kolaleaf.app"
+    }
+
+    private static var appAttestEnvironment: String {
+        #if DEBUG
+        return "development"
+        #else
+        return "production"
+        #endif
+    }
+}
+
+private enum DeviceAttestationError: Error {
+    case keyGenerationFailed
 }

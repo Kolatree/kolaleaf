@@ -87,6 +87,22 @@ public final class AppState {
     /// Not persisted — every cold launch starts unloaded.
     public private(set) var kycStatusLoaded: Bool = false
 
+    public struct NewDeviceAlert: Identifiable, Equatable, Sendable {
+        public let id = UUID()
+        public let title: String
+        public let message: String
+    }
+
+    public var newDeviceAlert: NewDeviceAlert?
+
+    public func showNewDeviceAlert(title: String, message: String) {
+        newDeviceAlert = NewDeviceAlert(title: title, message: message)
+    }
+
+    public func dismissNewDeviceAlert() {
+        newDeviceAlert = nil
+    }
+
     /// Set when `refreshPostKYCStateFromServer` exhausts retries on a
     /// post-login bootstrap call. Without this, a single `/account/me`
     /// failure (network blip, captive portal, server hiccup) would
@@ -360,6 +376,7 @@ public final class AppState {
         activeTransfer = nil
         isSubmittingTransfer = false
         pendingTwoFactor = nil
+        newDeviceAlert = nil
         // Phase 4 / U33: clear the active tab so a fresh sign-in
         // always starts on `.send`, never on a previous user's
         // (e.g. Account) tab. didSet would persist `.send` again so

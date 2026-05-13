@@ -143,6 +143,20 @@ public struct RootCoordinator: View {
             guard appState.hasActiveSession else { return }
             await appState.refreshPostKYCStateFromServer(api: apiClient)
         }
+        .alert(item: Binding(
+            get: { appState.newDeviceAlert },
+            set: { value in
+                if value == nil { appState.dismissNewDeviceAlert() }
+            }
+        )) { alert in
+            Alert(
+                title: Text(alert.title),
+                message: Text(alert.message),
+                dismissButton: .default(Text("OK")) {
+                    appState.dismissNewDeviceAlert()
+                }
+            )
+        }
     }
 }
 

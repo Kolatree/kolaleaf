@@ -282,6 +282,43 @@ public struct LoginVerificationRequiredResponse: Decodable, Sendable {
     public let message: String
 }
 
+public struct DeviceAttestationRequest: Encodable, Sendable {
+    public let supported: Bool
+    public let appAttestKeyId: String?
+    public let environment: String
+    public let bundleId: String
+    public let osVersion: String?
+    public let deviceModel: String?
+
+    public init(
+        supported: Bool,
+        appAttestKeyId: String?,
+        environment: String,
+        bundleId: String,
+        osVersion: String?,
+        deviceModel: String?
+    ) {
+        self.supported = supported
+        self.appAttestKeyId = appAttestKeyId
+        self.environment = environment
+        self.bundleId = bundleId
+        self.osVersion = osVersion
+        self.deviceModel = deviceModel
+    }
+}
+
+public struct DeviceAttestationResponse: Decodable, Sendable, Equatable {
+    public struct Alert: Decodable, Sendable, Equatable {
+        public let title: String
+        public let message: String
+    }
+
+    public let registered: Bool
+    public let isNewDevice: Bool
+    public let shouldAlert: Bool
+    public let alert: Alert?
+}
+
 // MARK: - Logout
 
 /// Backend currently returns `{ success: true }` but treat as empty-body-tolerant.

@@ -1,3 +1,41 @@
+# Review Request -- Wave 2a Phase 11.5 Device Attestation Slice
+
+**Ready for Review:** YES for local device registration/audit and user alert wiring. Full Apple attestation-object cryptographic verification remains a production hardening item, not claimed here.
+**Date:** 2026-05-14
+**Branch / worktree:** `feat/ios-swiftui-app` in `/Users/ao/Documents/projects/Kolaleaf`
+
+## Summary
+
+Adds authenticated device-attestation registration after session establishment. iOS generates and persists an App Attest key when supported, posts the key identifier to the backend, and the backend stores only a SHA-256 hash in AuthEvent metadata. Returning devices are recognized from prior `DEVICE_ATTESTED` events; second-and-later new devices trigger `NEW_DEVICE_LOGIN_ALERTED` and a native in-app alert. Unsupported devices/simulators are audited without creating a persistent key.
+
+## Files Changed In This Slice
+
+- `src/app/api/v1/auth/device-attestation/*` — new route, Zod/OpenAPI schema, canonical errors.
+- `src/lib/auth/device-attestation.ts` — hashed key registration and new-device detection.
+- `tests/app/api/v1/auth/device-attestation.test.ts` — route/service behavior coverage.
+- `src/app/api/v1/openapi/route.ts` — imports the new schema for contract output.
+- `ios/Kolaleaf/Networking/DTOs/AuthDTOs.swift` and `Endpoints/AuthEndpoints.swift` — iOS request/response contract.
+- `ios/Kolaleaf/Domain/Services/ReferralCapture.swift` — App Attest registration service housed in an existing compiled source file.
+- `ios/Kolaleaf/App/KolaleafApp.swift`, `AppState.swift`, `RootCoordinator.swift` — post-login registration task and new-device alert.
+- `ios/KolaleafTests/App/AppStateTests.swift` — confirms logout clears new-device alert state.
+
+## Validation
+
+- `npm test -- --run tests/app/api/v1/auth/device-attestation.test.ts` — 6 tests passed.
+- `npx tsc --noEmit` — passed.
+- `npm run build` — passed.
+- `xcodebuild test -project ios/Kolaleaf.xcodeproj -scheme Kolaleaf -destination 'platform=iOS Simulator,id=8E29B537-7E71-44A8-BA8D-F221CF7CBC97' -only-testing:KolaleafTests/AppStateTests` — 12 tests passed.
+- `xcodebuild -project ios/Kolaleaf.xcodeproj -scheme Kolaleaf -configuration Debug -destination 'platform=iOS,name=iPhone' -derivedDataPath ios/build/DerivedData build` — passed.
+- `xcrun devicectl device install app --device iPhone.coredevice.local .../Kolaleaf.app` — installed `com.kolaleaf.app`.
+- `xcrun devicectl device process launch --device iPhone.coredevice.local com.kolaleaf.app` — blocked because the iPhone was locked; install had already succeeded.
+
+## Remaining Review Scope
+
+- This slice deliberately does not claim full Apple App Attest cryptographic assertion verification. That should be promoted into Phase 12 production hardening if required before external beta.
+- Phase 11.5 still needs notification preferences, Sentry PII scrubber/config, and compliance-copy review.
+
+---
+
 # Review Request -- Wave 2a Phase 11.5 Privacy + Universal Links Slice
 
 **Ready for Review:** YES for this local slice. External WhatsApp allowlist and deployed AASA verification remain Phase 14/ops blockers.

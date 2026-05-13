@@ -18,6 +18,7 @@ struct KolaleafApp: App {
     @State private var apiClient: APIClient
     @State private var keychain: Keychain
     @State private var referralCapture: ReferralCapture
+    @State private var deviceAttestationService: DeviceAttestationService
     @State private var pushPermissionService: PushPermissionService
     /// CA-002 (iteration-2): session-scoped bank list cache. Wired here
     /// so a sheet re-open (or NavigationStack re-mount) doesn't refetch.
@@ -67,6 +68,10 @@ struct KolaleafApp: App {
         // Constructed in init for the same single-source-of-truth reason.
         let initialClient = Self.makeAPIClient()
         _apiClient = State(initialValue: initialClient)
+        _deviceAttestationService = State(initialValue: DeviceAttestationService(
+            api: initialClient,
+            keychain: kc
+        ))
         let pps = PushPermissionService(api: initialClient)
         _pushPermissionService = State(initialValue: pps)
         // CA-002 (iteration-2): canonical BankStore wired against the
@@ -118,6 +123,13 @@ struct KolaleafApp: App {
                 .environment(\.liveActivityService, liveActivityService)
                 .environment(\.biometricUnlock, biometricUnlock)
                 .task { await wireAPIClientHooks() }
+                // Phase 11.5: after a session exists, register the
+                // current App Attest key with the backend. The backend
+                // returns a user-facing alert only when this is a new
+                // device relative to prior authenticated devices.
+                .task(id: appState.currentUser?.id) {
+                    await registerDeviceAttestationForSession()
+                }
                 // Phase 10C iter-1 · CA-2007 + ADV-P10B-C3: reconcile
                 // the persisted `transferId → activityId` map against
                 // `Activity.activities` on cold start. Drops stale
@@ -142,6 +154,16 @@ struct KolaleafApp: App {
         }
         .onChange(of: scenePhase) { _, newPhase in
             handleScenePhase(newPhase)
+        }
+    }
+
+    private func registerDeviceAttestationForSession() async {
+        guard appState.hasActiveSession else { return }
+        let result = await deviceAttestationService.registerCurrentDevice()
+        if case .success(let response) = result,
+           response.shouldAlert,
+           let alert = response.alert {
+            appState.showNewDeviceAlert(title: alert.title, message: alert.message)
         }
     }
 

@@ -99,6 +99,10 @@ final class AppStateTests: XCTestCase {
             audAmount: 100, ngnAmount: 100_000, recipientId: "r1"
         )
         s.pendingTwoFactor = PendingTwoFactor(method: "TOTP", blockedReason: "test")
+        s.showNewDeviceAlert(
+            title: "New device signed in",
+            message: "We noticed a new device."
+        )
 
         s.clearForLogout()
 
@@ -106,6 +110,7 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(s.kycStatus, .unknown)
         XCTAssertNil(s.activeTransfer)
         XCTAssertNil(s.pendingTwoFactor)
+        XCTAssertNil(s.newDeviceAlert)
         XCTAssertNil(s.lastBackgroundedAt)
         // P1 fix (Phase 1 review): lastInteractionAt is now distantPast so any
         // accidental rehydration that sets currentUser without going through

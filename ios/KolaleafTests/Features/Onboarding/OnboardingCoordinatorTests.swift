@@ -41,9 +41,12 @@ final class OnboardingTransitionTests: XCTestCase {
             return XCTFail("PhoneNumber.parseE164 regression for +61400000000")
         }
         let r = OnboardingTransition.fromPhoneOTP(verifiedPhone: phone)
+        // iter-2 review fix (API-410 / CA-302): `.phone(_)` now carries
+        // a typed `PhoneNumber` rather than an E.164 String, preserving
+        // the D1 cascade end-to-end. The wire shape is unchanged.
         XCTAssertEqual(
             r,
-            .registrationDetails(identifier: LoginIdentifier.phone("+61400000000"))
+            .registrationDetails(identifier: .phone(phone))
         )
     }
 

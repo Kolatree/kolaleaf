@@ -66,16 +66,18 @@ final class SignInViewModelTests: XCTestCase {
         XCTAssertEqual(captured?.user.id, "u1")
         XCTAssertEqual(captured?.user.legalName, "Ada")
         XCTAssertEqual(captured?.user.email, "user@example.com")
-        XCTAssertEqual(captured?.requires2FA, false)
+        // iter-2 review fix (API-406): domain field renamed
+        // `requires2FA` → `requiresTwoFactor`.
+        XCTAssertEqual(captured?.requiresTwoFactor, false)
         XCTAssertEqual(captured?.twoFactorMethod, "NONE")
         XCTAssertNil(vm.inlineError)
     }
 
     /// P1 fix (Phase 1 review): security-critical test asserting the LoginResult
-    /// faithfully carries `requires2FA = true` from the backend. Combined with
-    /// the OnboardingCoordinator P0 fix (which gates `appState.currentUser` on
-    /// `requires2FA == false`), this test guards against a regression that would
-    /// strand 2FA-enabled users on KYC intro with no recovery path.
+    /// faithfully carries `requiresTwoFactor = true` from the backend. Combined
+    /// with the OnboardingCoordinator P0 fix (which gates `appState.currentUser`
+    /// on `requiresTwoFactor == false`), this test guards against a regression
+    /// that would strand 2FA-enabled users on KYC intro with no recovery path.
     func test_submit_200_with2FARequired_propagatesFlag() async {
         let api = FakeAPIClient()
         await api.stageSuccess(
@@ -94,8 +96,8 @@ final class SignInViewModelTests: XCTestCase {
         vm.password = "Correct-Horse-1234"
         await vm.submit()
 
-        XCTAssertEqual(captured?.requires2FA, true,
-                       "VM must forward requires2FA so the coordinator can gate appState.currentUser")
+        XCTAssertEqual(captured?.requiresTwoFactor, true,
+                       "VM must forward requiresTwoFactor so the coordinator can gate appState.currentUser")
         XCTAssertEqual(captured?.twoFactorMethod, "TOTP")
         XCTAssertNil(vm.inlineError)
     }

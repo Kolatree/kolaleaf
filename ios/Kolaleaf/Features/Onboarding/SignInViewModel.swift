@@ -14,14 +14,19 @@ import Foundation
 import Observation
 
 /// Result delivered to `onSignedIn` on a 200 login.
+///
+/// iter-2 review fix (API-406): domain field renamed from
+/// `requires2FA` to `requiresTwoFactor` to align with Swift naming
+/// conventions and the matching DTO field. The wire still emits
+/// `requires2FA` — only the Swift identifier changed.
 public struct LoginResult: Equatable, Sendable {
     public let user: CurrentUser
-    public let requires2FA: Bool
+    public let requiresTwoFactor: Bool
     public let twoFactorMethod: String?
 
-    public init(user: CurrentUser, requires2FA: Bool, twoFactorMethod: String?) {
+    public init(user: CurrentUser, requiresTwoFactor: Bool, twoFactorMethod: String?) {
         self.user = user
-        self.requires2FA = requires2FA
+        self.requiresTwoFactor = requiresTwoFactor
         self.twoFactorMethod = twoFactorMethod
     }
 }
@@ -33,9 +38,13 @@ public final class SignInViewModel {
     /// Identifier rail the user is signing in with. Phone-default per
     /// the D4c flip; the email rail is reachable via a "Use email
     /// instead" toggle on the view.
-    public enum Mode: Hashable, Sendable { case phone, email }
-
-    public var mode: Mode = .phone
+    ///
+    /// iter-2 review fix (API-405): the nested `Mode` enum was
+    /// collapsed into `IdentifierKind` so the same discriminator
+    /// drives the view rail, the DTO wire shape, and the
+    /// `LoginIdentifier` enum — one source of truth instead of three
+    /// parallel two-case enums.
+    public var mode: IdentifierKind = .phone
     /// Raw input buffer the user types. Interpreted per `mode`:
     /// phone → parsed with `country.dialCode`; email → trimmed +
     /// lowercased at submit.
@@ -81,10 +90,14 @@ public final class SignInViewModel {
             return
         }
 
-        let request: LoginRequest
+        let identifier: LoginIdentifier
         let railEmail: String?
         let railPhone: String?
 
+        // iter-2 review fix (API-410 / CA-302): build a typed
+        // `LoginIdentifier` per rail so the discriminated enum reaches
+        // the network DTO intact. The `.e164` projection only happens
+        // inside the DTO's Codable encode.
         switch mode {
         case .email:
             let normalisedEmail = identifierInput.trimmed().lowercased()
@@ -92,7 +105,7 @@ public final class SignInViewModel {
                 inlineError = "Please enter your email and password."
                 return
             }
-            request = LoginRequest(email: normalisedEmail, password: password)
+            identifier = .email(normalisedEmail)
             railEmail = normalisedEmail
             railPhone = nil
 
@@ -103,7 +116,7 @@ public final class SignInViewModel {
             )
             switch parsed {
             case .success(let phone):
-                request = LoginRequest(phone: phone.e164, password: password)
+                identifier = .phone(phone)
                 railEmail = nil
                 railPhone = phone.e164
             case .failure(let err):
@@ -111,6 +124,7 @@ public final class SignInViewModel {
                 return
             }
         }
+        let request = LoginRequest(identifier: identifier, password: password)
 
         isSubmitting = true
         inlineError = nil
@@ -128,12 +142,10 @@ public final class SignInViewModel {
             )
             onSignedIn(LoginResult(
                 user: user,
-                // API-008: DTO renamed `requiresTwoFactor` (CodingKey
-                // still maps to wire `requires2FA`). Domain
-                // `LoginResult` keeps the legacy name for now — the
-                // public surface change is scoped to the network DTO
-                // per the issue brief.
-                requires2FA: response.requiresTwoFactor,
+                // iter-2 review fix (API-406): domain `LoginResult`
+                // identifier now matches the DTO field (`requiresTwoFactor`);
+                // the wire still emits `requires2FA` via CodingKeys.
+                requiresTwoFactor: response.requiresTwoFactor,
                 twoFactorMethod: response.twoFactorMethod
             ))
         case .failure(.verificationRequired(let backendEmail, _)):

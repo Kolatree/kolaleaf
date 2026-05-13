@@ -211,10 +211,54 @@ final class PhoneNumberTests: XCTestCase {
     }
 
     func test_loginRequest_phoneVariant() throws {
-        let req = LoginRequest(phone: "+61400000000", password: "Hunter2!")
-        XCTAssertEqual(req.identifier.type, .phone)
-        XCTAssertEqual(req.identifier.value, "+61400000000")
+        // iter-2 review fix (API-410): LoginIdentifier is now a true
+        // enum with associated values. `.phone(_)` carries a typed
+        // `PhoneNumber`; the wire shape's still `{ type, value }`,
+        // verified end-to-end by decoding the request back through
+        // Codable below.
+        guard case .success(let phone) = PhoneNumber.parseE164("+61400000000") else {
+            return XCTFail("PhoneNumber.parseE164 regression for +61400000000")
+        }
+        let req = LoginRequest(identifier: .phone(phone), password: "Hunter2!")
+        XCTAssertEqual(req.identifier.kind, .phone)
+        XCTAssertEqual(req.identifier.stringValue, "+61400000000")
         XCTAssertEqual(req.password, "Hunter2!")
+
+        // Round-trip: encode the request and assert the on-wire shape
+        // is byte-equivalent to the prior struct form — `{ identifier: { type, value }, password }`.
+        let data = try JSONEncoder().encode(req)
+        struct Echo: Decodable {
+            struct Identifier: Decodable { let type: String; let value: String }
+            let identifier: Identifier
+            let password: String
+        }
+        let echo = try JSONDecoder().decode(Echo.self, from: data)
+        XCTAssertEqual(echo.identifier.type, "phone")
+        XCTAssertEqual(echo.identifier.value, "+61400000000")
+        XCTAssertEqual(echo.password, "Hunter2!")
+    }
+
+    /// iter-2 review fix (API-410): defensive Codable round-trip — a
+    /// `{type:"phone", value:"not-e164"}` payload from a hostile or
+    /// drifted backend MUST fail decoding rather than silently
+    /// constructing a malformed `PhoneNumber`. Matches the
+    /// `parseE164` invariant for in-process construction.
+    func test_loginIdentifier_decodesValidWireShapes_andRejectsMalformedPhone() throws {
+        let validEmail = #"{"type":"email","value":"a@b.com"}"#.data(using: .utf8)!
+        let validPhone = #"{"type":"phone","value":"+61400000000"}"#.data(using: .utf8)!
+        let badPhone   = #"{"type":"phone","value":"61400000000"}"#.data(using: .utf8)!
+
+        let dec = JSONDecoder()
+        let e = try dec.decode(LoginIdentifier.self, from: validEmail)
+        XCTAssertEqual(e.kind, .email)
+        XCTAssertEqual(e.stringValue, "a@b.com")
+
+        let p = try dec.decode(LoginIdentifier.self, from: validPhone)
+        XCTAssertEqual(p.kind, .phone)
+        XCTAssertEqual(p.stringValue, "+61400000000")
+
+        XCTAssertThrowsError(try dec.decode(LoginIdentifier.self, from: badPhone),
+                             "Malformed phone wire payload must fail decoding")
     }
 
     // MARK: - IdentifierKind wire shape

@@ -95,6 +95,17 @@ public final class BiometricUnlockController {
         return faceIDUnlockEnabled && !unlockedThisSession
     }
 
+    /// iter-2 review fix (API-404): the Face ID gate composition rule
+    /// lives on the controller rather than the SwiftUI app shell. The
+    /// caller supplies the session flag; the controller composes it
+    /// against its own lock state. Keeps `rootContent` a single
+    /// boolean read and lets the truth-table tests drive controller
+    /// state (preference + unlock flag) instead of two non-independent
+    /// booleans that the caller has to keep in sync.
+    public func shouldShowGate(hasActiveSession: Bool) -> Bool {
+        hasActiveSession && isLocked(hasActiveSession: hasActiveSession)
+    }
+
     /// Drive the LAContext prompt and flip `unlockedThisSession` on
     /// success. Failure cases (cancel / lockout / not enrolled) are
     /// returned verbatim so the gate view can surface the right

@@ -12,7 +12,14 @@ final class RegistrationDetailsViewModelTests: XCTestCase {
         email: String = "user@example.com",
         onRegistered: @escaping (CurrentUser) -> Void = { _ in }
     ) -> RegistrationDetailsViewModel {
-        RegistrationDetailsViewModel(email: email, api: api, onRegistered: onRegistered)
+        // iter-2 review fix (API-402): the string-rail convenience
+        // initialisers were removed; tests now construct the typed
+        // `LoginIdentifier` directly.
+        RegistrationDetailsViewModel(
+            identifier: .email(email),
+            api: api,
+            onRegistered: onRegistered
+        )
     }
 
     private func fillValid(_ vm: RegistrationDetailsViewModel) {
@@ -92,8 +99,11 @@ final class RegistrationDetailsViewModelTests: XCTestCase {
             for: String(describing: AuthEndpoints.CompleteRegistration.self),
             as: CompleteRegistrationRequest.self
         )
-        XCTAssertEqual(body?.identifier.type, .email)
-        XCTAssertEqual(body?.identifier.value, "user@example.com")
+        // iter-2 review fix (API-410): assertions read through the
+        // typed-enum helpers; the on-wire JSON is byte-for-byte
+        // identical to the prior `{ type, value }` struct form.
+        XCTAssertEqual(body?.identifier.kind, .email)
+        XCTAssertEqual(body?.identifier.stringValue, "user@example.com")
         XCTAssertEqual(body?.fullName, "Ada Lovelace") // trimmed
         XCTAssertEqual(body?.state, "NSW")             // uppercase
         XCTAssertNil(body?.addressLine2)               // empty → nil

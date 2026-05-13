@@ -151,9 +151,15 @@ struct KolaleafApp: App {
     // memory and resume cleanly once Face ID succeeds.
     @ViewBuilder
     private var rootContent: some View {
-        let shouldGate = Self.shouldShowGate(
-            hasActiveSession: appState.hasActiveSession,
-            isLocked: biometricUnlock.isLocked(hasActiveSession: appState.hasActiveSession)
+        // iter-2 review fix (API-404): the gate composition now lives
+        // on `BiometricUnlockController.shouldShowGate(hasActiveSession:)`
+        // — the caller threads the session flag once and the controller
+        // composes against its own state. Keeps `rootContent` a single
+        // boolean read and removes the two-non-independent-args footgun
+        // that had us passing `appState.hasActiveSession` to both
+        // arguments of the prior static method.
+        let shouldGate = biometricUnlock.shouldShowGate(
+            hasActiveSession: appState.hasActiveSession
         )
         ZStack {
             RootCoordinator()
@@ -170,17 +176,6 @@ struct KolaleafApp: App {
             }
         }
         .animation(KolaMotion.softFade, value: shouldGate)
-    }
-
-    /// D3 — pure composition rule for the Face ID gate. Lifted out of
-    /// `rootContent` so the truth table is testable without a SwiftUI
-    /// host (see `KolaleafAppGateCompositionTests`). Today the rule is
-    /// "active session AND controller-reports-locked"; if it grows
-    /// (e.g. emergency-call exemption, parental-controls override),
-    /// the test surface stays a single boolean predicate.
-    @MainActor
-    static func shouldShowGate(hasActiveSession: Bool, isLocked: Bool) -> Bool {
-        hasActiveSession && isLocked
     }
 
     // MARK: - App lifecycle

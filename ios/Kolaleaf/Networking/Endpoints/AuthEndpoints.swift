@@ -84,16 +84,12 @@ public enum AuthEndpoints {
         public let method: HTTPMethod = .post
         public let body: (any Encodable & Sendable)?
 
+        // iter-2 review fix (API-402): only the LoginRequest-taking
+        // form remains. Email/phone string-rail conveniences were
+        // removed so the type-narrowed `LoginIdentifier` enum reaches
+        // every call site intact.
         public init(_ request: LoginRequest) {
             self.body = request
-        }
-
-        public init(email: String, password: String) {
-            self.body = LoginRequest(email: email, password: password)
-        }
-
-        public init(phone: PhoneNumber, password: String) {
-            self.body = LoginRequest(phone: phone.e164, password: password)
         }
     }
 

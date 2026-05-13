@@ -95,6 +95,12 @@ public struct CompleteRegistrationRequest: Codable, Sendable {
     // D4a: discriminated identifier matches the widened backend
     // schema at src/app/api/v1/auth/complete-registration/_schemas.ts —
     // either an email or an E.164 phone, never both.
+    //
+    // iter-2 (API-410): `LoginIdentifier` is now an enum with associated
+    // values so the rail discriminator + value travel together as one
+    // type. The string-rail convenience initialisers were removed; all
+    // callers route through `LoginIdentifier.email(_:)` /
+    // `.phone(_:)` (the latter takes a typed `PhoneNumber`).
     public let identifier: LoginIdentifier
     public let fullName: String
     public let password: String
@@ -123,54 +129,6 @@ public struct CompleteRegistrationRequest: Codable, Sendable {
         self.state = state
         self.postcode = postcode
     }
-
-    // Email-rail convenience. Preserves the call-site shape used by
-    // RegistrationDetailsViewModel and the iter-1 baseline.
-    public init(
-        email: String,
-        fullName: String,
-        password: String,
-        addressLine1: String,
-        addressLine2: String?,
-        city: String,
-        state: String,
-        postcode: String
-    ) {
-        self.init(
-            identifier: .email(email),
-            fullName: fullName,
-            password: password,
-            addressLine1: addressLine1,
-            addressLine2: addressLine2,
-            city: city,
-            state: state,
-            postcode: postcode
-        )
-    }
-
-    // Phone-rail convenience. Caller supplies the E.164 string —
-    // typically `PhoneNumber.e164` from the post-OTP onboarding flow.
-    public init(
-        phone: String,
-        fullName: String,
-        password: String,
-        addressLine1: String,
-        addressLine2: String?,
-        city: String,
-        state: String,
-        postcode: String
-    ) {
-        self.init(
-            identifier: .phone(phone),
-            fullName: fullName,
-            password: password,
-            addressLine1: addressLine1,
-            addressLine2: addressLine2,
-            city: city,
-            state: state,
-            postcode: postcode
-        )
-    }
 }
 
 public struct CompleteRegistrationResponse: Decodable, Sendable {
@@ -191,25 +149,94 @@ public struct CompleteRegistrationResponse: Decodable, Sendable {
 /// Discriminated identifier per src/lib/schemas/common.ts IdentifierInput.
 /// 2026-05-13: `phone` variant added. Apple/Google land in v1.1.
 ///
-/// 4-lens review fix (type-design-analyzer): `type` is `IdentifierKind`
-/// so a stringly-typed typo at any call site is unrepresentable.
-/// Construct only via `email(_:)` / `phone(_:)` statics; the
-/// memberwise init takes the enum so the type can't escape.
-public struct LoginIdentifier: Codable, Sendable, Hashable {
-    public let type: IdentifierKind
-    public let value: String
+/// iter-2 review fix (API-410 + API-402 + CA-302): promoted from a
+/// `{ type, value }` struct to a true Swift enum with associated
+/// values so the rail and its payload are one inseparable type.
+/// Consumers `switch self` to access the rail; helper projections
+/// (`kind`, `fieldKey`, `railNoun`, `stringValue`) cover the common
+/// View / VM access patterns without re-implementing the rail→noun
+/// mapping at call sites (closes API-403 / OO-001).
+///
+/// Wire shape is unchanged — the custom Codable conformance still
+/// emits `{ "type": "email" | "phone", "value": "..." }` so the
+/// backend Zod `discriminatedUnion("type", …)` decodes byte-for-byte
+/// identically to the prior struct form. The `.phone` case carries
+/// a typed `PhoneNumber` so the D1 cascade is preserved end-to-end
+/// from `OnboardingRoute` through `CompleteRegistrationRequest`'s
+/// encode; the `.e164` projection only happens inside the Codable
+/// boundary.
+public enum LoginIdentifier: Sendable, Hashable {
+    case email(String)        // EmailAddress when that cascade lands later
+    case phone(PhoneNumber)   // typed value — preserves D1 cascade end-to-end
+}
 
-    public init(type: IdentifierKind, value: String) {
-        self.type = type
-        self.value = value
+extension LoginIdentifier: Codable {
+    private enum CodingKeys: String, CodingKey { case type, value }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .email(let v):
+            try c.encode(IdentifierKind.email, forKey: .type)
+            try c.encode(v, forKey: .value)
+        case .phone(let p):
+            try c.encode(IdentifierKind.phone, forKey: .type)
+            try c.encode(p.e164, forKey: .value)
+        }
     }
 
-    public static func email(_ value: String) -> LoginIdentifier {
-        LoginIdentifier(type: .email, value: value)
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let kind = try c.decode(IdentifierKind.self, forKey: .type)
+        let raw = try c.decode(String.self, forKey: .value)
+        switch kind {
+        case .email:
+            self = .email(raw)
+        case .phone:
+            // Defensive: parse with parseE164 — if a wire payload
+            // arrives with a malformed value, fail decoding rather
+            // than silently wrapping. Matches the parser invariant
+            // for in-process construction.
+            switch PhoneNumber.parseE164(raw) {
+            case .success(let p): self = .phone(p)
+            case .failure:
+                throw DecodingError.dataCorruptedError(
+                    forKey: .value,
+                    in: c,
+                    debugDescription: "Phone value '\(raw)' is not E.164"
+                )
+            }
+        }
+    }
+}
+
+extension LoginIdentifier {
+    /// Wire-level discriminator. Use sparingly — prefer switching over self.
+    public var kind: IdentifierKind {
+        switch self {
+        case .email: return .email
+        case .phone: return .phone
+        }
     }
 
-    public static func phone(_ value: String) -> LoginIdentifier {
-        LoginIdentifier(type: .phone, value: value)
+    /// Form-field key used by ViewModels for inline-error mapping
+    /// (mirror of the backend's `fields.email` / `fields.phone` keys).
+    public var fieldKey: String { kind == .email ? "email" : "phone" }
+
+    /// Human-readable noun for substituting into UI copy
+    /// ("Please verify your <noun> first"). Single source of truth —
+    /// do NOT re-implement the rail→noun mapping at View or VM call
+    /// sites.
+    public var railNoun: String { kind == .email ? "email" : "phone" }
+
+    /// The wire / string projection. Used at network-DTO and
+    /// view-display boundaries. For the phone rail this is `.e164`;
+    /// for email it's the raw address.
+    public var stringValue: String {
+        switch self {
+        case .email(let v): return v
+        case .phone(let p): return p.e164
+        }
     }
 }
 
@@ -217,13 +244,8 @@ public struct LoginRequest: Codable, Sendable {
     public let identifier: LoginIdentifier
     public let password: String
 
-    public init(email: String, password: String) {
-        self.identifier = .email(email)
-        self.password = password
-    }
-
-    public init(phone: String, password: String) {
-        self.identifier = .phone(phone)
+    public init(identifier: LoginIdentifier, password: String) {
+        self.identifier = identifier
         self.password = password
     }
 }

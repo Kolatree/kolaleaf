@@ -92,13 +92,17 @@ public struct RegistrationDetailsView: View {
             }
             errorIfAny(forKey: "password")
 
-            field(label: vm.identifier.type == .email ? "Email" : "Phone") {
-                Text(vm.identifier.value)
+            // iter-2 review fix (API-403): rail label, display value
+            // and inline-error key all read through the typed
+            // `LoginIdentifier` helpers so a future rail addition lands
+            // here as a single switch update.
+            field(label: vm.identifier.kind == .email ? "Email" : "Phone") {
+                Text(vm.identifier.stringValue)
                     .font(KolaFont.row)
                     .foregroundStyle(KolaColors.whiteOnGradientMuted)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            errorIfAny(forKey: vm.identifier.type == .email ? "email" : "phone")
+            errorIfAny(forKey: vm.identifier.fieldKey)
         }
     }
 

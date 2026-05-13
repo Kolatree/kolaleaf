@@ -195,6 +195,11 @@ public struct SignInView: View {
             // staring at an email field (or vice versa).
             vm.mode = (vm.mode == .phone) ? .email : .phone
             vm.identifierInput = ""
+            // iter-2 review fix (API-409): after the rail flips, drop
+            // focus onto the (now-different) identifier field so the
+            // keyboard / autofill type re-resolves immediately rather
+            // than leaving the user staring at a blurred field.
+            focus = .identifier
         } label: {
             Text(vm.mode == .phone ? "Use email instead" : "Use phone instead")
                 .font(KolaFont.tagline)

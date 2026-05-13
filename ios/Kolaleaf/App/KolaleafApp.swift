@@ -44,6 +44,12 @@ struct KolaleafApp: App {
     /// leave activities rendering on the lock screen for the next
     /// user of a shared device (ADV-P10B-C10).
     @State private var liveActivityService: LiveActivityService
+    /// Phase 11 · Face ID unlock: per-process biometric lock state.
+    /// Persists the "require Face ID at launch" preference and
+    /// drives BiometricLockView when the user comes back to a
+    /// foreground after backgrounding the app.
+    @State private var biometricUnlock: BiometricUnlockController
+    private let biometricsService: any BiometricsService = LABiometricsService()
 
     @Environment(\.scenePhase) private var scenePhase
     /// Phase 2 review fix (P1, adversarial adv-003): wire APNs callbacks so
@@ -79,6 +85,10 @@ struct KolaleafApp: App {
         // (ADV-P10B-C3) and end ones that advanced to a terminal state
         // while the app was suspended.
         _liveActivityService = State(initialValue: LiveActivityService(api: initialClient))
+        // Phase 11 · Face ID unlock: preference + per-session unlock
+        // flag. Reads `kola.faceIDUnlockEnabled` from .standard at
+        // init so the value is available before the first body render.
+        _biometricUnlock = State(initialValue: BiometricUnlockController())
         // Bind the AppDelegate so APNs device-token callbacks reach the
         // service. Done in init so the binding is in place before the first
         // `registerForRemoteNotifications()` call.
@@ -96,7 +106,7 @@ struct KolaleafApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootCoordinator()
+            rootContent
                 .environment(appState)
                 .environment(\.apiClient, apiClient)
                 .environment(\.keychain, keychain)
@@ -106,6 +116,7 @@ struct KolaleafApp: App {
                 .environment(\.swiftDataStack, swiftDataStack)
                 .environment(\.syncService, syncService)
                 .environment(\.liveActivityService, liveActivityService)
+                .environment(\.biometricUnlock, biometricUnlock)
                 .task { await wireAPIClientHooks() }
                 // Phase 10C iter-1 · CA-2007 + ADV-P10B-C3: reconcile
                 // the persisted `transferId → activityId` map against
@@ -131,12 +142,43 @@ struct KolaleafApp: App {
         }
     }
 
+    // MARK: - Root content w/ Face ID gate
+    //
+    // Phase 11 · Face ID unlock. The gate overlays RootCoordinator
+    // when `biometricUnlock.isLocked(hasActiveSession:)` is true.
+    // We compose it as a ZStack inside the WindowGroup so the
+    // RootCoordinator's NavigationStack lifecycle is unaffected —
+    // the views behind the gate stay in memory and resume cleanly
+    // once Face ID succeeds.
+    @ViewBuilder
+    private var rootContent: some View {
+        ZStack {
+            RootCoordinator()
+            if biometricUnlock.isLocked(hasActiveSession: appState.hasActiveSession) {
+                BiometricLockView(
+                    controller: biometricUnlock,
+                    service: biometricsService,
+                    onSignOut: {
+                        Task { await forceReauth() }
+                    }
+                )
+                .transition(.opacity)
+                .zIndex(1)
+            }
+        }
+        .animation(KolaMotion.softFade, value: biometricUnlock.isLocked(hasActiveSession: appState.hasActiveSession))
+    }
+
     // MARK: - App lifecycle
 
     private func handleScenePhase(_ phase: ScenePhase) {
         switch phase {
         case .background:
             appState.markBackgrounded()
+            // Phase 11 · Face ID unlock: re-lock on background so the
+            // next foreground entry re-presents the gate (when the
+            // preference is on).
+            biometricUnlock.lockForBackground()
         case .active:
             // r2 fix #3: compute reauth FIRST, then mark foreground. Otherwise
             // markForegrounded() clears lastBackgroundedAt and the check is unreachable.
@@ -208,6 +250,10 @@ struct KolaleafApp: App {
         UserDefaults.standard.removeObject(forKey: "kola.referralPasteboardScanned")
         await apiClient.clearCookies()
         appState.clearForLogout()
+        // Phase 11 · Face ID unlock: drop the per-session unlock flag
+        // so a fresh sign-in for a different user doesn't inherit
+        // the prior owner's unlocked state.
+        biometricUnlock.clearForLogout()
         // Phase 8 iter-2 (P2): wipe the SwiftData mirror so the next
         // sign-in (potentially a different user on the same device)
         // cannot see the previous user's cached recipients/transfers.

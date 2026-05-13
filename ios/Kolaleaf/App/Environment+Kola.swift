@@ -91,6 +91,14 @@ private struct LiveActivityServiceKey: EnvironmentKey {
     static let defaultValue: LiveActivityService? = nil
 }
 
+// Phase 11 · Face ID unlock: a single BiometricUnlockController
+// instance owned by KolaleafApp drives the lock state across the
+// entire WindowGroup. Nil default keeps previews / tests rendering
+// without explicit injection.
+private struct BiometricUnlockKey: EnvironmentKey {
+    static let defaultValue: BiometricUnlockController? = nil
+}
+
 public extension EnvironmentValues {
     var apiClient: AuthAPI {
         get { self[APIClientKey.self] }
@@ -127,5 +135,11 @@ public extension EnvironmentValues {
     var liveActivityService: LiveActivityService? {
         get { self[LiveActivityServiceKey.self] }
         set { self[LiveActivityServiceKey.self] = newValue }
+    }
+    /// Phase 11 · Face ID unlock controller. Nil for previews/tests.
+    @MainActor
+    var biometricUnlock: BiometricUnlockController? {
+        get { self[BiometricUnlockKey.self] }
+        set { self[BiometricUnlockKey.self] = newValue }
     }
 }

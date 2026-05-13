@@ -12,6 +12,23 @@
 
 import Foundation
 
+// MARK: - Identifier discriminator
+//
+// 4-lens review fix (type-design-analyzer): the wizard's wire-shape
+// discriminator was previously a stringly-typed `String` with a
+// `// "email" | "phone"` comment. Replaced with this enum so the
+// Codable raw value still produces `"email"` / `"phone"` on the
+// wire but the type system enforces the discriminator at every
+// call site. The `init(email:)` / `init(phone:)` convenience
+// initializers on the DTOs prevent callers from naming the
+// discriminator at all — a typo (`type: "phon"`) is now
+// unrepresentable.
+
+public enum IdentifierKind: String, Codable, Sendable, Hashable {
+    case email
+    case phone
+}
+
 // MARK: - Verify-first wizard, step 1: send code
 //
 // 2026-05-13 phone-first widening: the body is a discriminated
@@ -20,16 +37,16 @@ import Foundation
 // installs, but every new build sends the discriminated form.
 
 public struct SendCodeRequest: Codable, Sendable {
-    public let type: String  // "email" | "phone"
+    public let type: IdentifierKind
     public let value: String
 
     public init(email: String) {
-        self.type = "email"
+        self.type = .email
         self.value = email
     }
 
     public init(phone: String) {
-        self.type = "phone"
+        self.type = .phone
         self.value = phone
     }
 }
@@ -43,18 +60,18 @@ public struct SendCodeResponse: Decodable, Sendable {
 // MARK: - Verify-first wizard, step 2: verify code
 
 public struct VerifyCodeRequest: Codable, Sendable {
-    public let type: String  // "email" | "phone"
+    public let type: IdentifierKind
     public let value: String
     public let code: String
 
     public init(email: String, code: String) {
-        self.type = "email"
+        self.type = .email
         self.value = email
         self.code = code
     }
 
     public init(phone: String, code: String) {
-        self.type = "phone"
+        self.type = .phone
         self.value = phone
         self.code = code
     }
@@ -122,21 +139,26 @@ public struct CompleteRegistrationResponse: Decodable, Sendable {
 
 /// Discriminated identifier per src/lib/schemas/common.ts IdentifierInput.
 /// 2026-05-13: `phone` variant added. Apple/Google land in v1.1.
+///
+/// 4-lens review fix (type-design-analyzer): `type` is `IdentifierKind`
+/// so a stringly-typed typo at any call site is unrepresentable.
+/// Construct only via `email(_:)` / `phone(_:)` statics; the
+/// memberwise init takes the enum so the type can't escape.
 public struct LoginIdentifier: Codable, Sendable {
-    public let type: String  // "email" | "phone"
+    public let type: IdentifierKind
     public let value: String
 
-    public init(type: String, value: String) {
+    public init(type: IdentifierKind, value: String) {
         self.type = type
         self.value = value
     }
 
     public static func email(_ value: String) -> LoginIdentifier {
-        LoginIdentifier(type: "email", value: value)
+        LoginIdentifier(type: .email, value: value)
     }
 
     public static func phone(_ value: String) -> LoginIdentifier {
-        LoginIdentifier(type: "phone", value: value)
+        LoginIdentifier(type: .phone, value: value)
     }
 }
 

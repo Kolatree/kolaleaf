@@ -55,7 +55,7 @@ final class PhoneOTPViewModelTests: XCTestCase {
             for: String(describing: AuthEndpoints.VerifyPhoneCode.self),
             as: VerifyCodeRequest.self
         )
-        XCTAssertEqual(body?.type, "phone")
+        XCTAssertEqual(body?.type, .phone)
         XCTAssertEqual(body?.value, PHONE)
         XCTAssertEqual(body?.code, "123456")
     }
@@ -137,7 +137,7 @@ final class PhoneOTPViewModelTests: XCTestCase {
             for: String(describing: AuthEndpoints.SendPhoneCode.self),
             as: SendCodeRequest.self
         )
-        XCTAssertEqual(body?.type, "phone")
+        XCTAssertEqual(body?.type, .phone)
         XCTAssertEqual(body?.value, PHONE)
     }
 

@@ -124,27 +124,41 @@ final class PhoneNumberTests: XCTestCase {
 
     func test_sendCodeRequest_emailVariantSerialisation() throws {
         let req = SendCodeRequest(email: "a@b.com")
-        XCTAssertEqual(req.type, "email")
+        XCTAssertEqual(req.type, .email)
         XCTAssertEqual(req.value, "a@b.com")
     }
 
     func test_sendCodeRequest_phoneVariantSerialisation() throws {
         let req = SendCodeRequest(phone: "+61400000000")
-        XCTAssertEqual(req.type, "phone")
+        XCTAssertEqual(req.type, .phone)
         XCTAssertEqual(req.value, "+61400000000")
     }
 
     func test_verifyCodeRequest_phoneVariant() throws {
         let req = VerifyCodeRequest(phone: "+61400000000", code: "123456")
-        XCTAssertEqual(req.type, "phone")
+        XCTAssertEqual(req.type, .phone)
         XCTAssertEqual(req.value, "+61400000000")
         XCTAssertEqual(req.code, "123456")
     }
 
     func test_loginRequest_phoneVariant() throws {
         let req = LoginRequest(phone: "+61400000000", password: "Hunter2!")
-        XCTAssertEqual(req.identifier.type, "phone")
+        XCTAssertEqual(req.identifier.type, .phone)
         XCTAssertEqual(req.identifier.value, "+61400000000")
         XCTAssertEqual(req.password, "Hunter2!")
+    }
+
+    // MARK: - IdentifierKind wire shape
+
+    /// 4-lens review fix (type-design-analyzer): the discriminator
+    /// must encode to the exact strings the backend Zod
+    /// `discriminatedUnion("type", …)` expects. A wire change here
+    /// breaks every wizard call.
+    func test_identifierKind_encodesAsWireStrings() throws {
+        let encoder = JSONEncoder()
+        let emailData = try encoder.encode(IdentifierKind.email)
+        let phoneData = try encoder.encode(IdentifierKind.phone)
+        XCTAssertEqual(String(data: emailData, encoding: .utf8), "\"email\"")
+        XCTAssertEqual(String(data: phoneData, encoding: .utf8), "\"phone\"")
     }
 }

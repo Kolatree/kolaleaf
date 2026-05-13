@@ -52,7 +52,7 @@ final class PhoneEntryViewModelTests: XCTestCase {
             for: String(describing: AuthEndpoints.SendPhoneCode.self),
             as: SendCodeRequest.self
         )
-        XCTAssertEqual(body?.type, "phone")
+        XCTAssertEqual(body?.type, .phone)
         XCTAssertEqual(body?.value, "+61400000000")
     }
 

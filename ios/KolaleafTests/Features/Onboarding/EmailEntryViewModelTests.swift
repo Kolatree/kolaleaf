@@ -64,7 +64,7 @@ final class EmailEntryViewModelTests: XCTestCase {
             for: String(describing: AuthEndpoints.SendEmailCode.self),
             as: SendCodeRequest.self
         )
-        XCTAssertEqual(body?.type, "email")
+        XCTAssertEqual(body?.type, .email)
         XCTAssertEqual(body?.value, "user@example.com")
     }
 

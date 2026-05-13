@@ -23,6 +23,18 @@ enum IdentifierType {
   GOOGLE
 }
 
+// D2 (phone-first wave): narrow discriminator used by
+// `PendingVerification.kind`. APPLE / GOOGLE never reach the
+// pre-account claim flow — the IdP token proves identifier control,
+// so those rails skip the code-claim wizard entirely. Encoding that
+// invariant in the type system prevents a stray APPLE/GOOGLE write
+// from passing Prisma client validation and then dying at the
+// database CHECK constraint at runtime.
+enum PendingVerificationKind {
+  EMAIL
+  PHONE
+}
+
 enum TransferStatus {
   // Sentinel used ONLY as the fromStatus on the initial TransferEvent
   // (transfer creation). Never a real Transfer.status — a transfer
@@ -355,12 +367,15 @@ model WebhookEvent {
 // across both rails — a malicious caller can't probe whether a
 // (kind, identifier) is known by observing the response shape.
 //
-// APPLE / GOOGLE values of IdentifierType are valid at the schema
-// level but never written here: those sign-in paths skip the
-// code-claim flow because the IdP itself proves identifier control.
+// D2 (phone-first wave): `kind` narrowed to `PendingVerificationKind`
+// (EMAIL | PHONE) so a stray APPLE/GOOGLE write can no longer pass
+// Prisma client validation. APPLE/GOOGLE sign-in paths skip this
+// flow because the IdP token proves identifier control; encoding
+// that invariant in the column's type makes it unrepresentable
+// rather than merely undocumented.
 model PendingVerification {
-  id             String         @id @default(cuid())
-  kind           IdentifierType
+  id             String                  @id @default(cuid())
+  kind           PendingVerificationKind
   identifier     String
   codeHash       String
   expiresAt      DateTime

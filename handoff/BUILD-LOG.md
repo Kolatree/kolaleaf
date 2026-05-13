@@ -9,7 +9,7 @@ _Owned by Architect. Updated by Builder after each step._
 **Active step:** Wave 2a iOS Phase 11 partial + D-wave phone-first recovery + web KYC recovery.
 **Last cleared:** Phase 10C hardening + D-wave iter-2 review fixes are committed locally on `feat/ios-swiftui-app`.
 **Pending deploy:** All Pile B + Wave 1 commits local past 6d3db06, plus Wave 2a iOS/mobile commits and current uncommitted web KYC fixes.
-**Tests:** Last recorded green state is stale. Current targeted Vitest run is blocked because local Postgres is not reachable at `localhost:5433`.
+**Tests:** Recovery validation green after starting local `kolaleaf-db`: targeted KYC Vitest 10/10, `npx tsc --noEmit`, `npm run build`, physical iPhone build/install/launch.
 
 ### Active recovery todo — 2026-05-14
 
@@ -18,7 +18,8 @@ _Owned by Architect. Updated by Builder after each step._
 - [x] Wrap `/kyc/mock` `useSearchParams()` usage in a Suspense boundary for Next build compatibility.
 - [x] Mark phone-first onboarding plan as partially implemented instead of draft.
 - [x] Mark production `/api/v1/kyc/initiate` 500 as still unresolved and operationally blocked on Railway/Sumsub access.
-- [ ] Bring local Postgres up, then run targeted KYC tests, `npx tsc --noEmit`, and `npm run build`.
+- [x] Bring local Postgres up, then run targeted KYC tests, `npx tsc --noEmit`, and `npm run build`.
+- [x] Build Debug iOS app for paired physical iPhone and install/launch `com.kolaleaf.app`.
 - [ ] Confirm production Sumsub env/logs on Railway and fix the real `/api/v1/kyc/initiate` 500 root cause.
 - [ ] Clean or intentionally commit the large untracked generated `CLAUDE.md` set and new KYC files.
 - [ ] Finish Phase 11 proper: TOTP setup, TOTP verify, backup codes, and SMS 2FA UI decision.

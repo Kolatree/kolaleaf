@@ -1,6 +1,6 @@
 # Review Request -- Active Recovery: Phase 11 partial + D-wave phone-first + web KYC
 
-**Ready for Review:** PARTIAL — code fixes are ready for local review; full validation is blocked until local Postgres is reachable.
+**Ready for Review:** YES for the recovery patch. Production KYC 500 remains operationally blocked on Railway/Sumsub access.
 **Date:** 2026-05-14
 **Branch / worktree:** `feat/ios-swiftui-app` in `/Users/ao/Documents/projects/Kolaleaf`
 
@@ -20,9 +20,13 @@ This active recovery pass fixes two concrete web KYC regressions and updates sta
 
 ## Validation
 
-- Attempted targeted Vitest for KYC access-token/mock-complete tests. It did not run because the test harness requires local Postgres and `localhost:5433` is not reachable.
-- Next required command after DB is up: `npm test -- --run tests/app/api/v1/kyc/access-token.test.ts tests/app/api/v1/kyc/mock-complete.test.ts`.
-- Then run `npx tsc --noEmit` and `npm run build`.
+- `npm run db:up` — started existing `kolaleaf-db` container.
+- `npm test -- --run tests/app/api/v1/kyc/access-token.test.ts tests/app/api/v1/kyc/mock-complete.test.ts` — 2 files / 10 tests passed.
+- `npx tsc --noEmit` — clean.
+- `npm run build` — clean; includes `/api/v1/kyc/access-token`, `/api/v1/kyc/mock/complete`, and `/kyc/mock`.
+- `xcodebuild -project ios/Kolaleaf.xcodeproj -scheme Kolaleaf -configuration Debug -destination 'platform=iOS,name=iPhone' -derivedDataPath ios/build/DerivedData build` — build succeeded for paired iPhone.
+- `xcrun devicectl device install app --device iPhone.coredevice.local ios/build/DerivedData/Build/Products/Debug-iphoneos/Kolaleaf.app` — installed `com.kolaleaf.app`.
+- `xcrun devicectl device process launch --device iPhone.coredevice.local com.kolaleaf.app` — launched successfully.
 
 ## Remaining Review Scope
 

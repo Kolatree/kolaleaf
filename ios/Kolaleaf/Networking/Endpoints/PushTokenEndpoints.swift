@@ -36,6 +36,10 @@ public enum PushTokenEndpoints {
         public let path = "/api/v1/account/push-tokens"
         public let method: HTTPMethod = .post
         public let body: (any Encodable & Sendable)?
+        /// Phase 10 · U76b4: push-token registration is background
+        /// plumbing (APNs token roll-over, Live Activity per-activity
+        /// pushTokenUpdates). Must NOT reset the user-touch idle clock.
+        public let origin: RequestOrigin = .system
 
         public init(_ request: RegisterPushTokenRequest) {
             self.body = request

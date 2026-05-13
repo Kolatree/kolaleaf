@@ -76,7 +76,9 @@ public final class ProcessingTimelineViewModel {
     /// One-shot poll. Exposed so tests can drive the state-only-
     /// advances invariant without standing up the timer loop.
     public func pollOnce() async {
-        let result = await api.send(TransfersEndpoints.Get(id: transferId))
+        // U76b4: background poll — `.system` origin so this success
+        // does not reset the user-touch idle clock.
+        let result = await api.send(TransfersEndpoints.GetForBackgroundPoll(id: transferId))
         switch result {
         case .success(let envelope):
             apply(envelope.transfer)

@@ -23,7 +23,11 @@ public actor APIClient {
     private let cookieStorage: HTTPCookieStorage
     private let decoder: JSONDecoder
     private let builder: RequestBuilder
-    private var onSuccessfulCall: (@Sendable () async -> Void)?
+    /// Phase 10 · U76b4: split into per-origin hooks so background
+    /// traffic (push-token sync, 5s fallback polls) doesn't reset the
+    /// user-touch idle clock and mask a walked-away user.
+    private var onUserSuccess: (@Sendable () async -> Void)?
+    private var onSystemSuccess: (@Sendable () async -> Void)?
 
     public init(baseURL: URL) {
         self.baseURL = baseURL
@@ -48,10 +52,17 @@ public actor APIClient {
         self.decoder = decoder
     }
 
-    /// Hook called on every successful 2xx HTTP response (before decode), so the idle
-    /// timer reflects real backend traffic regardless of decode success.
-    public func setSuccessHook(_ hook: @escaping @Sendable () async -> Void) {
-        self.onSuccessfulCall = hook
+    /// Hook called on every successful 2xx HTTP response for `.user`-origin
+    /// endpoints (Phase 10 · U76b4). Resets the user-touch idle clock.
+    public func setUserSuccessHook(_ hook: @escaping @Sendable () async -> Void) {
+        self.onUserSuccess = hook
+    }
+
+    /// Hook called on every successful 2xx HTTP response for `.system`-origin
+    /// endpoints (push-token sync, fallback polls). Does NOT reset the
+    /// user-touch idle clock — system traffic must not mask an absent user.
+    public func setSystemSuccessHook(_ hook: @escaping @Sendable () async -> Void) {
+        self.onSystemSuccess = hook
     }
 
     /// Clears the private cookie jar. Used by `KolaleafApp.forceReauth()` so a
@@ -107,8 +118,9 @@ public actor APIClient {
 
         // Success path: fire hook BEFORE decode so the idle clock reflects the
         // network-level success even if a contract-drift decode fails.
+        // Origin (user vs system) selects which hook fires (U76b4).
         if (200..<300).contains(http.statusCode) {
-            await fireSuccessHook()
+            await fireSuccessHook(origin: endpoint.origin)
 
             // 202 verification-required: surface as a typed APIError so callers can route
             // to the verify-email screen instead of misinterpreting as 200 success.
@@ -160,9 +172,12 @@ public actor APIClient {
 
     // MARK: - Private
 
-    private func fireSuccessHook() async {
-        if let hook = onSuccessfulCall {
-            await hook()
+    private func fireSuccessHook(origin: RequestOrigin) async {
+        switch origin {
+        case .user:
+            if let hook = onUserSuccess { await hook() }
+        case .system:
+            if let hook = onSystemSuccess { await hook() }
         }
     }
 

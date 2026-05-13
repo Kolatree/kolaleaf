@@ -206,7 +206,9 @@ public final class FloatPausedViewModel {
     }
 
     private func pollOnce(generation expected: UInt64) async {
-        let result = await api.send(TransfersEndpoints.Get(id: transferId))
+        // U76b4: background poll — `.system` origin so the success
+        // does not reset the user-touch idle clock.
+        let result = await api.send(TransfersEndpoints.GetForBackgroundPoll(id: transferId))
         // F2: bail if the VM has been stopped/restarted while the
         // request was in flight.
         guard generation == expected else { return }

@@ -133,10 +133,14 @@ struct KolaleafApp: App {
     }
 
     private func wireAPIClientHooks() async {
-        // Bump idle clock on every successful API call (U76b).
-        await apiClient.setSuccessHook { [appState] in
+        // Bump idle clock on every successful USER-origin API call (U76b
+        // → split in U76b4). System-origin calls (push-token sync, 5s
+        // fallback polls) deliberately do NOT bump the idle clock so
+        // background traffic can't mask a walked-away user.
+        await apiClient.setUserSuccessHook { [appState] in
             await appState.bumpInteraction()
         }
+        await apiClient.setSystemSuccessHook { /* intentionally no-op */ }
     }
 
     private func forceReauth() async {

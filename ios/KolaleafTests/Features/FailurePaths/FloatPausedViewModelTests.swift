@@ -85,7 +85,7 @@ final class FloatPausedViewModelTests: XCTestCase {
     func test_pollOnce_statusUnchanged_doesNotResume() async {
         let api = FakeAPIClient()
         await api.stageSuccess(
-            TransfersEndpoints.Get.self,
+            TransfersEndpoints.GetForBackgroundPoll.self,
             TransferEnvelope(transfer: makeTransfer(status: .floatInsufficient))
         )
         let vm = FloatPausedViewModel(api: api, transferId: "txn_001")
@@ -99,7 +99,7 @@ final class FloatPausedViewModelTests: XCTestCase {
     func test_pollOnce_statusLeavesFloatPaused_setsResumed() async {
         let api = FakeAPIClient()
         await api.stageSuccess(
-            TransfersEndpoints.Get.self,
+            TransfersEndpoints.GetForBackgroundPoll.self,
             TransferEnvelope(transfer: makeTransfer(status: .processingNgn))
         )
         let vm = FloatPausedViewModel(api: api, transferId: "txn_001")
@@ -113,7 +113,7 @@ final class FloatPausedViewModelTests: XCTestCase {
     func test_pollOnce_resumeFiresCallback() async {
         let api = FakeAPIClient()
         await api.stageSuccess(
-            TransfersEndpoints.Get.self,
+            TransfersEndpoints.GetForBackgroundPoll.self,
             TransferEnvelope(transfer: makeTransfer(status: .processingNgn))
         )
         var received: TransferStatus?
@@ -129,7 +129,7 @@ final class FloatPausedViewModelTests: XCTestCase {
     func test_pollOnce_resumeFiresOnlyOnce() async {
         let api = FakeAPIClient()
         await api.stageSuccess(
-            TransfersEndpoints.Get.self,
+            TransfersEndpoints.GetForBackgroundPoll.self,
             TransferEnvelope(transfer: makeTransfer(status: .processingNgn))
         )
         var fireCount = 0
@@ -148,7 +148,7 @@ final class FloatPausedViewModelTests: XCTestCase {
     func test_start_kicksOffPollingLoop() async {
         let api = FakeAPIClient()
         await api.stageSuccess(
-            TransfersEndpoints.Get.self,
+            TransfersEndpoints.GetForBackgroundPoll.self,
             TransferEnvelope(transfer: makeTransfer(status: .floatInsufficient))
         )
         let vm = FloatPausedViewModel(

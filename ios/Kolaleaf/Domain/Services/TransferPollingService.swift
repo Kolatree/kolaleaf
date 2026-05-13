@@ -42,7 +42,9 @@ public final class LiveTransferPollingService: TransferPollingService {
                     guard let self else { continuation.finish(); return }
                     var lastStatus: TransferStatus?
                     while !Task.isCancelled {
-                        let result = await self.api.send(TransfersEndpoints.Get(id: transferId))
+                        // U76b4: background poll — `.system` origin so success
+                        // does not reset the user-touch idle clock.
+                        let result = await self.api.send(TransfersEndpoints.GetForBackgroundPoll(id: transferId))
                         switch result {
                         case .success(let envelope):
                             continuation.yield(.snapshot(envelope.transfer))

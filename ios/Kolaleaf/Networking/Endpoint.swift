@@ -15,6 +15,22 @@ public enum HTTPMethod: String, Sendable {
     case delete = "DELETE"
 }
 
+/// Origin of an API call. Drives whether the success hook resets the
+/// user-touch idle clock (Phase 10 · U76b4).
+///
+/// • `.user`   — the call was triggered by user intent (tap, form
+///   submit, pull-to-refresh, screen open). On 2xx it counts as
+///   activity and resets the idle window.
+/// • `.system` — the call is background plumbing (push-token sync,
+///   5-second fallback polls, refresh ticks). On 2xx it does NOT reset
+///   the idle window — otherwise the user could be away and the
+///   force-reauth at 14 minutes would never fire because polling kept
+///   the clock fresh.
+public enum RequestOrigin: Sendable {
+    case user
+    case system
+}
+
 public protocol Endpoint: Sendable {
     associatedtype Response: Decodable & Sendable
 
@@ -28,12 +44,20 @@ public protocol Endpoint: Sendable {
     var body: (any Encodable & Sendable)? { get }
     /// Headers added on top of `APIClient` defaults (Content-Type, Accept, cookies).
     var extraHeaders: [String: String] { get }
+    /// Whether this call counts as user activity for idle-clock purposes
+    /// (Phase 10 · U76b4). Defaults to `.user`; system endpoints
+    /// (push-token sync, fallback polls) override to `.system`.
+    var origin: RequestOrigin { get }
 }
 
 public extension Endpoint {
     var query: [URLQueryItem] { [] }
     var body: (any Encodable & Sendable)? { nil }
     var extraHeaders: [String: String] { [:] }
+    /// Default: every endpoint is user-driven unless it explicitly
+    /// declares otherwise. New endpoints don't need to think about
+    /// this — only background pollers and push-token registers do.
+    var origin: RequestOrigin { .user }
 }
 
 /// Sentinel response type for endpoints whose backend returns an empty body

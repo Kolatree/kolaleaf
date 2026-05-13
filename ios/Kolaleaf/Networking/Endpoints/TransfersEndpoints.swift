@@ -30,12 +30,29 @@ public enum TransfersEndpoints {
         }
     }
 
-    /// `GET /api/v1/transfers/:id` — single transfer for the polling
-    /// fallback used by ProcessingTimelineViewModel.
+    /// `GET /api/v1/transfers/:id` — single transfer fetch used by
+    /// user-driven flows (transaction-detail open, pull-to-refresh,
+    /// expired-transfer load). Origin defaults to `.user` so the
+    /// success counts as activity for the idle clock.
     public struct Get: Endpoint {
         public typealias Response = TransferEnvelope
         public let path: String
         public let method: HTTPMethod = .get
+
+        public init(id: String) {
+            self.path = "/api/v1/transfers/\(id)"
+        }
+    }
+
+    /// Identical to `Get(id:)` but marked `.system` origin (Phase 10 ·
+    /// U76b4) so background polling loops (ProcessingTimelineViewModel,
+    /// FloatPausedViewModel, LiveTransferPollingService) don't reset
+    /// the user-touch idle clock and mask a walked-away user.
+    public struct GetForBackgroundPoll: Endpoint {
+        public typealias Response = TransferEnvelope
+        public let path: String
+        public let method: HTTPMethod = .get
+        public let origin: RequestOrigin = .system
 
         public init(id: String) {
             self.path = "/api/v1/transfers/\(id)"

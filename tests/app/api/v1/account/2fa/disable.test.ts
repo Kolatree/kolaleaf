@@ -76,6 +76,11 @@ describe('POST /api/v1/account/2fa/disable', () => {
     mockRequireAuth.mockRejectedValueOnce(new AuthError(401, 'Authentication required'))
     const res = await POST(makeRequest({ code: '123456' }))
     expect(res.status).toBe(401)
+    const json = await res.json()
+    expect(json).toMatchObject({
+      error: 'Authentication required',
+      reason: 'unauthenticated',
+    })
   })
 
   it('returns 400 not_enabled when 2FA is off', async () => {
@@ -89,7 +94,7 @@ describe('POST /api/v1/account/2fa/disable', () => {
     const res = await POST(makeRequest({ code: '123456' }))
     expect(res.status).toBe(400)
     const json = await res.json()
-    expect(json.error).toBe('not_enabled')
+    expect(json.reason).toBe('not_enabled')
   })
 
   it('returns 422 for missing code (Zod)', async () => {
@@ -203,7 +208,7 @@ describe('POST /api/v1/account/2fa/disable', () => {
     const res = await POST(makeRequest({ code: '999999' }))
     expect(res.status).toBe(400)
     const json = await res.json()
-    expect(json.error).toBe('invalid_code')
+    expect(json.reason).toBe('invalid_code')
     expect(prisma.user.update).not.toHaveBeenCalled()
   })
 })

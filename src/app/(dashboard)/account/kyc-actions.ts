@@ -24,6 +24,17 @@ export function isAllowedSumsubUrl(raw: unknown): raw is string {
     return false
   }
 
+  const sameOrigin =
+    typeof window !== 'undefined' && url.origin === window.location.origin
+
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    sameOrigin &&
+    url.pathname.startsWith('/kyc/mock')
+  ) {
+    return true
+  }
+
   if (url.protocol !== 'https:') return false
   return url.host === 'sumsub.com' || url.host.endsWith('.sumsub.com')
 }

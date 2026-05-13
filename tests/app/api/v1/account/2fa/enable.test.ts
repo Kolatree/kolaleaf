@@ -74,6 +74,11 @@ describe('POST /api/v1/account/2fa/enable', () => {
     mockRequireAuth.mockRejectedValueOnce(new AuthError(401, 'Authentication required'))
     const res = await POST(makeRequest({ method: 'TOTP', secret: 's', code: '000000' }))
     expect(res.status).toBe(401)
+    const json = await res.json()
+    expect(json).toMatchObject({
+      error: 'Authentication required',
+      reason: 'unauthenticated',
+    })
   })
 
   it('returns 400 already_enabled when user has 2FA on', async () => {
@@ -85,7 +90,7 @@ describe('POST /api/v1/account/2fa/enable', () => {
     const res = await POST(makeRequest({ method: 'TOTP', secret: 's', code: '000000' }))
     expect(res.status).toBe(400)
     const json = await res.json()
-    expect(json.error).toBe('already_enabled')
+    expect(json.reason).toBe('already_enabled')
   })
 
   it('TOTP invalid code returns 400', async () => {
@@ -99,7 +104,7 @@ describe('POST /api/v1/account/2fa/enable', () => {
     const res = await POST(makeRequest({ method: 'TOTP', secret: 'SECRET', code: '999999' }))
     expect(res.status).toBe(400)
     const json = await res.json()
-    expect(json.error).toBe('invalid_code')
+    expect(json.reason).toBe('invalid_code')
     expect(prisma.$transaction).not.toHaveBeenCalled()
   })
 
@@ -158,7 +163,7 @@ describe('POST /api/v1/account/2fa/enable', () => {
     const res = await POST(makeRequest({ method: 'SMS', challengeId: 'c1', code: '000000' }))
     expect(res.status).toBe(400)
     const json = await res.json()
-    expect(json.error).toBe('invalid_code')
+    expect(json.reason).toBe('invalid_code')
   })
 
   it('SMS valid challenge commits and returns backup codes', async () => {

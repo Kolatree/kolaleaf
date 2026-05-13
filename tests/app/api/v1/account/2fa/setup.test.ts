@@ -71,6 +71,11 @@ describe('POST /api/v1/account/2fa/setup', () => {
     mockRequireAuth.mockRejectedValueOnce(new AuthError(401, 'Authentication required'))
     const res = await POST(makeRequest({ method: 'TOTP' }))
     expect(res.status).toBe(401)
+    const json = await res.json()
+    expect(json).toMatchObject({
+      error: 'Authentication required',
+      reason: 'unauthenticated',
+    })
   })
 
   it('returns 422 when method is missing or invalid (Zod)', async () => {
@@ -93,7 +98,8 @@ describe('POST /api/v1/account/2fa/setup', () => {
     const res = await POST(makeRequest({ method: 'TOTP' }))
     expect(res.status).toBe(400)
     const json = await res.json()
-    expect(json.error).toBe('already_enabled')
+    expect(json.reason).toBe('already_enabled')
+    expect(json.error).toBe('Two-factor authentication is already enabled.')
   })
 
   it('TOTP happy path: returns secret, otpauthUri and qrDataUrl', async () => {
@@ -163,7 +169,7 @@ describe('POST /api/v1/account/2fa/setup', () => {
     const res = await POST(makeRequest({ method: 'SMS' }))
     expect(res.status).toBe(400)
     const json = await res.json()
-    expect(json.error).toBe('phone_not_verified')
+    expect(json.reason).toBe('phone_not_verified')
     expect(mockIssueSmsChallenge).not.toHaveBeenCalled()
   })
 
@@ -178,6 +184,6 @@ describe('POST /api/v1/account/2fa/setup', () => {
     const res = await POST(makeRequest({ method: 'TOTP' }))
     expect(res.status).toBe(400)
     const json = await res.json()
-    expect(json.error).toBe('email_required')
+    expect(json.reason).toBe('email_required')
   })
 })

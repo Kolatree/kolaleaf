@@ -5,6 +5,7 @@ import { requireAuth, AuthError } from '@/lib/auth/middleware'
 import { verifyTotpCode, generateBackupCodes } from '@/lib/auth/totp'
 import { verifyChallenge } from '@/lib/auth/two-factor-challenge'
 import { parseBody } from '@/lib/http/validate'
+import { jsonError } from '@/lib/http/json-error'
 import { log } from '@/lib/obs/logger'
 import { Enable2faBody } from './_schemas'
 
@@ -26,13 +27,13 @@ export async function POST(request: Request) {
 
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } })
     if (user.twoFactorMethod !== 'NONE') {
-      return NextResponse.json({ error: 'already_enabled' }, { status: 400 })
+      return jsonError('already_enabled', 'Two-factor authentication is already enabled.', 400)
     }
 
     if (method === 'TOTP') {
       const { secret } = body
       if (!verifyTotpCode(secret, code)) {
-        return NextResponse.json({ error: 'invalid_code' }, { status: 400 })
+        return jsonError('invalid_code', 'That code did not match. Please try again.', 400)
       }
 
       const { codes, hashes } = generateBackupCodes()
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
     const { challengeId } = body
     const ok = await verifyChallenge(userId, challengeId, code)
     if (!ok) {
-      return NextResponse.json({ error: 'invalid_code' }, { status: 400 })
+      return jsonError('invalid_code', 'That code did not match. Please try again.', 400)
     }
 
     const { codes, hashes } = generateBackupCodes()
@@ -93,9 +94,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ enabled: true, backupCodes: codes })
   } catch (error) {
     if (error instanceof AuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+      const reason = error.statusCode === 401 ? 'unauthenticated' : 'forbidden'
+      return jsonError(reason, error.message, error.statusCode)
     }
     log('error', 'account.2fa.enable.failed', { error: error instanceof Error ? error.message : String(error) })
-    return NextResponse.json({ error: 'server_error' }, { status: 500 })
+    return jsonError('server_error', 'Server error', 500)
   }
 }

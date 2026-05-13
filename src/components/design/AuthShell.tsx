@@ -23,7 +23,7 @@ export interface AuthShellProps {
   children: ReactNode
   /** Max width of the card. 'sm' for short forms, 'md' for the
    *  details step with its longer address block. */
-  width?: 'sm' | 'md'
+  width?: 'sm' | 'md' | 'lg'
   /** Copy under the logo in the header. Defaults to the standard
    *  Kolaleaf tagline; pages can override for step-specific context. */
   subtitle?: ReactNode
@@ -37,6 +37,7 @@ export interface AuthShellProps {
 const widthClass = {
   sm: 'w-full max-w-sm',
   md: 'w-full max-w-md',
+  lg: 'w-full max-w-2xl',
 } as const
 
 function TrustIndicators() {
@@ -49,7 +50,7 @@ function TrustIndicators() {
   )
 }
 
-function Card({ children, width }: { children: ReactNode; width: 'sm' | 'md' }) {
+function Card({ children, width }: { children: ReactNode; width: 'sm' | 'md' | 'lg' }) {
   return (
     <div className={`${widthClass[width]} kola-card-enter`}>
       <div className="text-center mb-8">

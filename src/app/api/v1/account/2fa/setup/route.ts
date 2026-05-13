@@ -9,6 +9,7 @@ import {
 } from '@/lib/auth/totp'
 import { issueSmsChallenge } from '@/lib/auth/two-factor-challenge'
 import { parseBody } from '@/lib/http/validate'
+import { jsonError } from '@/lib/http/json-error'
 import { log } from '@/lib/obs/logger'
 import { Setup2faBody } from './_schemas'
 
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
 
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } })
     if (user.twoFactorMethod !== 'NONE') {
-      return NextResponse.json({ error: 'already_enabled' }, { status: 400 })
+      return jsonError('already_enabled', 'Two-factor authentication is already enabled.', 400)
     }
 
     if (method === 'TOTP') {
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
         orderBy: { createdAt: 'asc' },
       })
       if (!email) {
-        return NextResponse.json({ error: 'email_required' }, { status: 400 })
+        return jsonError('email_required', 'A verified email is required to set up an authenticator app.', 400)
       }
 
       const secret = generateTotpSecret()
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
       orderBy: { createdAt: 'asc' },
     })
     if (!phone) {
-      return NextResponse.json({ error: 'phone_not_verified' }, { status: 400 })
+      return jsonError('phone_not_verified', 'Verify your phone number before enabling SMS codes.', 400)
     }
 
     const { challengeId } = await issueSmsChallenge(userId, phone.identifier)
@@ -88,9 +89,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ method: 'SMS', challengeId })
   } catch (error) {
     if (error instanceof AuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+      const reason = error.statusCode === 401 ? 'unauthenticated' : 'forbidden'
+      return jsonError(reason, error.message, error.statusCode)
     }
     log('error', 'account.2fa.setup.failed', { error: error instanceof Error ? error.message : String(error) })
-    return NextResponse.json({ error: 'server_error' }, { status: 500 })
+    return jsonError('server_error', 'Server error', 500)
   }
 }

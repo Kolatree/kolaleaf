@@ -6,7 +6,7 @@ import { DashboardShell, colors, radius, shadow, spacing } from '@/components/de
 import { apiFetch } from '@/lib/http/api-client'
 import { TwoFactorSection } from './_components/two-factor-section'
 import { AccountIdentitySection } from './_components/account-identity-section'
-import { getKycAction, isAllowedSumsubUrl } from './kyc-actions'
+import { getKycAction } from './kyc-actions'
 
 interface KycStatus {
   status: string
@@ -25,8 +25,6 @@ export default function AccountPage() {
   const [kyc, setKyc] = useState<KycStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [loggingOut, setLoggingOut] = useState(false)
-  const [kycSubmitting, setKycSubmitting] = useState(false)
-  const [kycError, setKycError] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -55,31 +53,11 @@ export default function AccountPage() {
     router.push('/login')
   }
 
-  async function handleKycAction() {
+  function handleKycAction() {
     const action = getKycAction(kyc?.status)
     if (!action) return
 
-    setKycError('')
-    setKycSubmitting(true)
-    try {
-      const res = await apiFetch(action.endpoint, { method: 'POST' })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setKycError(typeof data.error === 'string' ? data.error : 'Unable to start verification right now.')
-        return
-      }
-
-      if (isAllowedSumsubUrl(data.verificationUrl)) {
-        window.location.href = data.verificationUrl
-        return
-      }
-
-      setKycError('Verification link is unavailable right now. Please try again.')
-    } catch {
-      setKycError('Unable to start verification right now. Please try again.')
-    } finally {
-      setKycSubmitting(false)
-    }
+    router.push('/kyc')
   }
 
   const pill = kyc ? KYC_PILL[kyc.status] ?? KYC_PILL.PENDING : null
@@ -132,31 +110,15 @@ export default function AccountPage() {
               <button
                 type="button"
                 onClick={handleKycAction}
-                disabled={kycSubmitting}
-                className="mt-4 disabled:opacity-60"
+                className="mt-4"
                 style={{
                   fontSize: '13px',
                   fontWeight: 600,
                   color: colors.purple,
                 }}
               >
-                {kycSubmitting ? 'Starting…' : kycAction?.label}
+                {kycAction?.label}
               </button>
-              {kycError && (
-                <div
-                  role="alert"
-                  className="mt-3"
-                  style={{
-                    background: '#fef1f2',
-                    color: '#b00020',
-                    fontSize: '12px',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                  }}
-                >
-                  {kycError}
-                </div>
-              )}
             </>
           )}
         </section>

@@ -5,6 +5,7 @@ import { requireAuth, AuthError } from '@/lib/auth/middleware'
 import { verifyTotpCodeWithReplay, verifyBackupCode, generateBackupCodes } from '@/lib/auth/totp'
 import { verifyChallenge } from '@/lib/auth/two-factor-challenge'
 import { parseBody } from '@/lib/http/validate'
+import { jsonError } from '@/lib/http/json-error'
 import { log } from '@/lib/obs/logger'
 import { RegenerateBackupCodesBody } from './_schemas'
 
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
 
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } })
     if (user.twoFactorMethod === 'NONE') {
-      return NextResponse.json({ error: 'not_enabled' }, { status: 400 })
+      return jsonError('not_enabled', 'Two-factor authentication is not enabled.', 400)
     }
 
     let verified = false
@@ -48,7 +49,7 @@ export async function POST(request: Request) {
     }
 
     if (!verified) {
-      return NextResponse.json({ error: 'invalid_code' }, { status: 400 })
+      return jsonError('invalid_code', 'That code did not match. Please try again.', 400)
     }
 
     const { codes, hashes } = generateBackupCodes()
@@ -78,9 +79,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ backupCodes: codes })
   } catch (error) {
     if (error instanceof AuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+      const reason = error.statusCode === 401 ? 'unauthenticated' : 'forbidden'
+      return jsonError(reason, error.message, error.statusCode)
     }
     log('error', 'account.2fa.regenerate-backup-codes.failed', { error: error instanceof Error ? error.message : String(error) })
-    return NextResponse.json({ error: 'server_error' }, { status: 500 })
+    return jsonError('server_error', 'Server error', 500)
   }
 }

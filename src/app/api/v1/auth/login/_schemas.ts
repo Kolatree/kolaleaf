@@ -9,15 +9,23 @@ import {
 // POST /api/v1/auth/login
 //
 // Step 21: `identifier` is now a discriminated-union object with
-// `type` + `value`. Only `type: 'email'` is implemented today —
-// Apple/Google sign-in will widen this schema when those routes
-// land. Keeping the body narrow prevents advertising OAuth types
-// we don't actually authenticate.
+// `type` + `value`. Apple/Google sign-in will widen this schema
+// when those routes land. Keeping the body narrow prevents
+// advertising OAuth types we don't actually authenticate.
+//
+// 2026-05-13 phone-first widening: phone variant accepted. The
+// backend matches an E.164 phone against a verified PHONE
+// UserIdentifier and password-checks the linked user. Apple/Google
+// remain out of scope until those IdP integrations ship.
 
-export const LoginIdentifier = z.object({
-  type: z.literal("email"),
-  value: Email,
-});
+const PhoneE164 = z
+  .string()
+  .regex(/^\+\d{7,15}$/, "Phone must be E.164 (e.g. +61400000000)");
+
+export const LoginIdentifier = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("email"), value: Email }),
+  z.object({ type: z.literal("phone"), value: PhoneE164 }),
+]);
 
 export const LoginBody = z.object({
   identifier: LoginIdentifier,

@@ -1,12 +1,12 @@
 # Plan: Phone-First Onboarding (with email fallback)
 
 **Date:** 2026-05-13
-**Status:** Draft — substantial multi-week effort spanning backend + iOS + provider integration
+**Status:** Partially implemented locally — backend/iOS core rails landed; production rollout and operational verification still pending
 **Origin:** User feedback during Phase 10 — "we started with phone number during design but you only implemented email"
 
 ## Why
 
-The original product design (`docs/Kolaleaf Vectors/`, screens shared 2026-05-13) put **phone number** as the primary identifier with **email as a fallback link** ("or use email instead"). The current Wave 1 implementation ships email-only because the backend `LoginIdentifier` schema is `{type: "email", value: Email}` (`src/app/api/v1/auth/login/_schemas.ts:17-20`) — phone wasn't yet wired into the auth or send-code routes.
+The original product design (`docs/Kolaleaf Vectors/`, screens shared 2026-05-13) put **phone number** as the primary identifier with **email as a fallback link** ("or use email instead"). This plan started because the Wave 1 implementation shipped email-only. Since then, the local branch has implemented the core phone rail: backend `LoginIdentifier`, `send-code`, `verify-code`, and `complete-registration` accept the discriminated email/phone shape; iOS has `PhoneEntryView`, `PhoneOTPView`, typed `PhoneNumber`, phone-default sign-in, and route wiring. Treat the remaining work below as rollout/readiness work, not greenfield implementation.
 
 Phone-first matters because:
 
@@ -140,11 +140,11 @@ public struct SendCodeRequest: Codable, Sendable {
 
 | Wave      | Work                                                           | Estimate             |
 | --------- | -------------------------------------------------------------- | -------------------- |
-| W1        | Twilio account + AU sender + Railway env vars                  | 1 day                |
-| W2        | Backend: SmsClient + schema widen + routes + migration + tests | 3 days               |
-| W3        | iOS: DTOs + endpoints + new views + coordinator changes        | 4 days               |
-| W4        | E2E test on simulator + physical device + Twilio sandbox       | 1 day                |
-| W5        | Production rollout via feature flag (`PHONE_LOGIN_ENABLED`)    | 1 day                |
+| W1        | Twilio account + AU sender + Railway env vars                  | Pending              |
+| W2        | Backend: SmsClient + schema widen + routes + migration + tests | Implemented locally  |
+| W3        | iOS: DTOs + endpoints + new views + coordinator changes        | Implemented locally  |
+| W4        | E2E test on simulator + physical device + Twilio sandbox       | Pending              |
+| W5        | Production rollout via feature flag / staged enablement        | Pending              |
 | **Total** |                                                                | **~10 working days** |
 
 ## Migration risk

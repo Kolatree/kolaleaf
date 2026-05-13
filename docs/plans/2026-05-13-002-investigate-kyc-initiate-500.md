@@ -1,7 +1,7 @@
 # Investigation: `/api/v1/kyc/initiate` returns 500 in production
 
 **Date:** 2026-05-13
-**Status:** Outstanding — needs Railway log access to confirm
+**Status:** Outstanding — needs Railway/Sumsub access to confirm. Local web fallback/mock KYC work does not prove or fix the production 500.
 **Trigger:** iPhone screenshot showed `Something went wrong on our side (500).` on the KYC intro screen after tapping "Start verification"
 
 ## What we know
@@ -71,6 +71,12 @@ railway logs --service kolaleaf-web --tail | grep -E "kyc.initiate|Sumsub|kyc.fa
 ## Workaround for the user RIGHT NOW
 
 The "Maybe later" Skip button shipped in commit `e8a52bb` lets the user reach MainTab without completing KYC. The /kyc/initiate 500 is a real backend bug but is not blocking app exploration. Backend transfer-time KYC enforcement (separate concern) gates actual money movement until verification completes.
+
+## Current local mitigation status
+
+- Web `/kyc` has been widened to continue an existing `IN_REVIEW` Sumsub session via `POST /api/v1/kyc/access-token`.
+- Local development can route to `/kyc/mock` and complete/reject a mock KYC application outside production.
+- These changes improve local/dev recovery only. Production still requires the Railway log/env check above, then either Sumsub env correction, Sumsub applicant cleanup/idempotency, or a code hotfix depending on the observed stack trace.
 
 ## Fix paths (once root cause confirmed)
 

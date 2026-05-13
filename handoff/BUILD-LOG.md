@@ -6,10 +6,23 @@ _Owned by Architect. Updated by Builder after each step._
 
 ## Current Status
 
-**Active step:** Wave 1 COMPLETE (Steps 26–32 all landed + review-hardened).
-**Last cleared:** Step 32 hardening — security anomaly detection review fixes (4113332)
-**Pending deploy:** All Pile B + Wave 1 commits local past 6d3db06 (the pushed Step 19).
-**Tests:** 955 passing. tsc clean. build clean.
+**Active step:** Wave 2a iOS Phase 11 partial + D-wave phone-first recovery + web KYC recovery.
+**Last cleared:** Phase 10C hardening + D-wave iter-2 review fixes are committed locally on `feat/ios-swiftui-app`.
+**Pending deploy:** All Pile B + Wave 1 commits local past 6d3db06, plus Wave 2a iOS/mobile commits and current uncommitted web KYC fixes.
+**Tests:** Last recorded green state is stale. Current targeted Vitest run is blocked because local Postgres is not reachable at `localhost:5433`.
+
+### Active recovery todo — 2026-05-14
+
+- [x] Fix `POST /api/v1/kyc/access-token` to return canonical `{ error, reason }` envelopes.
+- [x] Add/align access-token route tests for `unauthenticated`, `kyc_no_application`, `kyc_already_verified`, and `kyc_access_token_failed`.
+- [x] Wrap `/kyc/mock` `useSearchParams()` usage in a Suspense boundary for Next build compatibility.
+- [x] Mark phone-first onboarding plan as partially implemented instead of draft.
+- [x] Mark production `/api/v1/kyc/initiate` 500 as still unresolved and operationally blocked on Railway/Sumsub access.
+- [ ] Bring local Postgres up, then run targeted KYC tests, `npx tsc --noEmit`, and `npm run build`.
+- [ ] Confirm production Sumsub env/logs on Railway and fix the real `/api/v1/kyc/initiate` 500 root cause.
+- [ ] Clean or intentionally commit the large untracked generated `CLAUDE.md` set and new KYC files.
+- [ ] Finish Phase 11 proper: TOTP setup, TOTP verify, backup codes, and SMS 2FA UI decision.
+- [ ] Reconcile Phase 11.5 scope against code already moved earlier (switcher blur, idle timeout primitives, referral capture, Live Activity redaction).
 
 ### Wave 1 commit ledger (closes WAVE-1-AUDIT.md gaps)
 

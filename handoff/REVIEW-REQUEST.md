@@ -1,3 +1,38 @@
+# Review Request -- Active Recovery: Phase 11 partial + D-wave phone-first + web KYC
+
+**Ready for Review:** PARTIAL — code fixes are ready for local review; full validation is blocked until local Postgres is reachable.
+**Date:** 2026-05-14
+**Branch / worktree:** `feat/ios-swiftui-app` in `/Users/ao/Documents/projects/Kolaleaf`
+
+## Summary
+
+This active recovery pass fixes two concrete web KYC regressions and updates stale planning state. `POST /api/v1/kyc/access-token` now returns the canonical `{ error, reason }` envelope advertised by its OpenAPI schema, so iOS/web clients can route by stable reason codes. `/kyc/mock` now wraps `useSearchParams()` behind Suspense for Next build compatibility. The phone-first onboarding plan is no longer labelled as draft because backend/iOS core rails have landed locally; production readiness remains gated on Twilio/Railway env verification and device/simulator E2E. The production `/api/v1/kyc/initiate` 500 remains unresolved until Railway logs and Sumsub env/config are inspected.
+
+## Files Changed In This Recovery Pass
+
+- `src/app/api/v1/kyc/access-token/route.ts` — canonical `jsonError` envelopes with reasons: `unauthenticated`, `forbidden`, `kyc_already_verified`, `kyc_no_application`, `kyc_access_token_failed`.
+- `src/app/api/v1/kyc/access-token/_schemas.ts` — documents 500 as `ErrorEnvelope`.
+- `tests/app/api/v1/kyc/access-token.test.ts` — asserts canonical reason codes for 401/409/500.
+- `src/app/(dashboard)/kyc/mock/page.tsx` — splits inner component and wraps search-param usage in Suspense.
+- `docs/plans/2026-05-13-001-feat-phone-first-onboarding-plan.md` — status corrected to partially implemented locally.
+- `docs/plans/2026-05-13-002-investigate-kyc-initiate-500.md` — status clarified as unresolved production issue, not fixed by local mock/web recovery.
+- `handoff/BUILD-LOG.md` — active status and recovery todo list updated.
+
+## Validation
+
+- Attempted targeted Vitest for KYC access-token/mock-complete tests. It did not run because the test harness requires local Postgres and `localhost:5433` is not reachable.
+- Next required command after DB is up: `npm test -- --run tests/app/api/v1/kyc/access-token.test.ts tests/app/api/v1/kyc/mock-complete.test.ts`.
+- Then run `npx tsc --noEmit` and `npm run build`.
+
+## Remaining Review Scope
+
+- Verify the route envelope changes are compatible with iOS `APIError` reason dispatch.
+- Verify `/kyc/mock` builds under Next 16.
+- Confirm no production claim is made for the `/kyc/initiate` 500 until Railway/Sumsub logs are inspected.
+- Reconcile Phase 11 scope: the current app only has Phase 11 slim Face ID security; full TOTP/backup-code/SMS 2FA remains to build.
+
+---
+
 # Review Request -- Step 18: Verify-First Registration (3-step wizard)
 
 **Ready for Review:** YES

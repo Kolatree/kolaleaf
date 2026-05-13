@@ -127,6 +127,11 @@ targets:
       # ActivityKit attributes — same Codable type addressable on both
       # sides of the IPC boundary (Phase 10A · U66).
       - path: Kolaleaf/LiveActivities/KolaleafTransferAttributes.swift
+      # OO-2001 + CA-2008 + ADV-P10B-C5 (Phase 10B iter-2): single
+      # source of truth for the treasury-silent copy lint. Used by
+      # widget views (lock-screen + Dynamic Island) AND by the
+      # app-side `LiveActivityStageLabels` builder.
+      - path: Kolaleaf/LiveActivities/LiveActivityCopyLint.swift
     info:
       path: KolaleafWidgets/Info.plist
       properties:
@@ -190,6 +195,8 @@ targets:
       - path: Kolaleaf/Design/Tokens/KolaColors+Core.swift
       - path: Kolaleaf/Design/Tokens/KolaSpacing.swift
       - path: Kolaleaf/LiveActivities/KolaleafTransferAttributes.swift
+      # iter-2: shared lint surface (see app + widget target sources).
+      - path: Kolaleaf/LiveActivities/LiveActivityCopyLint.swift
     dependencies:
       - package: SnapshotTesting
     settings:

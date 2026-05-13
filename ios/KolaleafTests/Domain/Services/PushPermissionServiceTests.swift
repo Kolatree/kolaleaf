@@ -105,7 +105,7 @@ final class PushPermissionServiceTests: XCTestCase {
             as: RegisterPushTokenRequest.self
         )
         XCTAssertEqual(body?.deviceToken, "deadbeef")
-        XCTAssertEqual(body?.kind, "notification")
+        XCTAssertEqual(body?.kind, .notification)
         XCTAssertEqual(body?.bundleId, "com.kolaleaf.test")
         XCTAssertEqual(body?.device, "iPhone16,1")
     }
@@ -120,6 +120,6 @@ final class PushPermissionServiceTests: XCTestCase {
             for: String(describing: PushTokenEndpoints.Register.self),
             as: RegisterPushTokenRequest.self
         )
-        XCTAssertEqual(body?.kind, "live_activity")
+        XCTAssertEqual(body?.kind, .liveActivity)
     }
 }

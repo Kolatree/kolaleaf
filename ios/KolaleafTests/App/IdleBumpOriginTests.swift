@@ -69,7 +69,7 @@ final class IdleBumpOriginTests: XCTestCase {
 
     func test_pushTokenRegister_origin_isSystem() {
         let req = RegisterPushTokenRequest(
-            deviceToken: "ab", kind: "live_activity",
+            deviceToken: "ab", kind: .liveActivity,
             bundleId: "x", device: nil
         )
         XCTAssertEqual(PushTokenEndpoints.Register(req).origin, .system)

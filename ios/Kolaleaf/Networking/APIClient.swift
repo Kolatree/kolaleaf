@@ -150,14 +150,18 @@ public actor APIClient {
             }
         }
 
-        // Success path: fire hook BEFORE decode so the idle clock reflects the
-        // network-level success even if a contract-drift decode fails.
+        // Success path: fire hook AFTER successful decode (ADV-P10B-W8).
+        // The earlier "fire BEFORE decode" pattern bumped the user-touch
+        // idle clock for 200-with-malformed-body responses that the user
+        // perceives as a failure (corrupt upstream proxy, HTML 200 from a
+        // misconfigured edge, partial response). Firing post-decode means
+        // the hook only marks the user as present when the response was
+        // both 2xx AND a usable payload.
         // Origin (user vs system) selects which hook fires (U76b4).
         if (200..<300).contains(http.statusCode) {
-            await fireSuccessHook(origin: endpoint.origin)
-
             // 202 verification-required: surface as a typed APIError so callers can route
             // to the verify-email screen instead of misinterpreting as 200 success.
+            // No hook fire — verification-required is not user-success.
             if http.statusCode == 202,
                let v = try? decoder.decode(LoginVerificationRequiredResponse.self, from: data) {
                 return .failure(.verificationRequired(email: v.email, message: v.message))
@@ -167,11 +171,13 @@ public actor APIClient {
             // that fails for non-EmptyResponse types.
             if data.isEmpty {
                 if E.Response.self == EmptyResponse.self {
+                    await fireSuccessHook(origin: endpoint.origin)
                     return .success(EmptyResponse() as! E.Response)
                 }
                 // 204 with a non-Empty Response type — try parsing an empty object so
                 // DTOs with all-optional fields decode cleanly.
                 if let empty = try? decoder.decode(E.Response.self, from: Data("{}".utf8)) {
+                    await fireSuccessHook(origin: endpoint.origin)
                     return .success(empty)
                 }
                 return .failure(.decode("Empty body for non-EmptyResponse endpoint"))
@@ -179,6 +185,7 @@ public actor APIClient {
 
             do {
                 let decoded = try decoder.decode(E.Response.self, from: data)
+                await fireSuccessHook(origin: endpoint.origin)
                 return .success(decoded)
             } catch {
                 return .failure(.decode(error.localizedDescription))

@@ -40,7 +40,7 @@ final class APIClientOriginTests: XCTestCase {
     func test_pushTokenRegister_isSystem() {
         let req = RegisterPushTokenRequest(
             deviceToken: "deadbeef",
-            kind: "live_activity",
+            kind: .liveActivity,
             bundleId: "x",
             device: nil
         )

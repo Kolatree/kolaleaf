@@ -26,7 +26,7 @@ public enum HTTPMethod: String, Sendable {
 ///   the idle window — otherwise the user could be away and the
 ///   force-reauth at 14 minutes would never fire because polling kept
 ///   the clock fresh.
-public enum RequestOrigin: Sendable {
+public enum RequestOrigin: Sendable, Hashable, CaseIterable {
     case user
     case system
 }

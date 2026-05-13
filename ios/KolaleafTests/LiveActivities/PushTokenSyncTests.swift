@@ -27,7 +27,7 @@ final class PushTokenSyncTests: XCTestCase {
             as: RegisterPushTokenRequest.self
         )
         XCTAssertEqual(body?.deviceToken, "deadbeef")
-        XCTAssertEqual(body?.kind, "live_activity")
+        XCTAssertEqual(body?.kind, .liveActivity)
         XCTAssertEqual(body?.bundleId, "com.kolaleaf.test")
         XCTAssertEqual(body?.device, "iPhone16,1")
     }

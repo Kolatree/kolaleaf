@@ -63,9 +63,20 @@ public actor PushPermissionService {
         case error(String)
     }
 
-    public enum TokenKind: String, Sendable {
-        case notification = "notification"
-        case liveActivity = "live_activity"
+    /// API-2003 (Phase 10B iter-2): kept as a typealias-style wrapper
+    /// over the canonical `PushTokenKind` so existing call sites
+    /// (`register(deviceToken:kind: .notification)`) keep working
+    /// without churn while the wire payload uses the typed enum.
+    public enum TokenKind: Sendable {
+        case notification
+        case liveActivity
+
+        var wire: PushTokenKind {
+            switch self {
+            case .notification: return .notification
+            case .liveActivity: return .liveActivity
+            }
+        }
     }
 
     private let api: AuthAPI
@@ -114,7 +125,7 @@ public actor PushPermissionService {
         let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
         let req = RegisterPushTokenRequest(
             deviceToken: hex,
-            kind: kind.rawValue,
+            kind: kind.wire,
             bundleId: bundleId,
             device: device
         )

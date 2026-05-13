@@ -29,6 +29,12 @@ public final class ProcessingTimelineViewModel {
     public private(set) var isPolling: Bool = false
     public private(set) var lastError: String?
 
+    /// ADV-P10B-C6: counts back-to-back failed polls so the loop can
+    /// (a) back off to longer intervals and (b) eventually stop and
+    /// surface a recoverable error rather than poll forever and drain
+    /// battery. Reset to 0 on any successful poll.
+    public private(set) var consecutiveErrors: Int = 0
+
     private var pollTask: Task<Void, Never>?
 
     public init(
@@ -47,6 +53,14 @@ public final class ProcessingTimelineViewModel {
 
     /// Begin the polling loop. Idempotent — restart is a no-op while
     /// already running.
+    ///
+    /// Error-budget policy (ADV-P10B-C6): consecutive failures ramp the
+    /// inter-poll sleep via the `errorBackoffSeconds` ladder so a sustained
+    /// backend outage doesn't burn battery at the 5s base cadence. After
+    /// `maxConsecutiveErrors` failures in a row, the loop stops and surfaces
+    /// `lastError` for the user to manually retry (re-mount or pull-to-refresh
+    /// re-creates the VM, resetting the counter). A successful poll resets the
+    /// counter so a single recovered call returns the cadence to base.
     public func startPolling() {
         guard pollTask == nil else { return }
         isPolling = true
@@ -59,12 +73,33 @@ public final class ProcessingTimelineViewModel {
                 if TransferTimeline.isTerminal(self.currentStatus) {
                     break
                 }
-                try? await Task.sleep(nanoseconds: UInt64(self.pollInterval * 1_000_000_000))
+                if self.consecutiveErrors >= Self.maxConsecutiveErrors {
+                    self.lastError = "Couldn't refresh — please pull to retry."
+                    break
+                }
+                let delay = self.nextPollDelay()
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 if Task.isCancelled { break }
                 await self.pollOnce()
             }
             self.isPolling = false
         }
+    }
+
+    /// Cap on consecutive failures before the loop stops. ~100 errors
+    /// at the late-stage 60s cadence ≈ 100 minutes of dead-air; well
+    /// past any plausible backend hiccup.
+    private static let maxConsecutiveErrors = 100
+
+    /// Backoff ladder applied AFTER each consecutive failure. Index is
+    /// `min(consecutiveErrors - 1, count - 1)` so the first failure
+    /// uses the base interval, subsequent failures climb. Caps at 300s.
+    private static let errorBackoffSeconds: [TimeInterval] = [5, 5, 5, 10, 30, 60, 300]
+
+    private func nextPollDelay() -> TimeInterval {
+        guard consecutiveErrors > 0 else { return pollInterval }
+        let i = min(consecutiveErrors - 1, Self.errorBackoffSeconds.count - 1)
+        return Self.errorBackoffSeconds[i]
     }
 
     public func stopPolling() {
@@ -82,8 +117,11 @@ public final class ProcessingTimelineViewModel {
         switch result {
         case .success(let envelope):
             apply(envelope.transfer)
+            consecutiveErrors = 0
+            lastError = nil
         case .failure(let err):
             lastError = err.errorDescription
+            consecutiveErrors += 1
         }
     }
 

@@ -210,65 +210,6 @@ public struct RealLiveActivityAdapter: LiveActivityAdapter {
     }
 }
 
-// MARK: - Stage labels
-
-/// Operational copy that names the current step of an in-flight
-/// transfer. Pulled into a dedicated mapper so it can be exercised
-/// against `LiveActivityCopyLint` in a single test sweep.
-///
-/// Treasury-internal vocabulary is forbidden — see
-/// `LiveActivityCopyLint.forbidden`. The DEBUG lint asserts on every
-/// returned label.
-enum LiveActivityStageLabels {
-    static func label(for status: TransferStatus, recipientName: String) -> String {
-        let raw: String
-        switch status {
-        case .awaitingAud:        raw = "Waiting for your AUD"
-        case .audReceived:        raw = "AUD received — locking rate"
-        case .processingNgn:      raw = "Sending NGN to \(recipientName)"
-        case .ngnSent:            raw = "Almost done"
-        case .ngnRetry:           raw = "Retrying — checking with provider"
-        case .floatInsufficient:  raw = "Hold tight — we'll resume shortly"
-        case .completed:          raw = "Sent — \(recipientName) has it"
-        case .ngnFailed:          raw = "Retrying — checking with provider"
-        case .needsManual:        raw = "Action needed — open app"
-        default:                  raw = ""
-        }
-        return LiveActivityCopyLint.assertNotForbidden(raw)
-    }
-}
-
-/// DEBUG-only mirror of the widget's `LiveActivityCopyLint`. The
-/// widget lives in a separate target so the symbol is not visible to
-/// the app target — this re-declares the public surface so service
-/// labels are guarded the same way.
-enum LiveActivityCopyLint {
-    static let forbidden: Set<String> = [
-        "float", "treasury", "liquidity", "insufficient", "balance",
-    ]
-
-    @discardableResult
-    @inlinable
-    static func assertNotForbidden(
-        _ s: String,
-        file: StaticString = #file,
-        line: UInt = #line
-    ) -> String {
-        #if DEBUG
-        let lower = s.lowercased()
-        for word in forbidden where lower.contains(word) {
-            assertionFailure(
-                "Live Activity copy contains forbidden treasury vocabulary: \"\(word)\" in \"\(s)\"",
-                file: file,
-                line: line
-            )
-            break
-        }
-        #endif
-        return s
-    }
-}
-
 // MARK: - Service
 
 @MainActor
@@ -287,6 +228,14 @@ public final class LiveActivityService {
     /// Per-transferId guard so `apply(...)` for a terminal status calls
     /// `end(...)` exactly once even if invoked multiple times.
     private var endedTransferIds: Set<String> = []
+    /// Per-transferId in-flight grace timer (CA-2005). When a transfer
+    /// reaches `.completed` we end the activity after a 60-second grace
+    /// so the user sees the green check. Multiple back-to-back COMPLETED
+    /// pushes used to spawn competing detached Tasks; tracking them by
+    /// transferId lets us cancel the previous one before scheduling the
+    /// next, and lets `end(...)` / `endAllActivities()` cancel pending
+    /// timers on logout.
+    private var graceTasks: [String: Task<Void, Never>] = [:]
 
     public init(
         stateMap: any LiveActivityStateMapping = LiveActivityStateMap.shared,
@@ -306,9 +255,14 @@ public final class LiveActivityService {
 
     /// Start a Live Activity for a transfer. Idempotent: if an activity
     /// already exists for `transfer.id`, updates it instead of starting
-    /// a second one. Returns the handle's `(activityId, transferId)`.
+    /// a second one. Returns the handle's `(activityId, transferId)`,
+    /// or `nil` when the status carries no Live Activity surface (e.g.
+    /// `.created` / `.unknown` / terminal). OO-2007 + API-2002: the
+    /// nil return replaces the earlier empty-string-activityId sentinel
+    /// so call sites must explicitly handle "nothing to start" instead
+    /// of receiving a token whose `activityId` was the empty string.
     @discardableResult
-    public func start(for transfer: TransferShape, recipient: Recipient) async throws -> LiveActivityToken {
+    public func start(for transfer: TransferShape, recipient: Recipient) async throws -> LiveActivityToken? {
         let attributes = KolaleafTransferAttributes(
             transferId: transfer.id,
             recipientName: recipient.fullName,
@@ -328,7 +282,7 @@ public final class LiveActivityService {
             // Pre-AWAITING_AUD or terminal — there is nothing to start.
             // Caller should drive the activity once the backend
             // transitions the transfer to a renderable band.
-            return LiveActivityToken(activityId: "", transferId: transfer.id)
+            return nil
         }
 
         let stageLabel = LiveActivityStageLabels.label(
@@ -381,7 +335,15 @@ public final class LiveActivityService {
 
     /// Force-end the activity for `transferId`. Idempotent — second
     /// call is a no-op. Used by the deeplink "dismiss" flow + on logout.
+    /// CA-2005: also cancels any in-flight grace timer for this id so
+    /// an explicit end (e.g. logout) doesn't race a pending grace
+    /// dismissal.
     public func end(transferId: String, dismissalPolicy: ActivityKitDismissalPolicy = .default) async {
+        // Cancel any pending grace timer first, regardless of the
+        // ended-guard. A grace task scheduled by an earlier COMPLETED
+        // push is now superseded by an explicit end.
+        graceTasks.removeValue(forKey: transferId)?.cancel()
+
         guard !endedTransferIds.contains(transferId) else { return }
         endedTransferIds.insert(transferId)
 
@@ -396,6 +358,30 @@ public final class LiveActivityService {
         }
         handles.removeValue(forKey: transferId)
         await store.remove(transferId: transferId)
+    }
+
+    /// End every in-flight activity. Idempotent — built on `end(...)`.
+    /// ADV-P10B-C10: invoked from `KolaleafApp.forceReauth()` BEFORE
+    /// keychain / cookie clears so a user logging out cannot leave
+    /// orphaned activities rendering on the lock screen for the next
+    /// user of a shared device.
+    public func endAllActivities() async {
+        // Cancel every grace timer up front so a pending COMPLETED
+        // grace dismissal can't race the immediate ends we issue below.
+        for (_, task) in graceTasks { task.cancel() }
+        graceTasks.removeAll()
+
+        // Snapshot persisted ids so iteration isn't invalidated by the
+        // store mutations performed inside `end(...)`.
+        let persisted = await store.all()
+        for (transferId, _) in persisted {
+            await end(transferId: transferId, dismissalPolicy: .immediate)
+        }
+        // Defensive: also end any in-memory handle the persisted map
+        // didn't know about.
+        for transferId in handles.keys {
+            await end(transferId: transferId, dismissalPolicy: .immediate)
+        }
     }
 
     /// Reconcile the persisted `transferId → activityId` map against
@@ -465,13 +451,27 @@ public final class LiveActivityService {
     }
 
     private func endAfterGrace(transferId: String, seconds: TimeInterval) async {
+        // CA-2005: cancel any prior grace task for this transferId
+        // before scheduling a new one. Multiple back-to-back COMPLETED
+        // pushes would otherwise spawn competing detached Tasks, each
+        // racing to dismiss the same activity.
+        graceTasks.removeValue(forKey: transferId)?.cancel()
+
         // Detached so the apply(...) caller doesn't await the whole
         // grace period. Using Task is fine here — MainActor isolation
         // is preserved across the await.
-        Task { @MainActor [weak self] in
+        let task = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            // If the task was cancelled while sleeping (logout, supersede)
+            // bail before mutating state.
+            guard !Task.isCancelled else { return }
             await self?.end(transferId: transferId, dismissalPolicy: .immediate)
+            // `end(...)` already removed the entry from `graceTasks`,
+            // but if this body raced past that removal (a second grace
+            // schedule reinserted), the next scheduler will overwrite
+            // it deterministically. Nothing to do here.
         }
+        graceTasks[transferId] = task
     }
 
     private func findExistingHandle(transferId: String) async -> LiveActivityHandle? {

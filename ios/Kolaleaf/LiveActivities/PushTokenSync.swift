@@ -92,7 +92,7 @@ public final class PushTokenSync {
     private func postToken(activityId: String, hex: String) async {
         let req = RegisterPushTokenRequest(
             deviceToken: hex,
-            kind: "live_activity",
+            kind: .liveActivity,
             bundleId: bundleId,
             device: device
         )

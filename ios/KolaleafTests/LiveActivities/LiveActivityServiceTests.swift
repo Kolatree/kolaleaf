@@ -61,8 +61,8 @@ final class LiveActivityServiceTests: XCTestCase {
         XCTAssertEqual(requests, 1, "second start must not call request again")
         let updates = await adapter.updateCallCount()
         XCTAssertEqual(updates, 1, "second start should update the existing activity")
-        XCTAssertEqual(token1.activityId, token2.activityId)
-        XCTAssertEqual(token1.transferId, "tx_1")
+        XCTAssertEqual(token1?.activityId, token2?.activityId)
+        XCTAssertEqual(token1?.transferId, "tx_1")
     }
 
     func test_start_persistsActivityIdInStore() async throws {
@@ -70,17 +70,17 @@ final class LiveActivityServiceTests: XCTestCase {
         let svc = LiveActivityService(store: store, adapter: FakeLiveActivityAdapter())
         let token = try await svc.start(for: makeTransfer(), recipient: makeRecipient())
         let stored = await store.get(transferId: "tx_1")
-        XCTAssertEqual(stored, token.activityId)
+        XCTAssertEqual(stored, token?.activityId)
     }
 
-    func test_start_withCreatedStatus_returnsEmptyToken_andDoesNotRequest() async throws {
+    func test_start_withCreatedStatus_returnsNilToken_andDoesNotRequest() async throws {
         let adapter = FakeLiveActivityAdapter()
         let svc = LiveActivityService(store: makeStore(), adapter: adapter)
         let token = try await svc.start(
             for: makeTransfer(status: .created),
             recipient: makeRecipient()
         )
-        XCTAssertEqual(token.activityId, "")
+        XCTAssertNil(token)
         let count = await adapter.requestCallCount()
         XCTAssertEqual(count, 0)
     }

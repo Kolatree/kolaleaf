@@ -7,18 +7,29 @@
 
 import Foundation
 
+/// Tagged enum for the kind of push token being registered. API-2003
+/// (Phase 10B iter-2): replaces the earlier free-form `kind: String`
+/// so call sites cannot ship typos that the backend would silently
+/// accept and bucket into "unknown". Raw values are wire-compatible
+/// with the previous string form ("live_activity", "notification") so
+/// no backend change is required.
+public enum PushTokenKind: String, Codable, Sendable, Hashable, CaseIterable {
+    case liveActivity = "live_activity"
+    case notification
+}
+
 public struct RegisterPushTokenRequest: Codable, Sendable {
     /// Hex-encoded APNs device token (lowercase, no spaces/braces).
     public let deviceToken: String
     /// `live_activity` for ActivityKit pushes, `notification` for normal APNs.
     /// Backend uses one endpoint for both per plan.
-    public let kind: String
+    public let kind: PushTokenKind
     /// iOS bundle id. Backend can route per-environment.
     public let bundleId: String
     /// Hardware identifier (UIDevice modelIdentifier or similar). Optional.
     public let device: String?
 
-    public init(deviceToken: String, kind: String, bundleId: String, device: String?) {
+    public init(deviceToken: String, kind: PushTokenKind, bundleId: String, device: String?) {
         self.deviceToken = deviceToken
         self.kind = kind
         self.bundleId = bundleId

@@ -20,21 +20,56 @@ import { CompleteRegistrationBody } from "./_schemas";
 //
 // Step 3 — and the only step that writes to User. The caller must have
 // previously completed /send-code and /verify-code; that leaves a
-// PendingEmailVerification row with verifiedAt set and claimExpiresAt
-// still in the future. This endpoint consumes that claim to create the
-// User, the verified UserIdentifier, and the Session, and deletes the
-// pending row — all in one transaction.
+// PendingVerification row (kind=EMAIL or PHONE) with verifiedAt set
+// and claimExpiresAt still in the future. This endpoint consumes that
+// claim to create the User, the verified UserIdentifier, and the
+// Session, and deletes the pending row — all in one transaction.
 //
-// Shape-level validation (email format, field lengths, AU_STATE /
-// postcode regex) lives in _schemas.ts. Business-logic validation
-// (NFKC normalisation, password complexity, letter-required name
-// guard, idempotent-retry password match) stays here because it can't
-// be expressed cleanly in a Zod rule.
+// Shape-level validation (email format, E.164 phone, field lengths,
+// AU_STATE / postcode regex) lives in _schemas.ts. Business-logic
+// validation (NFKC normalisation, password complexity, letter-required
+// name guard, idempotent-retry password match) stays here because it
+// can't be expressed cleanly in a Zod rule.
+//
+// 2026-05-13 phone-first widening: identifier is now a discriminated
+// union (email | phone) mirroring /auth/login. The phone branch is a
+// 1:1 mirror of the email branch — same state machine, same
+// idempotent-retry short-circuit, same race guard — keyed by the
+// PHONE-kind PendingVerification row issued by the SMS wizard.
 const HAS_LETTER_RE = /\p{L}/u;
 const TX_TIMEOUT_MS = 15_000;
 const TX_MAX_WAIT_MS = 5_000;
 
 type Reason = CompleteRegistrationReason;
+
+// Wire-format ('email' | 'phone') → Prisma IdentifierType enum
+// ('EMAIL' | 'PHONE'). Kept tiny and local so the branch sites read
+// cleanly without re-deriving the mapping each time.
+function kindOf(type: "email" | "phone"): "EMAIL" | "PHONE" {
+  return type === "phone" ? "PHONE" : "EMAIL";
+}
+
+// User-facing copy is rail-aware: the verify step is "verify your
+// email" / "verify your phone", and the already-registered conflict
+// surfaces "Email already registered" / "Phone number already
+// registered". Keep the email strings byte-identical to pre-widening
+// so existing client surfaces and audit-log greps don't regress.
+function copyFor(type: "email" | "phone") {
+  if (type === "phone") {
+    return {
+      verifyToContinue: "Verify your phone to continue",
+      verifyFirst: "Please verify your phone first",
+      claimExpired: "Your verification expired. Please start again.",
+      alreadyRegistered: "Phone number already registered",
+    };
+  }
+  return {
+    verifyToContinue: "Verify your email to continue",
+    verifyFirst: "Please verify your email first",
+    claimExpired: "Your verification expired. Please start again.",
+    alreadyRegistered: "Email already registered",
+  };
+}
 
 function fail(reason: Reason, message: string, status: number) {
   return jsonError(reason, message, status);
@@ -44,7 +79,7 @@ export async function POST(request: Request) {
   const parsed = await parseBody(request, CompleteRegistrationBody);
   if (!parsed.ok) return parsed.response;
   const {
-    email,
+    identifier,
     fullName: rawFullName,
     password,
     addressLine1,
@@ -53,6 +88,10 @@ export async function POST(request: Request) {
     state,
     postcode,
   } = parsed.data;
+
+  const identifierValue = identifier.value;
+  const dbKind = kindOf(identifier.type);
+  const copy = copyFor(identifier.type);
 
   // Password complexity (character-class mix) isn't length-only and
   // isn't captured by the Zod schema — keep the existing helper.
@@ -66,7 +105,7 @@ export async function POST(request: Request) {
   // corrupt the AUSTRAC audit trail's legal-name column.
   const fullNameNormalized = rawFullName
     .normalize("NFKC")
-    .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, "")
+    .replace(/[​-‏‪-‮⁠-⁯﻿]/g, "")
     .trim();
   if (
     fullNameNormalized.length < 2 ||
@@ -87,18 +126,18 @@ export async function POST(request: Request) {
   // Idempotent-retry short-circuit. If the client re-posts after a
   // successful-but-dropped response, the tx already deleted the pending
   // row — the old path would return 400 telling the user to verify
-  // again, which strands them. Instead: if a verified EMAIL identifier
-  // already exists for this email AND the submitted password matches
-  // the stored hash, treat this as a retry of the just-succeeded call.
-  // Mismatched password → 409. Hash is computed LATER so we don't burn
-  // bcrypt time on the retry path.
+  // again, which strands them. Instead: if a verified UserIdentifier
+  // of the SAME rail already exists for this identifier AND the
+  // submitted password matches the stored hash, treat this as a retry
+  // of the just-succeeded call. Mismatched password → 409. Hash is
+  // computed LATER so we don't burn bcrypt time on the retry path.
   const maybeExisting = await prisma.userIdentifier.findUnique({
-    where: { identifier: email },
+    where: { identifier: identifierValue },
     include: { user: true },
   });
   if (
     maybeExisting &&
-    maybeExisting.type === "EMAIL" &&
+    maybeExisting.type === dbKind &&
     maybeExisting.verified
   ) {
     const u = maybeExisting.user;
@@ -106,7 +145,7 @@ export async function POST(request: Request) {
       !u.passwordHash ||
       !(await verifyPassword(pwCheck.password, u.passwordHash))
     ) {
-      return fail("already_registered", "Email already registered", 409);
+      return fail("already_registered", copy.alreadyRegistered, 409);
     }
     const session = await prisma.session.create({
       data: buildSessionData(u.id, ip, userAgent),
@@ -137,34 +176,32 @@ export async function POST(request: Request) {
     const result = await prisma.$transaction(
       async (tx) => {
         const pending = await tx.pendingVerification.findUnique({
-          where: { kind_identifier: { kind: "EMAIL", identifier: email } },
+          where: {
+            kind_identifier: { kind: dbKind, identifier: identifierValue },
+          },
         });
         if (!pending) {
           throw new CompleteError(
             "no_pending_verification",
             400,
-            "Verify your email to continue",
+            copy.verifyToContinue,
           );
         }
         if (!pending.verifiedAt) {
           throw new CompleteError(
             "pending_not_verified",
             400,
-            "Please verify your email first",
+            copy.verifyFirst,
           );
         }
         // Boundary: claim is valid iff now < claimExpiresAt.
         if (!pending.claimExpiresAt || pending.claimExpiresAt <= new Date()) {
-          throw new CompleteError(
-            "claim_expired",
-            400,
-            "Your verification expired. Please start again.",
-          );
+          throw new CompleteError("claim_expired", 400, copy.claimExpired);
         }
 
         // Race guard + OAuth protection + active-session protection.
         const existing = await tx.userIdentifier.findUnique({
-          where: { identifier: email },
+          where: { identifier: identifierValue },
           include: {
             user: {
               select: {
@@ -173,11 +210,11 @@ export async function POST(request: Request) {
             },
           },
         });
-        if (existing && (existing.type !== "EMAIL" || existing.verified)) {
+        if (existing && (existing.type !== dbKind || existing.verified)) {
           throw new CompleteError(
             "already_registered",
             409,
-            "Email already registered",
+            copy.alreadyRegistered,
           );
         }
         if (existing) {
@@ -187,7 +224,7 @@ export async function POST(request: Request) {
             throw new CompleteError(
               "already_registered",
               409,
-              "Email already registered",
+              copy.alreadyRegistered,
             );
           }
         }
@@ -205,18 +242,18 @@ export async function POST(request: Request) {
           },
         });
 
-        // Clean up the stale UNVERIFIED EMAIL identifier (if any) so
-        // the new row's unique constraint can land. deleteMany is a
-        // no-op on missing rows, avoiding P2025 under concurrent
-        // cleanup.
-        if (existing && existing.type === "EMAIL" && !existing.verified) {
+        // Clean up the stale UNVERIFIED identifier of the SAME rail
+        // (if any) so the new row's unique constraint can land.
+        // deleteMany is a no-op on missing rows, avoiding P2025 under
+        // concurrent cleanup.
+        if (existing && existing.type === dbKind && !existing.verified) {
           await tx.userIdentifier.deleteMany({ where: { id: existing.id } });
         }
         await tx.userIdentifier.create({
           data: {
             userId: user.id,
-            type: "EMAIL",
-            identifier: email,
+            type: dbKind,
+            identifier: identifierValue,
             verified: true,
             verifiedAt: new Date(),
           },
@@ -227,7 +264,9 @@ export async function POST(request: Request) {
         });
 
         await tx.pendingVerification.delete({
-          where: { kind_identifier: { kind: "EMAIL", identifier: email } },
+          where: {
+            kind_identifier: { kind: dbKind, identifier: identifierValue },
+          },
         });
 
         // Batch REGISTER + LOGIN into a single createMany round-trip,
@@ -242,6 +281,10 @@ export async function POST(request: Request) {
           ...(country ? { country } : {}),
           ...(deviceFingerprintHash ? { deviceFingerprintHash } : {}),
         };
+        const loginVia =
+          identifier.type === "phone"
+            ? "phone-verification"
+            : "email-verification";
         await logAuthEventsMany(
           [
             {
@@ -254,7 +297,7 @@ export async function POST(request: Request) {
               userId: user.id,
               event: "LOGIN",
               ip,
-              metadata: { via: "email-verification", ...baseSecurity },
+              metadata: { via: loginVia, ...baseSecurity },
             },
           ],
           tx,
@@ -277,12 +320,13 @@ export async function POST(request: Request) {
     }
     // P2002 — unique-constraint violation. Under concurrent requests
     // one tx wins and the other hits P2002 on UserIdentifier.identifier
-    // — that's a 409, not a 500.
+    // — that's a 409, not a 500. The constraint is on the identifier
+    // string column itself, so this catches both rails uniformly.
     if (
       err instanceof Prisma.PrismaClientKnownRequestError &&
       err.code === "P2002"
     ) {
-      return fail("already_registered", "Email already registered", 409);
+      return fail("already_registered", copy.alreadyRegistered, 409);
     }
     log("error", "auth.complete-registration.failed", {
       reason: "unexpected",

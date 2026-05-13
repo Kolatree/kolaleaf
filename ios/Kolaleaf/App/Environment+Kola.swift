@@ -32,8 +32,8 @@ import SwiftUI
 private struct APIClientKey: EnvironmentKey {
     static let defaultValue: AuthAPI = {
         let urlString = ProcessInfo.processInfo.environment["KOLA_API_BASE_URL"]
-            ?? "https://kolaleaf.com.au"
-        let url = URL(string: urlString) ?? URL(string: "https://kolaleaf.com.au")!
+            ?? "https://www.kolaleaf.com"
+        let url = URL(string: urlString) ?? URL(string: "https://www.kolaleaf.com")!
         return APIClient(baseURL: url)
     }()
 }

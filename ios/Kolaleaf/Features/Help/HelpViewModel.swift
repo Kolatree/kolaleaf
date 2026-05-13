@@ -3,10 +3,10 @@
 //
 // Composition:
 //   • 4 quick-help cards with static copy + URL deep-links into the
-//     marketing site (`https://kolaleaf.com.au/help/<slug>`).
+//     marketing site (`https://www.kolaleaf.com/help/<slug>`).
 //   • Recent transfer (the most recent transfer from the /transfers
 //     list) so the user can jump straight into TransactionDetail.
-//   • Chat CTA → `https://kolaleaf.com.au/help` for v1 (no embedded
+//   • Chat CTA → `https://www.kolaleaf.com/help` for v1 (no embedded
 //     chat).
 //
 // The VM uses a `WebOpener` test seam so unit tests don't actually
@@ -40,7 +40,7 @@ public final class HelpViewModel {
     }
 
     public private(set) var state: State = .idle
-    public let chatCTAURL: URL = URL(string: "https://kolaleaf.com.au/help")!
+    public let chatCTAURL: URL = URL(string: "https://www.kolaleaf.com/help")!
 
     /// The 4 quick-help cards. Stable IDs so the View ForEach has a
     /// deterministic identity and tests can assert against the list
@@ -50,25 +50,25 @@ public final class HelpViewModel {
             id: "transfer-status",
             title: "Where's my transfer?",
             subtitle: "Track a transfer, refund or delay.",
-            url: URL(string: "https://kolaleaf.com.au/help/transfer-status")!
+            url: URL(string: "https://www.kolaleaf.com/help/transfer-status")!
         ),
         QuickHelpCard(
             id: "limits-fees",
             title: "Limits and fees",
             subtitle: "Daily limits, FX rates and service fees.",
-            url: URL(string: "https://kolaleaf.com.au/help/limits-fees")!
+            url: URL(string: "https://www.kolaleaf.com/help/limits-fees")!
         ),
         QuickHelpCard(
             id: "kyc",
             title: "Identity verification",
             subtitle: "Why we ask and what to upload.",
-            url: URL(string: "https://kolaleaf.com.au/help/kyc")!
+            url: URL(string: "https://www.kolaleaf.com/help/kyc")!
         ),
         QuickHelpCard(
             id: "security",
             title: "Account security",
             subtitle: "2FA, sign-in alerts and recovery.",
-            url: URL(string: "https://kolaleaf.com.au/help/security")!
+            url: URL(string: "https://www.kolaleaf.com/help/security")!
         ),
     ]
 

@@ -71,7 +71,7 @@ struct KolaleafApp: App {
 
     private static func makeAPIClient() -> APIClient {
         let urlString = ProcessInfo.processInfo.environment["KOLA_API_BASE_URL"]
-            ?? "https://kolaleaf.com.au"
+            ?? "https://www.kolaleaf.com"
         guard let url = URL(string: urlString) else {
             fatalError("KOLA_API_BASE_URL is invalid: \(urlString)")
         }

@@ -91,7 +91,7 @@ public final class ReferralCapture: @unchecked Sendable {
         return token
     }
 
-    /// Handle a `https://kolaleaf.com.au/refer/<token>` universal link.
+    /// Handle a `https://www.kolaleaf.com/refer/<token>` universal link.
     /// Overrides any pasteboard-sourced token already stored.
     @discardableResult
     public func captureFromUniversalLink(_ url: URL) async -> String? {

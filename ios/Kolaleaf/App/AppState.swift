@@ -61,6 +61,16 @@ public final class AppState {
     /// Not persisted — every cold launch starts unloaded.
     public private(set) var kycStatusLoaded: Bool = false
 
+    /// Set when `refreshPostKYCStateFromServer` exhausts retries on a
+    /// post-login bootstrap call. Without this, a single `/account/me`
+    /// failure (network blip, captive portal, server hiccup) would
+    /// permanently strand the user on `LoadingShell` since
+    /// `RootCoordinator.task(id: currentUser?.id)` only re-fires on
+    /// identity change. RootRouter checks this BEFORE the
+    /// kycStatusLoaded gate so the user sees a recoverable error UI
+    /// rather than a forever-spinning shell.
+    public internal(set) var bootstrapError: String?
+
     private static let kSelectedTab = "kola.selectedTab"
     private static let kPostKYCComplete = "kola.postKYCComplete"
 
@@ -94,18 +104,40 @@ public final class AppState {
     ///     cold launch should not bounce a verified user back through
     ///     PostKYC.
     public func refreshPostKYCStateFromServer(api: AuthAPI) async {
-        let result = await api.send(AccountEndpoints.Me())
-        switch result {
-        case .success(let me):
-            let derived = (me.displayName != nil) && (me.addressLine1 != nil)
-            if hasCompletedPostKYC != derived {
-                hasCompletedPostKYC = derived  // didSet persists.
+        // Backoff schedule: 0s / 1s / 3s. Three attempts cover most
+        // transient blips (network handoff, edge cold-start, single
+        // 5xx) without keeping the user on the spinner for long.
+        let backoffs: [UInt64] = [0, 1_000_000_000, 3_000_000_000]
+        var lastErrorMessage: String?
+        for delay in backoffs {
+            if delay > 0 { try? await Task.sleep(nanoseconds: delay) }
+            let result = await api.send(AccountEndpoints.Me())
+            switch result {
+            case .success(let me):
+                let derived = (me.displayName != nil) && (me.addressLine1 != nil)
+                if hasCompletedPostKYC != derived {
+                    hasCompletedPostKYC = derived  // didSet persists.
+                }
+                kycStatus = me.kycStatus
+                kycStatusLoaded = true
+                bootstrapError = nil  // clear any prior failure UI.
+                return
+            case .failure(let err):
+                lastErrorMessage = err.errorDescription ?? "Couldn't reach Kolaleaf."
             }
-            kycStatus = me.kycStatus
-            kycStatusLoaded = true
-        case .failure:
-            return  // best-effort; keep cached flag.
         }
+        // All retries exhausted — surface a recoverable error rather
+        // than silently leaving the user on the loading shell forever.
+        bootstrapError = lastErrorMessage ?? "Couldn't reach Kolaleaf."
+    }
+
+    /// Called by the bootstrap-error UI's Retry action. Clears the
+    /// surfaced error so RootRouter falls back to `.loading` and the
+    /// `.task(id: currentUser?.id)` re-fires on the next render of
+    /// RootCoordinator (driven by the explicit `await refresh...`
+    /// the view performs after clearing).
+    public func clearBootstrapError() {
+        bootstrapError = nil
     }
 
     /// ADV-008 / CA-006: explicit setter used by call sites that
@@ -294,6 +326,7 @@ public final class AppState {
         // ADV-008 / CA-006: reset so the next session's RootRouter
         // routes to .loading until the new user's /account/me lands.
         kycStatusLoaded = false
+        bootstrapError = nil
         activeTransfer = nil
         isSubmittingTransfer = false
         pendingTwoFactor = nil

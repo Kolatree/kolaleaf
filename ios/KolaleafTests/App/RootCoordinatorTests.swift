@@ -138,4 +138,36 @@ final class RootRouterTests: XCTestCase {
         )
         XCTAssertEqual(r, .onboardingResumeAtKYC)
     }
+
+    // MARK: - Bootstrap-error wins over .loading
+
+    func test_bootstrapError_overridesLoading() {
+        // The user logged in, the post-login /account/me chain
+        // exhausted retries — without this branch the user would be
+        // stuck on LoadingShell forever (the .task(id:) only re-fires
+        // on identity change). bootstrapError must win over the
+        // .loading gate so a recoverable Retry/Sign-out UI is shown.
+        let r = RootRouter.route(
+            hasActiveSession: true,
+            kycStatusLoaded: false,
+            kycStatus: .unknown,
+            hasCompletedPostKYC: false,
+            bootstrapError: "Couldn't reach Kolaleaf."
+        )
+        XCTAssertEqual(r, .bootstrapError(message: "Couldn't reach Kolaleaf."))
+    }
+
+    func test_bootstrapError_ignoredWhenNotAuthenticated() {
+        // A bootstrap error left over from a stale state must not
+        // override the no-session route — sign-out should always land
+        // on Welcome cleanly.
+        let r = RootRouter.route(
+            hasActiveSession: false,
+            kycStatusLoaded: false,
+            kycStatus: .unknown,
+            hasCompletedPostKYC: false,
+            bootstrapError: "stale"
+        )
+        XCTAssertEqual(r, .onboardingWelcome)
+    }
 }

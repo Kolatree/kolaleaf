@@ -44,6 +44,11 @@ public enum RootRoute: Equatable, Sendable {
     /// `.unknown` initial value from flickering through
     /// `.onboardingResumeAtKYC` for a verified user on cold launch.
     case loading
+    /// Bootstrap call (`/account/me`) exhausted retries after sign-in.
+    /// Wins over `.loading` so the user sees a recoverable error UI
+    /// with Retry + Sign-out actions rather than a forever-spinning
+    /// shell.
+    case bootstrapError(message: String)
 }
 
 public enum RootRouter {
@@ -51,9 +56,15 @@ public enum RootRouter {
         hasActiveSession: Bool,
         kycStatusLoaded: Bool,
         kycStatus: KycStatus,
-        hasCompletedPostKYC: Bool
+        hasCompletedPostKYC: Bool,
+        bootstrapError: String? = nil
     ) -> RootRoute {
         guard hasActiveSession else { return .onboardingWelcome }
+        // Bootstrap-error wins over loading: a `/account/me` failure
+        // chain leaves `kycStatusLoaded == false` and would otherwise
+        // strand the user on the spinner. Surface a recoverable UI
+        // instead.
+        if let message = bootstrapError { return .bootstrapError(message: message) }
         // ADV-008 / CA-006: gate authenticated routing on a known
         // server-derived kycStatus. Without this, the `.unknown`
         // initial value collapses with `.pending`/`.rejected` into
@@ -82,7 +93,8 @@ public struct RootCoordinator: View {
             hasActiveSession: appState.hasActiveSession,
             kycStatusLoaded: appState.kycStatusLoaded,
             kycStatus: appState.kycStatus,
-            hasCompletedPostKYC: appState.hasCompletedPostKYC
+            hasCompletedPostKYC: appState.hasCompletedPostKYC,
+            bootstrapError: appState.bootstrapError
         )
         Group {
             switch route {
@@ -103,6 +115,15 @@ public struct RootCoordinator: View {
                 MainTabView()
             case .loading:
                 LoadingShell()
+            case .bootstrapError(let message):
+                BootstrapErrorView(
+                    message: message,
+                    onRetry: {
+                        appState.clearBootstrapError()
+                        Task { await appState.refreshPostKYCStateFromServer(api: apiClient) }
+                    },
+                    onSignOut: { appState.clearForLogout() }
+                )
             }
         }
         // ADV-007: refresh the PostKYC + kycStatus from the server
@@ -146,6 +167,50 @@ struct LoadingShell: View {
         ZStack {
             KolaColors.Card.background.ignoresSafeArea()
             ProgressView().tint(KolaColors.trustGreen)
+        }
+    }
+}
+
+/// Shown when the post-login bootstrap call (`/account/me`) exhausts
+/// retries. The user gets to either retry the same call or sign out
+/// and try again clean. Without this, a single network blip during
+/// sign-in stranded the user on `LoadingShell` forever (the
+/// `.task(id:)` only re-fires on identity change).
+struct BootstrapErrorView: View {
+    let message: String
+    let onRetry: () -> Void
+    let onSignOut: () -> Void
+
+    var body: some View {
+        ZStack {
+            KolaColors.Card.background.ignoresSafeArea()
+            VStack(spacing: KolaSpacing.l) {
+                Image(systemName: "wifi.exclamationmark")
+                    .font(.system(size: 44, weight: .regular))
+                    .foregroundStyle(KolaColors.muted)
+                Text("Couldn't finish signing in")
+                    .font(KolaFont.headline)
+                    .foregroundStyle(KolaColors.ink)
+                Text(message)
+                    .font(KolaFont.row)
+                    .foregroundStyle(KolaColors.muted)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, KolaSpacing.l)
+                VStack(spacing: KolaSpacing.s) {
+                    Button("Try again", action: onRetry)
+                        .font(KolaFont.row)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .background(KolaColors.primary)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    Button("Sign out", action: onSignOut)
+                        .font(KolaFont.row)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .foregroundStyle(KolaColors.muted)
+                }
+                .padding(.horizontal, KolaSpacing.l)
+            }
+            .padding(KolaSpacing.l)
         }
     }
 }

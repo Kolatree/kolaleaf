@@ -338,35 +338,49 @@ model WebhookEvent {
   @@unique([provider, eventId])
 }
 
-// Code-gated email claim used by the /register wizard. Unlike
-// EmailVerificationToken (which requires a User and is used post-account
-// creation and for the logged-in change-email flow) this row exists BEFORE
-// any User exists — it proves control of the email so no "ghost" User row
-// is persisted for unverified addresses. A row's lifetime:
-//   step 1 /send-code        → upsert (codeHash, expiresAt, attempts=0, verifiedAt=null)
+// Code-gated identifier claim used by the /register wizard. Unlike
+// EmailVerificationToken / PhoneVerificationCode (both of which require
+// a User and are used post-account-creation) this row exists BEFORE
+// any User exists — it proves control of the identifier so no "ghost"
+// User row is persisted for unverified addresses/numbers. A row's
+// lifetime:
+//   step 1 /send-code        → upsert (kind, identifier, codeHash, ...)
 //   step 2 /verify-code      → set verifiedAt + claimExpiresAt
 //   step 3 /complete-registration → delete on success
 // If step 3 doesn't happen within claimExpiresAt the user must re-verify.
-model PendingEmailVerification {
-  id             String    @id @default(cuid())
-  email          String    @unique
+//
+// 2026-05-13 (phone-first onboarding): widened from email-only to
+// polymorphic via `kind` (EMAIL | PHONE). The compound unique on
+// (kind, identifier) keeps the verify-first wizard enumeration-proof
+// across both rails — a malicious caller can't probe whether a
+// (kind, identifier) is known by observing the response shape.
+//
+// APPLE / GOOGLE values of IdentifierType are valid at the schema
+// level but never written here: those sign-in paths skip the
+// code-claim flow because the IdP itself proves identifier control.
+model PendingVerification {
+  id             String         @id @default(cuid())
+  kind           IdentifierType
+  identifier     String
   codeHash       String
   expiresAt      DateTime
-  attempts       Int       @default(0)
+  attempts       Int            @default(0)
   verifiedAt     DateTime?
   claimExpiresAt DateTime?
-  // Rate-limit counter. Because the row is upsert-keyed by email,
-  // `createdAt` never moves after first insert and cannot be used for
-  // a send-count window. We track sends explicitly: `sendCount` is the
-  // number of codes issued inside the current window, and
-  // `sendWindowStart` is when that window began. When a new send arrives
-  // more than an hour after `sendWindowStart`, we reset the window and
-  // count=1; otherwise we increment. At 5-in-window, /send-code returns
-  // rate_limited (enumeration-proofed to a silent 200 by the route).
+  // Rate-limit counter. Because the row is upsert-keyed by
+  // (kind, identifier), `createdAt` never moves after first insert
+  // and cannot be used for a send-count window. We track sends
+  // explicitly: `sendCount` is the number of codes issued inside the
+  // current window, and `sendWindowStart` is when that window began.
+  // When a new send arrives more than an hour after `sendWindowStart`,
+  // we reset the window and count=1; otherwise we increment. At
+  // 5-in-window, /send-code returns rate_limited (enumeration-proofed
+  // to a silent 200 by the route).
   sendCount       Int      @default(0)
   sendWindowStart DateTime @default(now())
   createdAt       DateTime @default(now())
 
+  @@unique([kind, identifier])
   @@index([expiresAt])
   @@index([claimExpiresAt])
 }

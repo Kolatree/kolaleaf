@@ -1,67 +1,74 @@
-import { prisma } from '@/lib/db/client'
-import { generateVerificationCode } from './tokens'
-import { enqueueEmail } from '@/lib/queue/email-dispatcher'
+import { prisma } from "@/lib/db/client";
+import { generateVerificationCode } from "./tokens";
+import { enqueueEmail } from "@/lib/queue/email-dispatcher";
 import {
   EMAIL_CODE_TTL_MINUTES,
   EMAIL_CODE_MAX_ATTEMPTS,
   EMAIL_CLAIM_WINDOW_MINUTES,
   EMAIL_CODE_SENDS_PER_HOUR,
-} from './constants'
-import { evaluateCodeAttempt, isAtAttemptCap } from './email-verification-core'
-import type { VerifyCodeReason } from './reasons'
+} from "./constants";
+import { evaluateCodeAttempt, isAtAttemptCap } from "./email-verification-core";
+import type { VerifyCodeReason } from "./reasons";
 
 // Re-export the knobs callers previously imported from here so we
 // don't break /api/auth/send-code and friends with the constants move.
-export const PENDING_CODE_TTL_MINUTES = EMAIL_CODE_TTL_MINUTES
-export const PENDING_CODE_MAX_ATTEMPTS = EMAIL_CODE_MAX_ATTEMPTS
-export const PENDING_CLAIM_WINDOW_MINUTES = EMAIL_CLAIM_WINDOW_MINUTES
+export const PENDING_CODE_TTL_MINUTES = EMAIL_CODE_TTL_MINUTES;
+export const PENDING_CODE_MAX_ATTEMPTS = EMAIL_CODE_MAX_ATTEMPTS;
+export const PENDING_CLAIM_WINDOW_MINUTES = EMAIL_CLAIM_WINDOW_MINUTES;
 
 export interface IssuePendingOptions {
-  email: string
+  email: string;
 }
 
 export type IssuePendingResult =
   | { ok: true; delivered: boolean }
-  | { ok: false; reason: 'rate_limited'; retryAfterMs: number }
-  | { ok: false; reason: 'claim_in_flight' }
-  | { ok: false; reason: 'send_failed'; providerError: string }
+  | { ok: false; reason: "rate_limited"; retryAfterMs: number }
+  | { ok: false; reason: "claim_in_flight" }
+  | { ok: false; reason: "send_failed"; providerError: string };
 
-// Issue a 6-digit code for the PendingEmailVerification row keyed by
-// email. Unlike the post-account path (email-verification.ts), no User
-// exists yet — the whole point of this flow is to avoid persisting a
-// User row for an unverified address. Rate-limited to
-// EMAIL_CODE_SENDS_PER_HOUR per email; resend does NOT invalidate a
-// live verified claim (claim preservation).
+// Issue a 6-digit code for the PendingVerification row keyed by
+// (kind='EMAIL', identifier=email). Unlike the post-account path
+// (email-verification.ts), no User exists yet — the whole point of
+// this flow is to avoid persisting a User row for an unverified
+// address. Rate-limited to EMAIL_CODE_SENDS_PER_HOUR per email; resend
+// does NOT invalidate a live verified claim (claim preservation).
+//
+// 2026-05-13: the underlying row was widened to a polymorphic
+// `PendingVerification` (EMAIL | PHONE rails) for phone-first
+// onboarding. This helper still scopes to EMAIL — the phone-side
+// `issuePendingPhoneCode` will land alongside in the follow-up
+// commit. Keeping the helper signature unchanged keeps the
+// consumers untouched.
 export async function issuePendingEmailCode(
   opts: IssuePendingOptions,
 ): Promise<IssuePendingResult> {
-  const { email } = opts
-  const now = new Date()
-  const windowMs = 60 * 60 * 1000
-  const windowOpenedAt = new Date(now.getTime() - windowMs)
+  const { email } = opts;
+  const now = new Date();
+  const windowMs = 60 * 60 * 1000;
+  const windowOpenedAt = new Date(now.getTime() - windowMs);
 
-  const existing = await prisma.pendingEmailVerification.findUnique({
-    where: { email },
-  })
+  const existing = await prisma.pendingVerification.findUnique({
+    where: { kind_identifier: { kind: "EMAIL", identifier: email } },
+  });
 
-  let nextSendCount: number
-  let nextWindowStart: Date
+  let nextSendCount: number;
+  let nextWindowStart: Date;
 
   if (existing && existing.sendWindowStart > windowOpenedAt) {
     if (existing.sendCount >= EMAIL_CODE_SENDS_PER_HOUR) {
       const retryAfterMs =
-        existing.sendWindowStart.getTime() + windowMs - now.getTime()
+        existing.sendWindowStart.getTime() + windowMs - now.getTime();
       return {
         ok: false,
-        reason: 'rate_limited',
+        reason: "rate_limited",
         retryAfterMs: Math.max(retryAfterMs, 0),
-      }
+      };
     }
-    nextSendCount = existing.sendCount + 1
-    nextWindowStart = existing.sendWindowStart
+    nextSendCount = existing.sendCount + 1;
+    nextWindowStart = existing.sendWindowStart;
   } else {
-    nextSendCount = 1
-    nextWindowStart = now
+    nextSendCount = 1;
+    nextWindowStart = now;
   }
 
   // Claim preservation: if a legitimate user has completed step 2 and
@@ -74,16 +81,19 @@ export async function issuePendingEmailCode(
     existing.claimExpiresAt !== null &&
     existing.claimExpiresAt > now
   ) {
-    return { ok: false, reason: 'claim_in_flight' }
+    return { ok: false, reason: "claim_in_flight" };
   }
 
-  const { raw, hash } = generateVerificationCode()
-  const expiresAt = new Date(now.getTime() + EMAIL_CODE_TTL_MINUTES * 60 * 1000)
+  const { raw, hash } = generateVerificationCode();
+  const expiresAt = new Date(
+    now.getTime() + EMAIL_CODE_TTL_MINUTES * 60 * 1000,
+  );
 
-  await prisma.pendingEmailVerification.upsert({
-    where: { email },
+  await prisma.pendingVerification.upsert({
+    where: { kind_identifier: { kind: "EMAIL", identifier: email } },
     create: {
-      email,
+      kind: "EMAIL",
+      identifier: email,
       codeHash: hash,
       expiresAt,
       attempts: 0,
@@ -101,7 +111,7 @@ export async function issuePendingEmailCode(
       sendCount: nextSendCount,
       sendWindowStart: nextWindowStart,
     },
-  })
+  });
 
   // No User row yet → "there" as the greeting keeps the subject and
   // body neutral without leaking user-supplied input. Rendering now
@@ -113,28 +123,29 @@ export async function issuePendingEmailCode(
   // surfaces as send_failed here.
   try {
     await enqueueEmail({
-      template: 'verification_code',
+      template: "verification_code",
       toEmail: email,
-      recipientName: 'there',
+      recipientName: "there",
       code: raw,
       expiresInMinutes: EMAIL_CODE_TTL_MINUTES,
-    })
+    });
   } catch (err) {
     return {
       ok: false,
-      reason: 'send_failed',
-      providerError: err instanceof Error ? err.message : 'Enqueue failed',
-    }
+      reason: "send_failed",
+      providerError: err instanceof Error ? err.message : "Enqueue failed",
+    };
   }
 
-  return { ok: true, delivered: true }
+  return { ok: true, delivered: true };
 }
 
 export type VerifyPendingOutcome =
   | { ok: true }
-  | { ok: false; reason: VerifyCodeReason }
+  | { ok: false; reason: VerifyCodeReason };
 
-// Verify a 6-digit code for a PendingEmailVerification row.
+// Verify a 6-digit code for a PendingVerification row scoped to
+// (kind='EMAIL', identifier=email).
 //
 // On success: flip verifiedAt + claimExpiresAt so step 3 has a
 // bounded window. The row is NOT deleted here —
@@ -148,50 +159,55 @@ export type VerifyPendingOutcome =
 // there's no intermediate state where attempts has landed but the
 // row is still guessable.
 export async function verifyPendingEmailCode(opts: {
-  email: string
-  code: string
+  email: string;
+  code: string;
 }): Promise<VerifyPendingOutcome> {
-  const { email, code } = opts
+  const { email, code } = opts;
 
-  const row = await prisma.pendingEmailVerification.findUnique({ where: { email } })
-  if (!row) return { ok: false, reason: 'no_token' }
+  const row = await prisma.pendingVerification.findUnique({
+    where: { kind_identifier: { kind: "EMAIL", identifier: email } },
+  });
+  if (!row) return { ok: false, reason: "no_token" };
 
-  const now = new Date()
+  const now = new Date();
 
   if (row.verifiedAt !== null) {
-    if (row.claimExpiresAt && row.claimExpiresAt > now) return { ok: true }
-    return { ok: false, reason: 'used' }
+    if (row.claimExpiresAt && row.claimExpiresAt > now) return { ok: true };
+    return { ok: false, reason: "used" };
   }
-  if (row.expiresAt < now) return { ok: false, reason: 'expired' }
-  if (isAtAttemptCap(row.attempts)) return { ok: false, reason: 'too_many_attempts' }
+  if (row.expiresAt < now) return { ok: false, reason: "expired" };
+  if (isAtAttemptCap(row.attempts))
+    return { ok: false, reason: "too_many_attempts" };
 
   const { match, willHitCap } = evaluateCodeAttempt({
     attempts: row.attempts,
     candidate: code,
     storedHash: row.codeHash,
-  })
+  });
 
   if (!match) {
-    await prisma.pendingEmailVerification.update({
+    await prisma.pendingVerification.update({
       where: { id: row.id },
       data: {
         attempts: { increment: 1 },
         ...(willHitCap ? { expiresAt: new Date(now.getTime() - 1) } : {}),
       },
-    })
+    });
     return {
       ok: false,
-      reason: willHitCap ? 'too_many_attempts' : 'wrong_code',
-    }
+      reason: willHitCap ? "too_many_attempts" : "wrong_code",
+    };
   }
 
-  await prisma.pendingEmailVerification.update({
+  await prisma.pendingVerification.update({
     where: { id: row.id },
     data: {
       verifiedAt: now,
-      claimExpiresAt: new Date(now.getTime() + EMAIL_CLAIM_WINDOW_MINUTES * 60 * 1000),
+      claimExpiresAt: new Date(
+        now.getTime() + EMAIL_CLAIM_WINDOW_MINUTES * 60 * 1000,
+      ),
     },
-  })
+  });
 
-  return { ok: true }
+  return { ok: true };
 }

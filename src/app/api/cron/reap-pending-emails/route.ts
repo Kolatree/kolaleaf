@@ -1,14 +1,20 @@
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/db/client'
-import { authorizeCron } from '@/lib/auth/cron-auth'
-import { log } from '@/lib/obs/logger'
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/db/client";
+import { authorizeCron } from "@/lib/auth/cron-auth";
+import { log } from "@/lib/obs/logger";
 
 // POST /api/cron/reap-pending-emails
 //
-// Janitor for abandoned PendingEmailVerification rows. The wizard's
-// upsert model keeps the table bounded by unique emails, but every
-// visitor who starts /send-code and never finishes leaves a row
-// behind forever unless they return (which overwrites in place).
+// Janitor for abandoned PendingVerification rows. The wizard's
+// upsert model keeps the table bounded by (kind, identifier), but
+// every visitor who starts /send-code and never finishes leaves a
+// row behind forever unless they return (which overwrites in place).
+//
+// 2026-05-13: scope unchanged (sweeps both EMAIL and PHONE rails
+// since the table is now polymorphic). The name kept the
+// `reap-pending-emails` path for stability — Railway cron schedule
+// references it. A future rename would land alongside a Railway
+// config update.
 //
 // We delete rows that fall into one of two terminal states:
 //
@@ -28,44 +34,44 @@ import { log } from '@/lib/obs/logger'
 // can alert on abnormal volume.
 export async function POST(request: Request) {
   if (!authorizeCron(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const now = new Date()
-  const expiredCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-  const claimStaleCutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+  const now = new Date();
+  const expiredCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const claimStaleCutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
   try {
-    const expired = await prisma.pendingEmailVerification.deleteMany({
+    const expired = await prisma.pendingVerification.deleteMany({
       where: {
         verifiedAt: null,
         expiresAt: { lt: expiredCutoff },
       },
-    })
+    });
 
-    const staleClaims = await prisma.pendingEmailVerification.deleteMany({
+    const staleClaims = await prisma.pendingVerification.deleteMany({
       where: {
         verifiedAt: { not: null },
         claimExpiresAt: { lt: claimStaleCutoff },
       },
-    })
+    });
 
     const out = {
       deletedExpired: expired.count,
       deletedStaleClaims: staleClaims.count,
       ts: now.toISOString(),
-    }
+    };
 
-    log('info', 'cron.reap-pending-emails.completed', out)
-    return NextResponse.json(out)
+    log("info", "cron.reap-pending-emails.completed", out);
+    return NextResponse.json(out);
   } catch (err) {
-    log('error', 'cron.reap-pending-emails.failed', {
+    log("error", "cron.reap-pending-emails.failed", {
       error: err instanceof Error ? err.message : String(err),
       ts: now.toISOString(),
-    })
+    });
     return NextResponse.json(
-      { error: 'Janitor sweep failed' },
+      { error: "Janitor sweep failed" },
       { status: 500 },
-    )
+    );
   }
 }

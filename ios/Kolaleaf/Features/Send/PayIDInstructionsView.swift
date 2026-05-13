@@ -17,14 +17,20 @@ public struct PayIDInstructionsView: View {
     @State private var copyAckCounter: UInt = 0
     @State private var now: Date = Date()
     private let onContinue: () -> Void
+    /// Phase 9 · U62: optional cancel-transfer escape hatch. Wired by
+    /// SendTabRoot to push the CancelTransferView destination. Defaults
+    /// to nil so existing callers (and snapshot tests) keep compiling.
+    private let onCancelRequested: (() -> Void)?
 
     public init(
         api: AuthAPI,
         transferId: String,
-        onContinue: @escaping () -> Void
+        onContinue: @escaping () -> Void,
+        onCancelRequested: (() -> Void)? = nil
     ) {
         _vm = State(initialValue: PayIDInstructionsViewModel(api: api, transferId: transferId))
         self.onContinue = onContinue
+        self.onCancelRequested = onCancelRequested
     }
 
     public var body: some View {
@@ -230,18 +236,34 @@ public struct PayIDInstructionsView: View {
     }
 
     private var ctaStack: some View {
-        Button(action: onContinue) {
-            Text("Track this transfer")
-                .font(KolaFont.cta)
-                .kerning(KolaKerning.cta)
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, minHeight: KolaSpacing.hitTarget + 6)
-                .background(
-                    RoundedRectangle(cornerRadius: KolaRadius.cta, style: .continuous)
-                        .fill(KolaColors.kolaGreen)
-                )
+        VStack(spacing: KolaSpacing.m) {
+            Button(action: onContinue) {
+                Text("Track this transfer")
+                    .font(KolaFont.cta)
+                    .kerning(KolaKerning.cta)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: KolaSpacing.hitTarget + 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: KolaRadius.cta, style: .continuous)
+                            .fill(KolaColors.kolaGreen)
+                    )
+            }
+            .buttonStyle(.plain)
+
+            // Phase 9 · U62: user-initiated cancel hatch. Hidden when
+            // the parent didn't wire a handler (defensive — keeps the
+            // surface intact for existing snapshot tests).
+            if let onCancelRequested {
+                Button(action: onCancelRequested) {
+                    Text("Cancel transfer")
+                        .font(KolaFont.cta)
+                        .foregroundStyle(KolaColors.coral)
+                        .frame(maxWidth: .infinity, minHeight: KolaSpacing.hitTarget)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("payid.cancel")
+            }
         }
-        .buttonStyle(.plain)
     }
 
     // MARK: - Helpers

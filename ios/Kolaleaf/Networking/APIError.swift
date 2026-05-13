@@ -65,6 +65,24 @@ public enum APIError: Error, Equatable, Sendable {
     /// body. SendView should treat this as a "previous transfer is
     /// still authoritative; show that one" signal.
     case idempotencyKeyConflict
+
+    // MARK: - Phase 9 iter-2 typed cancel reasons (A1 / API-901)
+    //
+    // Cancel route now ships `reason: "cancel_too_late" | "invalid_transition"`
+    // alongside HTTP 409 so iOS dispatches on the typed enum. Bare
+    // 409-without-reason is preserved as `.server(409, …)` — that path
+    // shouldn't fire in practice but keeps the contract permissive.
+    /// HTTP 409 + `reason == "cancel_too_late"` — caller attempted a
+    /// cancel after the AUD has been received. UI shows the .tooLate
+    /// branch with a "View transfer" CTA.
+    case cancelTooLate
+    /// HTTP 409 + `reason == "invalid_transition"` — caller and backend
+    /// disagree about the transfer's current state. The cancel branch
+    /// treats this as idempotent success (the only way to reach this
+    /// today is the backend already moved past CANCELLED, which is
+    /// also handled by the cancel.ts early-return) — see
+    /// CancelTransferViewModel.
+    case invalidTransferTransition
 }
 
 extension APIError: LocalizedError {
@@ -97,6 +115,8 @@ extension APIError: LocalizedError {
         case .invalidCorridor:          return "That currency corridor isn't available right now."
         case .emailUnverified:          return "Please verify your email before sending money."
         case .idempotencyKeyConflict:   return "We already received an earlier version of this transfer."
+        case .cancelTooLate:            return "Your AUD has arrived. Track it instead."
+        case .invalidTransferTransition: return "This transfer can no longer be changed."
         }
     }
 }
@@ -140,6 +160,10 @@ extension APIError {
             return .emailUnverified
         case "idempotency_key_conflict":
             return .idempotencyKeyConflict
+        case "cancel_too_late":
+            return .cancelTooLate
+        case "invalid_transition":
+            return .invalidTransferTransition
         default:
             break
         }
@@ -183,6 +207,8 @@ extension APIError {
         case (.invalidCorridor, .invalidCorridor):                    return true
         case (.emailUnverified, .emailUnverified):                    return true
         case (.idempotencyKeyConflict, .idempotencyKeyConflict):      return true
+        case (.cancelTooLate, .cancelTooLate):                        return true
+        case (.invalidTransferTransition, .invalidTransferTransition): return true
         default:                                                       return false
         }
     }

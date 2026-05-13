@@ -55,6 +55,23 @@ public enum TransfersEndpoints {
         }
     }
 
+    /// `POST /api/v1/transfers/:id/cancel` — user-initiated cancel
+    /// while the transfer is in `AWAITING_AUD`. Backend wire reference:
+    ///   • src/app/api/v1/transfers/[id]/cancel/route.ts
+    /// Response on 200: same `{ transfer: TransferShape }` envelope as
+    /// `Get`. 4xx codes (403 NotOwner / 404 NotFound / 409
+    /// CancelTooLate / 409 InvalidTransition) ship `{ error: <msg> }`
+    /// without a machine `reason`, so iOS demuxes on HTTP status.
+    public struct Cancel: Endpoint {
+        public typealias Response = TransferEnvelope
+        public let path: String
+        public let method: HTTPMethod = .post
+
+        public init(id: String) {
+            self.path = "/api/v1/transfers/\(id)/cancel"
+        }
+    }
+
     /// `GET /api/v1/transfers` — cursor-paginated transfer list owned
     /// by the authenticated user. Backend orders by `createdAt desc`
     /// (see `src/lib/transfers/queries.ts:listTransfers`).

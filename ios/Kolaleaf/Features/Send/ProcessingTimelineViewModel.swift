@@ -123,7 +123,13 @@ public final class ProcessingTimelineViewModel {
             ngnAmount: transfer.receiveAmount.flatMap { Decimal(string: $0) }
                 ?? existing?.ngnAmount
                 ?? 0,
-            recipientId: transfer.recipientId
+            recipientId: transfer.recipientId,
+            // CA-902 / ADV-P9-W2: mirror the locked rate so the
+            // expired-screen renders the correct value without
+            // calling out to deriveRate (which has been removed).
+            exchangeRate: Decimal(string: transfer.exchangeRate)
+                ?? existing?.exchangeRate
+                ?? 0
         )
     }
 

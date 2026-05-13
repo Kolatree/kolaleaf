@@ -31,17 +31,42 @@ public struct SendView: View {
         initialRecipient: Recipient?,
         api: AuthAPI,
         biometrics: BiometricsService = LABiometricsService(),
+        prefill: SendPrefill? = nil,
         onAddRecipient: @escaping () -> Void,
         onCreated: @escaping (Transfer) -> Void,
         onSessionExpired: @escaping () -> Void = {}
     ) {
+        // Phase 9 · U63: when an expired-transfer re-quote arrives,
+        // honour the prefill — pick the matching recipient out of the
+        // list and seed the AmountStore with the original AUD amount
+        // (rounded to whole cents). Falls back to `initialRecipient`
+        // when the prefilled recipient id isn't in the list (e.g.
+        // deleted between the original send and the re-quote).
+        let resolvedRecipient: Recipient? = {
+            if let prefill,
+               let match = recipients.first(where: { $0.id == prefill.recipientId }) {
+                return match
+            }
+            return initialRecipient
+        }()
         self.recipients = recipients
-        self.initialRecipient = initialRecipient
+        self.initialRecipient = resolvedRecipient
         self.onAddRecipient = onAddRecipient
         self.onCreated = onCreated
         self.onSessionExpired = onSessionExpired
-        let model = SendViewModel(api: api, biometrics: biometrics)
-        model.selectedRecipient = initialRecipient
+        let amountStore: AmountStore = {
+            guard let prefill else { return AmountStore() }
+            // SendPrefill carries cents directly (B2 / OO-902 / API-902);
+            // the producer (ExpiredTransferViewModel) does the
+            // Decimal→Int conversion at the boundary.
+            return AmountStore(cents: prefill.cents)
+        }()
+        let model = SendViewModel(
+            api: api,
+            biometrics: biometrics,
+            amountStore: amountStore
+        )
+        model.selectedRecipient = resolvedRecipient
         _vm = State(initialValue: model)
     }
 

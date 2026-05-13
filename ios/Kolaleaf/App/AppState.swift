@@ -407,6 +407,12 @@ public struct ActiveTransfer: Equatable, Sendable {
     public let audAmount: Decimal
     public let ngnAmount: Decimal
     public let recipientId: String
+    /// Wire-supplied exchange rate (NGN per AUD). Mirrored from the
+    /// processing-poll transfer so the expired-screen can render the
+    /// locked rate without re-fetching (CA-902 / ADV-P9-W2). Defaults
+    /// to `0`; the expired destination falls back to a Get-by-id when
+    /// this is 0 OR when the activeTransfer mirror is missing entirely.
+    public let exchangeRate: Decimal
 
     public var isInFlight: Bool {
         switch status {
@@ -417,12 +423,20 @@ public struct ActiveTransfer: Equatable, Sendable {
         }
     }
 
-    public init(id: String, status: TransferStatus, audAmount: Decimal, ngnAmount: Decimal, recipientId: String) {
+    public init(
+        id: String,
+        status: TransferStatus,
+        audAmount: Decimal,
+        ngnAmount: Decimal,
+        recipientId: String,
+        exchangeRate: Decimal = 0
+    ) {
         self.id = id
         self.status = status
         self.audAmount = audAmount
         self.ngnAmount = ngnAmount
         self.recipientId = recipientId
+        self.exchangeRate = exchangeRate
     }
 }
 

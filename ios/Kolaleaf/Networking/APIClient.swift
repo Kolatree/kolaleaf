@@ -33,15 +33,49 @@ public actor APIClient {
         self.baseURL = baseURL
         self.builder = RequestBuilder(baseURL: baseURL)
 
-        // Private cookie jar so the auth session can't leak to/from URLSession.shared
-        // or future Sumsub WKWebView instances.
-        let cookieStorage = HTTPCookieStorage()
-        cookieStorage.cookieAcceptPolicy = .onlyFromMainDocumentDomain
+        // App-Group-scoped cookie jar so the auth session can't leak to
+        // URLSession.shared or to a future Sumsub WKWebView instance,
+        // while still being a real working storage.
+        //
+        // ROOT CAUSE FIX (2026-05-13 production hotfix):
+        //   The earlier code used `HTTPCookieStorage()` (direct init) to
+        //   create a "private" cookie jar. Apple's HTTPCookieStorage API
+        //   does NOT support direct instantiation — `HTTPCookieStorage()`
+        //   returns a phantom storage object that silently drops every
+        //   cookie passed to `setCookies(_:for:mainDocumentURL:)`. Verified
+        //   reproducible in a standalone Swift test: a single valid Set-
+        //   Cookie with future `Max-Age` results in 0 cookies in the jar
+        //   on `HTTPCookieStorage()` vs 1 cookie on `.shared`.
+        //
+        //   Consequence: every authenticated request after `/auth/login`
+        //   went out cookieless and the backend returned 401 "session
+        //   expired". From the user's POV: they could log in, but the
+        //   immediate `/account/me` bootstrap call failed — leaving them
+        //   stranded on the loading shell (or, after the bootstrap-error
+        //   UI landed, on the recoverable error screen).
+        //
+        //   The supported APIs for an isolated cookie jar are:
+        //     • `HTTPCookieStorage.shared`  (process-wide; URLSession.shared
+        //        sees it too — leak surface)
+        //     • `HTTPCookieStorage.sharedCookieStorage(forGroupContainerIdentifier:)`
+        //        (per-app-group; isolated from .shared and from the
+        //        widget's own private jar unless the widget opts in via
+        //        the same identifier — which is fine here since the
+        //        widget is ours and Part B's PushTokenSync wants to
+        //        share the session)
+        //
+        //   We pick the App-Group-scoped option using the same identifier
+        //   the widget extension already declares
+        //   (`group.com.kolaleaf.shared` — see project.yml entitlements).
+        let cookieStorage = HTTPCookieStorage.sharedCookieStorage(
+            forGroupContainerIdentifier: "group.com.kolaleaf.shared"
+        )
+        cookieStorage.cookieAcceptPolicy = .always
         self.cookieStorage = cookieStorage
 
         let config = URLSessionConfiguration.default
         config.httpCookieStorage = cookieStorage
-        config.httpCookieAcceptPolicy = .onlyFromMainDocumentDomain
+        config.httpCookieAcceptPolicy = .always
         config.timeoutIntervalForRequest = 15      // r2 reliability fix: 60s default is too long
         config.timeoutIntervalForResource = 30
         config.waitsForConnectivity = false

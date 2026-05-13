@@ -168,47 +168,121 @@ public struct EmailIdentifierDTO: Decodable, Sendable {
     public let verified: Bool
 }
 
-/// Mirrors Wave 1 AccountMeResponse exactly.
+/// Mirrors Wave 1 AccountMeResponse with forward+backward tolerance.
 ///
 /// Phase 3 (U29 / U30 PostKYC) extension: `displayName`, the AU address
-/// columns, and `kycStatus` are now returned by the same `/account/me`
-/// route. PostKYC views read everything from a single GET so they don't
-/// have to compose multiple endpoints. KYC-only screens keep using
-/// `/api/v1/kyc/status` for the polled-status flow.
+/// columns, and `kycStatus` were added to the route. Production hotfix
+/// (2026-05-13): the deployed backend may still ship the pre-Phase-3
+/// shape (`email` instead of `primaryEmail`, no `kycStatus`/`displayName`/
+/// address fields). The custom decoder handles BOTH wire shapes so an
+/// older deploy doesn't strand iOS on the post-login bootstrap loop:
+///   - `primaryEmail` → falls back to legacy `email` key
+///   - `kycStatus` → defaults to `.unknown` if missing (RootRouter
+///      already handles `.unknown` cleanly, sending the user to the
+///      KYC-resume path rather than locking the spinner)
+///   - All Phase-3 additions decode as nil/empty when absent
 public struct MeResponse: Decodable, Sendable {
     public let userId: String
     public let fullName: String?
-    /// Phase 3 / U29 — user-chosen display name. Optional (UI falls back
-    /// to first token of `fullName` when null).
     public let displayName: String?
-    /// API-007: server contract names the primary identifier
-    /// `primaryEmail` so the field reads symmetrically with
-    /// `secondaryEmails`. Both lists carry the same shape — a singular
-    /// `email` next to a plural `secondaryEmails` was asymmetric.
     public let primaryEmail: EmailIdentifierDTO?
     public let secondaryEmails: [EmailIdentifierDTO]
-    public let twoFactorMethod: String?       // "NONE" | "TOTP" | "SMS" | nil
-    /// ISO-8601 string (always with milliseconds via JS toISOString). Decoded as String
-    /// at this layer; callers parse on demand using the fractional-seconds-aware formatter.
+    public let twoFactorMethod: String?
     public let twoFactorEnabledAt: String?
     public let hasVerifiedPhone: Bool
     public let phoneMasked: String?
     public let hasRemainingBackupCodes: Bool
     public let backupCodesRemaining: Int
-    /// Phase 3 / U30 — AU address columns. All optional on the row. The
-    /// `state` field is a String here (not the iOS `AUState` enum) so the
-    /// DTO stays a thin mirror of the wire format; ConfirmAddress VM
-    /// translates to the enum at the use site.
     public let addressLine1: String?
     public let addressLine2: String?
     public let city: String?
     public let state: String?
     public let postcode: String?
     public let country: String?
-    /// Phase 3 / U29 — KYC status from the backend (mirrors prisma/schema.prisma
-    /// KycStatus enum). Lets PostKYC routing read both account + KYC state from
-    /// a single GET.
     public let kycStatus: KycStatus
+
+    /// Memberwise initialiser preserved for tests and call-site
+    /// construction. The custom Decodable init below shadows the
+    /// synthesised one — re-declare here so existing fixtures keep
+    /// compiling.
+    public init(
+        userId: String,
+        fullName: String?,
+        displayName: String?,
+        primaryEmail: EmailIdentifierDTO?,
+        secondaryEmails: [EmailIdentifierDTO],
+        twoFactorMethod: String?,
+        twoFactorEnabledAt: String?,
+        hasVerifiedPhone: Bool,
+        phoneMasked: String?,
+        hasRemainingBackupCodes: Bool,
+        backupCodesRemaining: Int,
+        addressLine1: String?,
+        addressLine2: String?,
+        city: String?,
+        state: String?,
+        postcode: String?,
+        country: String?,
+        kycStatus: KycStatus
+    ) {
+        self.userId = userId
+        self.fullName = fullName
+        self.displayName = displayName
+        self.primaryEmail = primaryEmail
+        self.secondaryEmails = secondaryEmails
+        self.twoFactorMethod = twoFactorMethod
+        self.twoFactorEnabledAt = twoFactorEnabledAt
+        self.hasVerifiedPhone = hasVerifiedPhone
+        self.phoneMasked = phoneMasked
+        self.hasRemainingBackupCodes = hasRemainingBackupCodes
+        self.backupCodesRemaining = backupCodesRemaining
+        self.addressLine1 = addressLine1
+        self.addressLine2 = addressLine2
+        self.city = city
+        self.state = state
+        self.postcode = postcode
+        self.country = country
+        self.kycStatus = kycStatus
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case userId, fullName, displayName
+        case primaryEmail, email  // legacy alias
+        case secondaryEmails
+        case twoFactorMethod, twoFactorEnabledAt
+        case hasVerifiedPhone, phoneMasked
+        case hasRemainingBackupCodes, backupCodesRemaining
+        case addressLine1, addressLine2, city, state, postcode, country
+        case kycStatus
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.userId = try c.decode(String.self, forKey: .userId)
+        self.fullName = try c.decodeIfPresent(String.self, forKey: .fullName)
+        self.displayName = try c.decodeIfPresent(String.self, forKey: .displayName)
+        // primaryEmail (current contract) OR email (legacy / pre-API-007)
+        let primaryFromCanonical = try c.decodeIfPresent(EmailIdentifierDTO.self, forKey: .primaryEmail)
+        let primaryFromLegacy = try c.decodeIfPresent(EmailIdentifierDTO.self, forKey: .email)
+        self.primaryEmail = primaryFromCanonical ?? primaryFromLegacy
+        self.secondaryEmails = (try c.decodeIfPresent([EmailIdentifierDTO].self, forKey: .secondaryEmails)) ?? []
+        self.twoFactorMethod = try c.decodeIfPresent(String.self, forKey: .twoFactorMethod)
+        self.twoFactorEnabledAt = try c.decodeIfPresent(String.self, forKey: .twoFactorEnabledAt)
+        self.hasVerifiedPhone = (try c.decodeIfPresent(Bool.self, forKey: .hasVerifiedPhone)) ?? false
+        self.phoneMasked = try c.decodeIfPresent(String.self, forKey: .phoneMasked)
+        self.hasRemainingBackupCodes = (try c.decodeIfPresent(Bool.self, forKey: .hasRemainingBackupCodes)) ?? false
+        self.backupCodesRemaining = (try c.decodeIfPresent(Int.self, forKey: .backupCodesRemaining)) ?? 0
+        self.addressLine1 = try c.decodeIfPresent(String.self, forKey: .addressLine1)
+        self.addressLine2 = try c.decodeIfPresent(String.self, forKey: .addressLine2)
+        self.city = try c.decodeIfPresent(String.self, forKey: .city)
+        self.state = try c.decodeIfPresent(String.self, forKey: .state)
+        self.postcode = try c.decodeIfPresent(String.self, forKey: .postcode)
+        self.country = try c.decodeIfPresent(String.self, forKey: .country)
+        // Phase 3 added kycStatus; older deploys omit it. KycStatus's own
+        // decoder maps unknown rawValues → .unknown; we default the
+        // ENTIRE-FIELD-MISSING case to .unknown too.
+        self.kycStatus = (try c.decodeIfPresent(KycStatus.self, forKey: .kycStatus)) ?? .unknown
+    }
 }
 
 // MARK: - Backend error envelope helpers

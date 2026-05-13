@@ -605,7 +605,19 @@ public final class LiveActivityService {
             // so the gap surfaces immediately. Production stays a
             // soft no-op so a hot-fix release-build doesn't crash
             // on an unrelated wiring mishap.
-            assertionFailure("LiveActivityService.api is nil — refetch on reconcile is skipped. Check KolaleafApp wiring.")
+            //
+            // Test-bundle suppression: LiveActivityServiceTests
+            // deliberately constructs `LiveActivityService(api: nil)`
+            // to exercise this soft no-op path in isolation. Under
+            // XCTest the assertion would crash the test bundle and
+            // surface as a "Kolaleaf quit unexpectedly" dialog — keep
+            // the tripwire LOUD for real dev builds, silent under the
+            // test runner. XCTest sets `XCTestConfigurationFilePath`
+            // in the process environment; nothing else does.
+            let isXCTest = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            if !isXCTest {
+                assertionFailure("LiveActivityService.api is nil — refetch on reconcile is skipped. Check KolaleafApp wiring.")
+            }
             #endif
             return
         }

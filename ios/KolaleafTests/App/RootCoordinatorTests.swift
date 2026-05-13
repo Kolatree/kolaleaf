@@ -170,4 +170,51 @@ final class RootRouterTests: XCTestCase {
         )
         XCTAssertEqual(r, .onboardingWelcome)
     }
+
+    // MARK: - kycSkipped routes to MainTab
+
+    func test_kycSkipped_routesToMainTab_evenWhenStatusUnknown() {
+        // Product change (2026-05-13): "Maybe later" defers KYC. The
+        // user gets MainTab access; backend enforces KYC at transfer-
+        // processing time. Routes to MainTab regardless of kycStatus
+        // or kycStatusLoaded — survives session refresh that sees
+        // .unknown before /account/me resolves.
+        let r = RootRouter.route(
+            hasActiveSession: true,
+            kycStatusLoaded: false,
+            kycStatus: .unknown,
+            hasCompletedPostKYC: false,
+            kycSkipped: true
+        )
+        XCTAssertEqual(r, .mainTab)
+    }
+
+    func test_kycSkipped_ignoredWhenNotAuthenticated() {
+        // Skip flag must not leak across sessions — sign-out clears
+        // it (verified in AppStateTests), but if a stale flag arrives
+        // here without an active session the user lands on Welcome.
+        let r = RootRouter.route(
+            hasActiveSession: false,
+            kycStatusLoaded: true,
+            kycStatus: .unknown,
+            hasCompletedPostKYC: false,
+            kycSkipped: true
+        )
+        XCTAssertEqual(r, .onboardingWelcome)
+    }
+
+    func test_kycSkipped_loses_to_bootstrapError() {
+        // Bootstrap error wins so the user gets a recoverable UI
+        // even if they previously skipped KYC. This avoids stranding
+        // them in MainTab when /account/me is fundamentally broken.
+        let r = RootRouter.route(
+            hasActiveSession: true,
+            kycStatusLoaded: false,
+            kycStatus: .unknown,
+            hasCompletedPostKYC: false,
+            bootstrapError: "Couldn't reach Kolaleaf.",
+            kycSkipped: true
+        )
+        XCTAssertEqual(r, .bootstrapError(message: "Couldn't reach Kolaleaf."))
+    }
 }

@@ -228,12 +228,19 @@ public struct OnboardingCoordinator: View {
             ))
 
         case .kycIntro:
-            KYCIntroView(vm: KYCIntroViewModel(
-                api: apiClient,
-                onAccessToken: { session in
-                    path.append(OnboardingTransition.fromKYCIntro(sessionFetched: session))
-                }
-            ))
+            KYCIntroView(
+                vm: KYCIntroViewModel(
+                    api: apiClient,
+                    onAccessToken: { session in
+                        path.append(OnboardingTransition.fromKYCIntro(sessionFetched: session))
+                    }
+                ),
+                // Product change (2026-05-13): "Maybe later" defers KYC.
+                // RootCoordinator's body re-renders when `kycSkipped`
+                // flips → RootRouter routes to `.mainTab` → the
+                // OnboardingCoordinator subtree unmounts.
+                onSkip: { appState.markKycSkipped() }
+            )
 
         case .kycPreWarm(let session):
             SumsubPreWarmView(onPrepared: {

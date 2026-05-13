@@ -57,7 +57,8 @@ public enum RootRouter {
         kycStatusLoaded: Bool,
         kycStatus: KycStatus,
         hasCompletedPostKYC: Bool,
-        bootstrapError: String? = nil
+        bootstrapError: String? = nil,
+        kycSkipped: Bool = false
     ) -> RootRoute {
         guard hasActiveSession else { return .onboardingWelcome }
         // Bootstrap-error wins over loading: a `/account/me` failure
@@ -65,6 +66,13 @@ public enum RootRouter {
         // strand the user on the spinner. Surface a recoverable UI
         // instead.
         if let message = bootstrapError { return .bootstrapError(message: message) }
+        // Deferred-KYC users go straight to MainTab. Backend enforces
+        // KYC at transfer-processing time so they can browse and
+        // prepare a transfer; the actual ledger movement is gated.
+        // The skip survives the kycStatusLoaded gate so the next
+        // session also opens to MainTab without flickering through
+        // .loading.
+        if kycSkipped { return .mainTab }
         // ADV-008 / CA-006: gate authenticated routing on a known
         // server-derived kycStatus. Without this, the `.unknown`
         // initial value collapses with `.pending`/`.rejected` into
@@ -94,7 +102,8 @@ public struct RootCoordinator: View {
             kycStatusLoaded: appState.kycStatusLoaded,
             kycStatus: appState.kycStatus,
             hasCompletedPostKYC: appState.hasCompletedPostKYC,
-            bootstrapError: appState.bootstrapError
+            bootstrapError: appState.bootstrapError,
+            kycSkipped: appState.kycSkipped
         )
         Group {
             switch route {

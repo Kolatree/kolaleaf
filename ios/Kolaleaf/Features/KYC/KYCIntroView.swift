@@ -8,8 +8,17 @@ public struct KYCIntroView: View {
     @State private var rationaleExpanded: Bool = false
     @Environment(\.dismiss) private var dismiss
 
-    public init(vm: KYCIntroViewModel) {
+    /// Fired when the user picks "Maybe later" instead of starting
+    /// verification. The parent (OnboardingCoordinator) flips
+    /// `appState.kycSkipped = true` so RootRouter routes to MainTab.
+    /// Backend enforces KYC at transfer-processing time — a deferred
+    /// user can browse and prepare a transfer; the actual ledger
+    /// movement is gated until verification clears.
+    private let onSkip: (() -> Void)?
+
+    public init(vm: KYCIntroViewModel, onSkip: (() -> Void)? = nil) {
         self._vm = State(initialValue: vm)
+        self.onSkip = onSkip
     }
 
     public var body: some View {
@@ -49,10 +58,23 @@ public struct KYCIntroView: View {
                     .accessibilityLabel("Error: \(error)")
             }
             startButton
+            if onSkip != nil { skipButton }
         }
         .padding(.horizontal, KolaSpacing.xl)
         .padding(.top, KolaSpacing.xxxl)
         .padding(.bottom, KolaSpacing.homeIndicator)
+    }
+
+    private var skipButton: some View {
+        Button {
+            onSkip?()
+        } label: {
+            Text("Maybe later")
+                .font(KolaFont.cta)
+                .frame(maxWidth: .infinity, minHeight: KolaSpacing.hitTarget)
+                .foregroundStyle(KolaColors.whiteOnGradientMuted)
+        }
+        .accessibilityHint("Skip verification for now. You'll be asked again before sending money.")
     }
 
     private var heading: some View {

@@ -52,6 +52,32 @@ public final class AppState {
         }
     }
 
+    /// Product change (2026-05-13): user can defer KYC at the intro
+    /// screen. Persisted so a kill-and-relaunch keeps them in MainTab
+    /// rather than bouncing back to the KYC intro. Backend enforces
+    /// KYC at transfer-processing time — a deferred user can browse,
+    /// prepare a transfer, even submit one, but the actual ledger
+    /// movement is gated until KYC clears.
+    ///
+    /// When the user later completes verification, `kycStatus` flips
+    /// to `.verified` and PostKYC completes — at that point this
+    /// flag becomes redundant (the verified path takes over routing).
+    /// We keep it set rather than clearing it so a user who skipped
+    /// once doesn't bounce back through the intro after a session
+    /// refresh that loads `.unknown` before `/account/me` resolves.
+    public var kycSkipped: Bool = false {
+        didSet {
+            guard kycSkipped != oldValue else { return }
+            defaults.set(kycSkipped, forKey: Self.kKycSkipped)
+        }
+    }
+
+    /// Mark the user as having deferred KYC. Called from
+    /// `KYCIntroView`'s "Maybe later" action via OnboardingCoordinator.
+    public func markKycSkipped() {
+        kycSkipped = true
+    }
+
     /// ADV-008 / CA-006: true once a successful `/account/me` (or
     /// `/kyc/status`) response has resolved the user's current
     /// `kycStatus`. Until this flips RootRouter routes to a quiet
@@ -73,6 +99,7 @@ public final class AppState {
 
     private static let kSelectedTab = "kola.selectedTab"
     private static let kPostKYCComplete = "kola.postKYCComplete"
+    private static let kKycSkipped = "kola.kycSkipped"
 
     /// PostKYCCoordinator's terminal handler. Public so RootCoordinator
     /// can wire it as the `onPostKYCComplete` closure without exposing
@@ -256,6 +283,9 @@ public final class AppState {
         // directly to MainTab instead of looping them back through
         // Confirm Profile.
         self.hasCompletedPostKYC = defaults.bool(forKey: Self.kPostKYCComplete)
+        // Restore the deferred-KYC flag so a relaunch keeps the user
+        // in MainTab rather than bouncing them back to the KYC intro.
+        self.kycSkipped = defaults.bool(forKey: Self.kKycSkipped)
     }
 
     /// Parses `--<key>=<n>` from a launch-args array. Clamps to `[1, 3600]` seconds.
@@ -341,6 +371,11 @@ public final class AppState {
         // on Confirm Profile / Confirm Address again.
         hasCompletedPostKYC = false
         defaults.removeObject(forKey: Self.kPostKYCComplete)
+        // Deferred-KYC flag is per-user too: a fresh sign-in starts
+        // with the KYC intro flow visible (the next user makes their
+        // own choice to verify or defer).
+        kycSkipped = false
+        defaults.removeObject(forKey: Self.kKycSkipped)
         lastInteractionAt = Date.distantPast
         lastBackgroundedAt = nil
         defaults.set(lastInteractionAt, forKey: Self.kLastInteractionAt)

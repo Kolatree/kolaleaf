@@ -108,12 +108,9 @@ public struct MainTabView: View {
                         case .myPayID:
                             MyPayIDView(api: apiClient)
                         case .security:
-                            // Phase 11 / Face ID unlock: SecurityMenuView is
-                            // the slim Phase-11 surface — Face ID toggle plus
-                            // "Coming soon" rows for the 2FA/alert work still
-                            // ahead. Falls back to the placeholder if the
-                            // unlock controller isn't injected (previews /
-                            // tests that don't wire \.biometricUnlock).
+                            // Phase 11: real security surface. Falls back to
+                            // the placeholder if previews/tests do not wire
+                            // \.biometricUnlock.
                             if let unlock = biometricUnlock {
                                 SecurityMenuView(controller: unlock)
                             } else {

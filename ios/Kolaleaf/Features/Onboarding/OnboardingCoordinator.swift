@@ -16,6 +16,7 @@ import SwiftUI
 public enum OnboardingRoute: Hashable, Sendable {
     case welcome
     case signIn
+    case twoFactorSignIn(method: String)
     case emailEntry
     case emailOTP(email: String)
     /// Phase 11A-5 phone-first: country picker + phone field +
@@ -207,30 +208,29 @@ public struct OnboardingCoordinator: View {
             SignInView(vm: SignInViewModel(
                 api: apiClient,
                 onSignedIn: { result in
-                    // P0 fix (Phase 1 review): when requiresTwoFactor is true the
-                    // backend has NOT issued a session cookie — it issued a
-                    // pendingTwoFactorCookie and is waiting for /auth/verify-2fa.
-                    // If we set currentUser here, RootCoordinator routes the user
-                    // into the authenticated graph but every protected request
-                    // returns 401 — the user gets trapped on KYC intro with no
-                    // recovery path. Surface a clear message and leave the session
-                    // unset until U73-U75 (Phase 11) lands the 2FA challenge UI.
-                    //
-                    // iter-2 review fix (API-406): domain identifier renamed from
-                    // `requires2FA` to `requiresTwoFactor` to align with Swift
-                    // naming conventions and the matching DTO field; the wire
-                    // shape still emits `requires2FA` via CodingKeys.
                     if result.requiresTwoFactor {
+                        let method = result.twoFactorMethod ?? "TOTP"
                         appState.pendingTwoFactor = PendingTwoFactor(
-                            method: result.twoFactorMethod ?? "TOTP",
-                            blockedReason: "Two-factor sign-in arrives in a later release. Please use the web app for now."
+                            method: method,
+                            blockedReason: nil
                         )
+                        path.append(.twoFactorSignIn(method: method))
                         return
                     }
                     appState.currentUser = result.user
                 },
                 onVerificationRequired: { email in
                     path.append(OnboardingTransition.fromSignInVerificationRequired(email: email))
+                }
+            ))
+
+        case .twoFactorSignIn(let method):
+            TwoFactorSignInView(vm: TwoFactorSignInViewModel(
+                method: method,
+                api: apiClient,
+                onVerified: { user in
+                    appState.pendingTwoFactor = nil
+                    appState.currentUser = user
                 }
             ))
 

@@ -1,3 +1,43 @@
+# Review Request -- Wave 2a Phase 11 Security / 2FA
+
+**Ready for Review:** YES for local Phase 11 implementation. Production KYC 500 remains operationally blocked on Railway/Sumsub access.
+**Date:** 2026-05-14
+**Branch / worktree:** `feat/ios-swiftui-app` in `/Users/ao/Documents/projects/Kolaleaf`
+
+## Summary
+
+Phase 11 now has a real iOS Security surface instead of the previous Face ID-only stub. The Account tab security route supports Face ID app unlock, TOTP setup with QR/manual key, code verification, one-time backup-code display, backup-code regeneration, disabling 2FA, and SMS 2FA setup when the account has a verified phone. The sign-in flow now routes `requires2FA` users into an iOS 2FA challenge screen and calls `/api/v1/auth/verify-2fa`, then refreshes `/account/me` before entering the authenticated graph.
+
+Backend review also found `/auth/verify-2fa` still returned non-canonical errors; that route now returns `{ error, reason }` for expired, invalid, unauthenticated, and server failures so iOS can route by reason consistently.
+
+## Files Changed In This Phase 11 Pass
+
+- `ios/Kolaleaf/Features/Security/SecurityMenuView.swift` — full Security menu, TOTP/SMS setup sheets, backup-code sheet, regenerate/disable verification sheet, and `SecurityMenuViewModel`.
+- `ios/Kolaleaf/Features/Onboarding/OnboardingCoordinator.swift` — routes `requires2FA` logins into the challenge screen.
+- `ios/Kolaleaf/Features/Onboarding/SignInView.swift` — adds `TwoFactorSignInViewModel` and `TwoFactorSignInView`.
+- `ios/Kolaleaf/Networking/DTOs/{AccountDTOs.swift,AuthDTOs.swift}` — Phase 11 2FA request/response DTOs.
+- `ios/Kolaleaf/Networking/Endpoints/{AccountEndpoints.swift,AuthEndpoints.swift}` — 2FA setup/enable/disable/regenerate and sign-in verify endpoints.
+- `ios/Kolaleaf/Networking/APIError.swift` — maps `invalid_code` into the typed code-invalid branch.
+- `src/app/api/v1/auth/verify-2fa/route.ts` — canonical error envelope fix.
+- `tests/app/api/v1/auth/verify-2fa.test.ts` — asserts canonical 401/expired envelopes.
+
+## Validation
+
+- `npm test -- --run tests/app/api/v1/auth/verify-2fa.test.ts tests/app/api/v1/account/2fa/setup.test.ts tests/app/api/v1/account/2fa/enable.test.ts tests/app/api/v1/account/2fa/disable.test.ts tests/app/api/v1/account/2fa/regenerate-backup-codes.test.ts` — 5 files / 32 tests passed.
+- `npx tsc --noEmit` — clean.
+- `npm run build` — clean.
+- `xcodebuild -project ios/Kolaleaf.xcodeproj -scheme Kolaleaf -configuration Debug -destination 'platform=iOS,name=iPhone' -derivedDataPath ios/build/DerivedData build` — build succeeded for paired iPhone.
+- `xcrun devicectl device install app --device iPhone.coredevice.local /Users/ao/Documents/projects/Kolaleaf/ios/build/DerivedData/Build/Products/Debug-iphoneos/Kolaleaf.app` — installed `com.kolaleaf.app`.
+- `xcrun devicectl device process launch --device iPhone.coredevice.local com.kolaleaf.app` — launched successfully.
+
+## Remaining Review Scope
+
+- Review the UX decision that SMS 2FA setup is supported, while later sensitive SMS 2FA changes accept backup code verification. The current backend has no dedicated "issue SMS challenge for already-enabled 2FA management" route.
+- Phase 11.5 still needs reconciliation: App Attest backend integration, new-device alert, compliance copy review, Sentry PII scrubber, notification preferences, and universal-link referral leftovers.
+- Production `/api/v1/kyc/initiate` 500 is still not proved fixed until Railway/Sumsub logs and env are inspected.
+
+---
+
 # Review Request -- Active Recovery: Phase 11 partial + D-wave phone-first + web KYC
 
 **Ready for Review:** YES for the recovery patch. Production KYC 500 remains operationally blocked on Railway/Sumsub access.

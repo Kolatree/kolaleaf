@@ -428,3 +428,21 @@ public struct BackendValidationError: Decodable, Sendable {
     public let reason: String
     public let fields: [String: [String]]
 }
+
+// MARK: - Phase 11 sign-in 2FA
+
+public struct VerifySignInTwoFactorRequest: Codable, Sendable, Equatable {
+    public let code: String
+    public let challengeId: String?
+
+    public init(code: String, challengeId: String? = nil) {
+        self.code = code
+        self.challengeId = challengeId
+    }
+}
+
+public struct VerifySignInTwoFactorResponse: Decodable, Sendable, Equatable {
+    public let verified: Bool
+    public let backupCodeUsed: Bool?
+    public let remaining: Int?
+}

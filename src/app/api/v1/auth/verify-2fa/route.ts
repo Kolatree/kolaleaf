@@ -13,6 +13,7 @@ import { createSession } from '@/lib/auth/sessions'
 import { extractRequestContext } from '@/lib/security/request-context'
 import { recordSecurityAnomalyCheck } from '@/lib/security/anomaly'
 import { parseBody } from '@/lib/http/validate'
+import { jsonError } from '@/lib/http/json-error'
 import { log } from '@/lib/obs/logger'
 import { Verify2faBody } from './_schemas'
 
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
       include: { user: true },
     })
     if (!challenge || challenge.consumedAt || challenge.expiresAt < new Date()) {
-      const response = NextResponse.json({ error: '2FA challenge expired' }, { status: 401 })
+      const response = jsonError('expired', '2FA challenge expired', 401)
       response.headers.append('Set-Cookie', clearPendingTwoFactorCookie())
       return response
     }
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
     const user = challenge.user
 
     if (user.twoFactorMethod === 'NONE') {
-      const response = NextResponse.json({ error: '2FA is not enabled' }, { status: 400 })
+      const response = jsonError('not_enabled', '2FA is not enabled', 400)
       response.headers.append('Set-Cookie', clearPendingTwoFactorCookie())
       return response
     }
@@ -103,7 +104,7 @@ export async function POST(request: Request) {
             where: { id: challenge.id },
             data: { consumedAt: new Date() },
           })
-          const response = NextResponse.json({ error: '2FA challenge expired' }, { status: 401 })
+          const response = jsonError('expired', '2FA challenge expired', 401)
           response.headers.append('Set-Cookie', clearPendingTwoFactorCookie())
           return response
         }
@@ -117,12 +118,12 @@ export async function POST(request: Request) {
             where: { id: challenge.id },
             data: { consumedAt: new Date() },
           })
-          const response = NextResponse.json({ error: '2FA challenge expired' }, { status: 401 })
+          const response = jsonError('expired', '2FA challenge expired', 401)
           response.headers.append('Set-Cookie', clearPendingTwoFactorCookie())
           return response
         }
       }
-      return NextResponse.json({ error: 'Invalid 2FA code' }, { status: 401 })
+      return jsonError('invalid_code', 'Invalid 2FA code', 401)
     }
 
     const securityContext = extractRequestContext(request)
@@ -173,9 +174,10 @@ export async function POST(request: Request) {
     return response
   } catch (error) {
     if (error instanceof AuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.statusCode })
+      const reason = error.statusCode === 401 ? 'unauthenticated' : 'forbidden'
+      return jsonError(reason, error.message, error.statusCode)
     }
     log('error', 'auth.verify-2fa.failed', { error: error instanceof Error ? error.message : String(error) })
-    return NextResponse.json({ error: 'Verification failed' }, { status: 500 })
+    return jsonError('verify_2fa_failed', 'Verification failed', 500)
   }
 }

@@ -66,11 +66,8 @@ public struct SignInView: View {
                     .foregroundStyle(KolaColors.coral)
                     .accessibilityLabel("Error: \(error)")
             }
-            // P0 fix (Phase 1 review): block 2FA-required accounts from entering the
-            // app until U73-U75 lands the challenge UI. SignInViewModel sets
-            // appState.pendingTwoFactor on a 200 with requires2FA: true; we surface
-            // the block here so the user has a clear next step instead of being
-            // stranded mid-flow.
+            // Phase 11 keeps this fallback for stale pending states that
+            // predate the real 2FA challenge route.
             if let pending = appState.pendingTwoFactor, let reason = pending.blockedReason {
                 Text(reason)
                     .font(KolaFont.tagline)
@@ -266,5 +263,149 @@ public struct SignInView: View {
             .kerning(KolaKerning.label)
             .textCase(.uppercase)
             .foregroundStyle(KolaColors.whiteOnGradientMuted)
+    }
+}
+
+@MainActor
+@Observable
+public final class TwoFactorSignInViewModel {
+    public let method: String
+    public var code = ""
+    public private(set) var isSubmitting = false
+    public private(set) var errorMessage: String?
+
+    private let api: AuthAPI
+    private let onVerified: (CurrentUser) -> Void
+
+    public init(method: String, api: AuthAPI, onVerified: @escaping (CurrentUser) -> Void) {
+        self.method = method
+        self.api = api
+        self.onVerified = onVerified
+    }
+
+    public var title: String {
+        method == "SMS" ? "Enter your SMS code" : "Enter your authenticator code"
+    }
+
+    public var subtitle: String {
+        method == "SMS"
+            ? "Use the 6-digit code we sent to your phone, or an unused backup code."
+            : "Use the 6-digit code from your authenticator app, or an unused backup code."
+    }
+
+    public func submit() async {
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        isSubmitting = true
+        errorMessage = nil
+        defer { isSubmitting = false }
+
+        let verify = await api.send(AuthEndpoints.VerifyTwoFactor(code: trimmed))
+        switch verify {
+        case .success:
+            let me = await api.send(AccountEndpoints.Me())
+            switch me {
+            case .success(let response):
+                onVerified(Self.currentUser(from: response))
+            case .failure(let error):
+                errorMessage = APIErrorPresenter.userFacingMessage(
+                    for: error,
+                    fallback: "Two-factor verified, but we could not load your account."
+                )
+            }
+        case .failure(let error):
+            errorMessage = APIErrorPresenter.userFacingMessage(
+                for: error,
+                fallback: "Could not verify that code."
+            )
+            if case .codeInvalid = error {
+                code = ""
+            }
+        }
+    }
+
+    private static func currentUser(from me: MeResponse) -> CurrentUser {
+        CurrentUser(
+            id: me.userId,
+            displayName: me.displayName ?? me.fullName,
+            legalName: me.fullName,
+            email: me.primaryEmail?.email,
+            phone: nil
+        )
+    }
+}
+
+public struct TwoFactorSignInView: View {
+    @State private var vm: TwoFactorSignInViewModel
+    @FocusState private var focused: Bool
+
+    public init(vm: TwoFactorSignInViewModel) {
+        self._vm = State(initialValue: vm)
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: KolaSpacing.card) {
+            VStack(alignment: .leading, spacing: KolaSpacing.s) {
+                Text(vm.title)
+                    .font(KolaFont.headline)
+                    .kerning(KolaKerning.headline)
+                    .foregroundStyle(KolaColors.whiteOnGradient)
+                Text(vm.subtitle)
+                    .font(KolaFont.tagline)
+                    .foregroundStyle(KolaColors.whiteOnGradientMuted)
+            }
+            .padding(.top, KolaSpacing.xxxl)
+
+            TextField("123456", text: $vm.code)
+                .keyboardType(.asciiCapable)
+                .textContentType(.oneTimeCode)
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+                .focused($focused)
+                .font(KolaFont.row)
+                .foregroundStyle(KolaColors.whiteOnGradient)
+                .padding(KolaSpacing.l)
+                .kolaFrosted(.card)
+                .privacySensitive()
+
+            if let error = vm.errorMessage {
+                Text(error)
+                    .font(KolaFont.tagline)
+                    .foregroundStyle(KolaColors.coral)
+                    .accessibilityLabel("Error: \(error)")
+            }
+
+            Spacer(minLength: KolaSpacing.card)
+
+            Button {
+                Task { await vm.submit() }
+            } label: {
+                HStack(spacing: KolaSpacing.s) {
+                    if vm.isSubmitting {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(.white)
+                    }
+                    Text("Verify")
+                        .font(KolaFont.cta)
+                        .kerning(KolaKerning.cta)
+                }
+                .frame(maxWidth: .infinity, minHeight: KolaSpacing.hitTarget + 6)
+                .foregroundStyle(.white)
+                .background(
+                    RoundedRectangle(cornerRadius: KolaRadius.cta, style: .continuous)
+                        .fill(!vm.code.isEmpty && !vm.isSubmitting ? KolaColors.greenLight : Color.white.opacity(0.18))
+                )
+            }
+            .disabled(vm.isSubmitting || vm.code.isEmpty)
+        }
+        .padding(.horizontal, KolaSpacing.xl)
+        .padding(.bottom, KolaSpacing.homeIndicator)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .kolaWallpaper()
+        .sensitiveScreen()
+        .navigationBarBackButtonHidden(false)
+        .onAppear { focused = true }
     }
 }

@@ -52,4 +52,50 @@ public enum AccountEndpoints {
             self.body = body
         }
     }
+
+    // MARK: - 2FA
+
+    public struct SetupTwoFactor: Endpoint {
+        public typealias Response = SetupTwoFactorResponse
+        public let path = "/api/v1/account/2fa/setup"
+        public let method: HTTPMethod = .post
+        public let body: (any Encodable & Sendable)?
+
+        public init(method: TwoFactorMethodKind) {
+            self.body = SetupTwoFactorBody(method: method)
+        }
+    }
+
+    public struct EnableTwoFactor: Endpoint {
+        public typealias Response = EnableTwoFactorResponse
+        public let path = "/api/v1/account/2fa/enable"
+        public let method: HTTPMethod = .post
+        public let body: (any Encodable & Sendable)?
+
+        public init(_ body: EnableTwoFactorBody) {
+            self.body = body
+        }
+    }
+
+    public struct DisableTwoFactor: Endpoint {
+        public typealias Response = DisableTwoFactorResponse
+        public let path = "/api/v1/account/2fa/disable"
+        public let method: HTTPMethod = .post
+        public let body: (any Encodable & Sendable)?
+
+        public init(_ body: VerifyTwoFactorBody) {
+            self.body = body
+        }
+    }
+
+    public struct RegenerateBackupCodes: Endpoint {
+        public typealias Response = RegenerateBackupCodesResponse
+        public let path = "/api/v1/account/2fa/regenerate-backup-codes"
+        public let method: HTTPMethod = .post
+        public let body: (any Encodable & Sendable)?
+
+        public init(_ body: VerifyTwoFactorBody) {
+            self.body = body
+        }
+    }
 }

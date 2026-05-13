@@ -6,10 +6,10 @@ _Owned by Architect. Updated by Builder after each step._
 
 ## Current Status
 
-**Active step:** Wave 2a iOS Phase 11 partial + D-wave phone-first recovery + web KYC recovery.
-**Last cleared:** Phase 10C hardening + D-wave iter-2 review fixes are committed locally on `feat/ios-swiftui-app`.
-**Pending deploy:** All Pile B + Wave 1 commits local past 6d3db06, plus Wave 2a iOS/mobile commits and current uncommitted web KYC fixes.
-**Tests:** Recovery validation green after starting local `kolaleaf-db`: targeted KYC Vitest 10/10, `npx tsc --noEmit`, `npm run build`, physical iPhone build/install/launch.
+**Active step:** Wave 2a iOS Phase 11 implemented locally; Phase 11.5 reconciliation is next.
+**Last cleared:** Web KYC recovery patch committed locally as `3e439c5`; Phase 11 iOS 2FA/security committed locally on `feat/ios-swiftui-app`.
+**Pending deploy:** All Pile B + Wave 1 commits local past 6d3db06, plus Wave 2a iOS/mobile commits. Production KYC 500 remains operationally blocked on Railway/Sumsub access.
+**Tests:** Latest validation: 2FA Vitest 32/32, `npx tsc --noEmit`, `npm run build`, physical iPhone Debug build/install/launch.
 
 ### Active recovery todo — 2026-05-14
 
@@ -22,7 +22,8 @@ _Owned by Architect. Updated by Builder after each step._
 - [x] Build Debug iOS app for paired physical iPhone and install/launch `com.kolaleaf.app`.
 - [ ] Confirm production Sumsub env/logs on Railway and fix the real `/api/v1/kyc/initiate` 500 root cause.
 - [ ] Clean or intentionally commit the large untracked generated `CLAUDE.md` set and new KYC files.
-- [ ] Finish Phase 11 proper: TOTP setup, TOTP verify, backup codes, and SMS 2FA UI decision.
+- [x] Review and commit web KYC recovery changes; add canonical envelopes for KYC mock and existing 2FA routes.
+- [x] Finish Phase 11 proper: TOTP setup, TOTP verify, backup-code display/regeneration, SMS 2FA setup UI, and sign-in 2FA challenge.
 - [ ] Reconcile Phase 11.5 scope against code already moved earlier (switcher blur, idle timeout primitives, referral capture, Live Activity redaction).
 
 ### Wave 1 commit ledger (closes WAVE-1-AUDIT.md gaps)

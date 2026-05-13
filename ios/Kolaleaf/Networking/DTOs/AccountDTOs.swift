@@ -40,3 +40,64 @@ public struct PatchMeBody: Codable, Sendable, Equatable {
         self.country = country
     }
 }
+
+// MARK: - Phase 11 2FA DTOs
+
+public enum TwoFactorMethodKind: String, Codable, Sendable, Equatable {
+    case none = "NONE"
+    case totp = "TOTP"
+    case sms = "SMS"
+}
+
+public struct SetupTwoFactorBody: Codable, Sendable, Equatable {
+    public let method: TwoFactorMethodKind
+
+    public init(method: TwoFactorMethodKind) {
+        self.method = method
+    }
+}
+
+public struct SetupTwoFactorResponse: Decodable, Sendable, Equatable {
+    public let method: TwoFactorMethodKind
+    public let secret: String?
+    public let otpauthUri: String?
+    public let qrDataUrl: String?
+    public let challengeId: String?
+}
+
+public struct EnableTwoFactorBody: Codable, Sendable, Equatable {
+    public let method: TwoFactorMethodKind
+    public let secret: String?
+    public let challengeId: String?
+    public let code: String
+
+    public init(method: TwoFactorMethodKind, secret: String? = nil, challengeId: String? = nil, code: String) {
+        self.method = method
+        self.secret = secret
+        self.challengeId = challengeId
+        self.code = code
+    }
+}
+
+public struct EnableTwoFactorResponse: Decodable, Sendable, Equatable {
+    public let enabled: Bool
+    public let backupCodes: [String]
+}
+
+public struct VerifyTwoFactorBody: Codable, Sendable, Equatable {
+    public let code: String
+    public let challengeId: String?
+
+    public init(code: String, challengeId: String? = nil) {
+        self.code = code
+        self.challengeId = challengeId
+    }
+}
+
+public struct DisableTwoFactorResponse: Decodable, Sendable, Equatable {
+    public let disabled: Bool
+}
+
+public struct RegenerateBackupCodesResponse: Decodable, Sendable, Equatable {
+    public let backupCodes: [String]
+}

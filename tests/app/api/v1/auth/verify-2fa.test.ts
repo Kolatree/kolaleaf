@@ -44,7 +44,8 @@ vi.mock('@/lib/security/anomaly', () => ({
 }))
 
 import { POST } from '@/app/api/v1/auth/verify-2fa/route'
-import { requirePendingTwoFactorChallenge } from '@/lib/auth/middleware'
+import { requirePendingTwoFactorChallenge, AuthError } from '@/lib/auth/middleware'
+import { prisma } from '@/lib/db/client'
 
 function makeRequest(body: unknown): Request {
   return new Request('http://localhost/api/v1/auth/verify-2fa', {
@@ -84,5 +85,29 @@ describe('POST /api/v1/auth/verify-2fa (schema validation)', () => {
   it('returns 422 when code is wrong type (Zod)', async () => {
     const res = await POST(makeRequest({ code: 123456 }))
     expect(res.status).toBe(422)
+  })
+
+  it('returns canonical 401 envelope when pending challenge cookie is missing', async () => {
+    vi.mocked(requirePendingTwoFactorChallenge).mockImplementationOnce(() => {
+      throw new AuthError(401, '2FA challenge required')
+    })
+
+    const res = await POST(makeRequest({ code: '123456' }))
+    expect(res.status).toBe(401)
+    await expect(res.json()).resolves.toMatchObject({
+      error: '2FA challenge required',
+      reason: 'unauthenticated',
+    })
+  })
+
+  it('returns canonical expired envelope when challenge is gone', async () => {
+    vi.mocked(prisma.twoFactorChallenge.findUnique).mockResolvedValueOnce(null)
+
+    const res = await POST(makeRequest({ code: '123456' }))
+    expect(res.status).toBe(401)
+    await expect(res.json()).resolves.toMatchObject({
+      error: '2FA challenge expired',
+      reason: 'expired',
+    })
   })
 })

@@ -104,6 +104,7 @@ extension APIError: LocalizedError {
         case .codeInvalid(let r):
             switch r {
             case "wrong_code": return "That code didn't match. Please try again."
+            case "invalid_code": return "That code didn't match. Please try again."
             case "expired":    return "That code has expired. Tap Resend to get a new one."
             case "used":       return "That code has already been used."
             case "no_token":   return "Please request a new code first."
@@ -144,7 +145,7 @@ extension APIError {
             return .stepUpRequired(intent: message ?? "transfer.create")
         case "bank_unreachable":
             return .bankUnreachable
-        case "wrong_code", "expired", "used", "no_token":
+        case "wrong_code", "expired", "used", "no_token", "invalid_code":
             return .codeInvalid(reason: reason!)
         // Phase 6 iter-2 typed reasons (C4 / ADV-P6-C2): every Send-
         // path error is dispatched on `reason`, never on message text.

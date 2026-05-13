@@ -93,6 +93,17 @@ public enum AuthEndpoints {
         }
     }
 
+    public struct VerifyTwoFactor: Endpoint {
+        public typealias Response = VerifySignInTwoFactorResponse
+        public let path = "/api/v1/auth/verify-2fa"
+        public let method: HTTPMethod = .post
+        public let body: (any Encodable & Sendable)?
+
+        public init(code: String, challengeId: String? = nil) {
+            self.body = VerifySignInTwoFactorRequest(code: code, challengeId: challengeId)
+        }
+    }
+
     // MARK: - Logout
 
     /// Logout uses EmptyResponse so APIClient's empty-body fast-path applies even when

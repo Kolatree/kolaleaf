@@ -83,7 +83,7 @@ final class HelpViewModelTests: XCTestCase {
         vm.openChatCTA()
 
         XCTAssertEqual(opener.openedURLs.first?.absoluteString,
-                       "https://kolaleaf.com.au/help")
+                       "https://www.kolaleaf.com/help")
     }
 
     func test_load_unauthorized_setsSessionExpired() async {

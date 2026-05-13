@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ADV-P10A-S2 (Phase 10A iter-2): the App Group is reserved for Part B
+  (Phase 10B) where LiveActivityService will hand state hints to the
+  widget process via a shared container. Currently dormant — the widget
+  reads ContentState through ActivityKit's own IPC channel and writes
+  nothing. Do NOT remove the group: re-adding it later forces an App
+  Store re-review of the entitlement profile.
+-->
 <plist version="1.0">
 <dict>
     <key>com.apple.security.application-groups</key>

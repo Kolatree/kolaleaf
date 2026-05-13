@@ -71,6 +71,15 @@ targets:
         # Data Protection class is set via the entitlement instead (see Kolaleaf.entitlements).
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: false
+        # ADV-P10A-C1 (Phase 10A iter-2): register the `kolaleaf://`
+        # custom URL scheme that the Live Activity widget surfaces
+        # (lock-screen + Dynamic Island) deep-link into. Without this,
+        # the App Store review flags the unhandled scheme as a non-no-op
+        # placeholder. Reverse-DNS bundle identifier is the convention.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.kolaleaf.app
+            CFBundleURLSchemes:
+              - kolaleaf
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kolaleaf.app
@@ -104,6 +113,20 @@ targets:
       - path: KolaleafWidgets
         excludes:
           - "**/*.md"
+      # Design tokens shared with the app target.
+      # CA-1001 (iter-2): KolaTypography intentionally NOT included.
+      # The widget views all use `.system(...)` fonts; the Inter `.ttf`
+      # files aren't bundled with the extension, so KolaTypography
+      # would silently fall back to system anyway. Drop the symbol
+      # from the widget process entirely.
+      # CA-1004 (iter-2): only the small `+Core.swift` token surface
+      # is wired in — the migration aliases / Frosted namespace /
+      # wallpaper stops in `KolaColors.swift` are app-only.
+      - path: Kolaleaf/Design/Tokens/KolaColors+Core.swift
+      - path: Kolaleaf/Design/Tokens/KolaSpacing.swift
+      # ActivityKit attributes — same Codable type addressable on both
+      # sides of the IPC boundary (Phase 10A · U66).
+      - path: Kolaleaf/LiveActivities/KolaleafTransferAttributes.swift
     info:
       path: KolaleafWidgets/Info.plist
       properties:
@@ -139,6 +162,43 @@ targets:
   # break xcodebuild test. Removed from project until Phase 12's actual UI tests land.
   # The directory may still exist for future use; xcodegen won't include it without a target.
 
+  # Phase 10A · widget unit + snapshot tests for the Live Activity surfaces.
+  KolaleafWidgetsTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      # Pull the widget's source files directly into the test target so
+      # the test binary owns its own copy of every type. App-extension
+      # binaries cannot host XCTest, and `@testable` against an .appex
+      # leaves the symbols undefined at link time. Compiling the widget
+      # sources into the test bundle is the canonical workaround used by
+      # most production iOS app projects with widget extensions.
+      # ADV-P10A-W9: yes, this means the widget code lives in three
+      # binaries (.appex, the app, the test target). It is the
+      # canonical pattern; xcodegen handles file dedup across paths.
+      - KolaleafWidgetsTests
+      - path: KolaleafWidgets
+        excludes:
+          - "**/*.md"
+          # The @main entry would conflict with XCTest's own entry point
+          # in the test bundle. Exclude it — tests don't need the bundle
+          # registration; they exercise the surface views directly.
+          - KolaleafWidgets.swift
+      # Mirror the widget extension's design-token surface — Core only.
+      # CA-1001 + CA-1004 (iter-2): KolaTypography stripped from the
+      # widget process and KolaColors split.
+      - path: Kolaleaf/Design/Tokens/KolaColors+Core.swift
+      - path: Kolaleaf/Design/Tokens/KolaSpacing.swift
+      - path: Kolaleaf/LiveActivities/KolaleafTransferAttributes.swift
+    dependencies:
+      - package: SnapshotTesting
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kolaleaf.app.widgets.tests
+        GENERATE_INFOPLIST_FILE: YES
+        # Test bundle hosts itself — no app/extension host required when
+        # the widget sources compile in directly.
+
 packages:
   SnapshotTesting:
     url: https://github.com/pointfreeco/swift-snapshot-testing
@@ -154,8 +214,10 @@ schemes:
       gatherCoverageData: true
       coverageTargets:
         - Kolaleaf
+        - KolaleafWidgets
       targets:
         - KolaleafTests
+        - KolaleafWidgetsTests
     run:
       config: Debug
     archive:

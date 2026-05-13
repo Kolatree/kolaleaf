@@ -126,6 +126,13 @@ public final class AppState {
     // MARK: - Active flow
 
     public var activeTransfer: ActiveTransfer?
+    /// ADV-P10A-C1 (Phase 10A iter-2): transferId the Live Activity
+    /// deep link asked us to open, captured during `.onOpenURL`. The
+    /// ActivityTabRoot reads + clears it on first appear so the
+    /// router routes once and never re-opens on tab re-mount. Not
+    /// persisted — a kill-and-relaunch via the deep link will set it
+    /// again on next foreground.
+    public var pendingTransferDetailId: String?
     /// Phase 6 iter-2 (C6 / ADV-P6-C4): true while the iOS-side submit
     /// is in flight, BEFORE a real backend transfer id exists. Idle
     /// extension logic reads this flag alongside `activeTransfer` so

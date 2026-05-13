@@ -90,6 +90,14 @@ struct KolaleafApp: App {
                 .environment(\.swiftDataStack, swiftDataStack)
                 .environment(\.syncService, syncService)
                 .task { await wireAPIClientHooks() }
+                // ADV-P10A-C1 (Phase 10A iter-2): handle the
+                // `kolaleaf://` scheme registered in project.yml. The
+                // Live Activity surfaces deep-link into the app via
+                // `kolaleaf://transfer/<id>`; routing logic lives in
+                // `DeepLinkRouter.handle(_:appState:)`.
+                .onOpenURL { url in
+                    DeepLinkRouter.handle(url, appState: appState)
+                }
         }
         .onChange(of: scenePhase) { _, newPhase in
             handleScenePhase(newPhase)

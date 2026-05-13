@@ -18,6 +18,11 @@ public enum OnboardingRoute: Hashable, Sendable {
     case signIn
     case emailEntry
     case emailOTP(email: String)
+    /// Phase 11A-5 phone-first: country picker + phone field +
+    /// "or use email instead" fallback link.
+    case phoneEntry
+    /// Phase 11A-5 phone-first: 6-digit SMS code entry.
+    case phoneOTP(phone: String)
     case registrationDetails(email: String)
     case kycIntro
     /// Phase 2 · U22a — pre-warm shell shown briefly before mounting Sumsub.
@@ -67,6 +72,11 @@ public enum OnboardingTransition {
     /// Email OTP verified → registration details (collect name + password + AU address).
     public static func fromEmailOTP(verifiedEmail email: String) -> OnboardingRoute {
         .registrationDetails(email: email)
+    }
+
+    /// Phone entry → Phone OTP with the normalised E.164 number.
+    public static func fromPhoneEntry(codeSentTo phone: String) -> OnboardingRoute {
+        .phoneOTP(phone: phone)
     }
 
     /// Sign-in 202 → bounce to OTP for the given email so the user can verify.
@@ -213,6 +223,41 @@ public struct OnboardingCoordinator: View {
                 api: apiClient,
                 onVerified: {
                     path.append(OnboardingTransition.fromEmailOTP(verifiedEmail: email))
+                }
+            ))
+
+        case .phoneEntry:
+            PhoneEntryView(
+                vm: PhoneEntryViewModel(
+                    api: apiClient,
+                    onCodeSent: { phone in
+                        path.append(OnboardingTransition.fromPhoneEntry(codeSentTo: phone))
+                    }
+                ),
+                onUseEmailInstead: {
+                    // Fallback rail. We push emailEntry onto the existing
+                    // stack rather than replacing the root so the user can
+                    // still back up to the phone screen if they reconsider.
+                    path.append(.emailEntry)
+                }
+            )
+
+        case .phoneOTP(let phone):
+            PhoneOTPView(vm: PhoneOTPViewModel(
+                phone: phone,
+                api: apiClient,
+                onVerified: {
+                    // Phase 11A-5 follow-up gap: RegistrationDetailsView
+                    // still requires an `email` identifier. The
+                    // registration widening (iOS + backend
+                    // /complete-registration accepting a phone-identified
+                    // claim) lands in the next commit. Until then, route
+                    // verified phone users into the email-equivalent
+                    // landing so the wizard at least completes — copy
+                    // change will land alongside the registration
+                    // widening so we don't confuse users with a
+                    // half-wired flow.
+                    path.append(.emailEntry)
                 }
             ))
 

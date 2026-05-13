@@ -12,26 +12,50 @@
 
 import Foundation
 
-// MARK: - Email OTP (Wave 1 verify-first wizard, step 1: send code)
+// MARK: - Verify-first wizard, step 1: send code
+//
+// 2026-05-13 phone-first widening: the body is a discriminated
+// `{ type, value }` shape. Backend still accepts the legacy
+// `{ email }` form via shape-sniffing for in-flight older app
+// installs, but every new build sends the discriminated form.
 
 public struct SendCodeRequest: Codable, Sendable {
-    public let email: String
-    public init(email: String) { self.email = email }
+    public let type: String  // "email" | "phone"
+    public let value: String
+
+    public init(email: String) {
+        self.type = "email"
+        self.value = email
+    }
+
+    public init(phone: String) {
+        self.type = "phone"
+        self.value = phone
+    }
 }
 
 /// Backend literally returns `{ ok: true }` (z.literal(true)). Enumeration-proof:
-/// always 200 regardless of whether the address is known / rate-limited / bounced.
+/// always 200 regardless of whether the identifier is known / rate-limited / bounced.
 public struct SendCodeResponse: Decodable, Sendable {
     public let ok: Bool
 }
 
-// MARK: - Email OTP step 2: verify code
+// MARK: - Verify-first wizard, step 2: verify code
 
 public struct VerifyCodeRequest: Codable, Sendable {
-    public let email: String
+    public let type: String  // "email" | "phone"
+    public let value: String
     public let code: String
+
     public init(email: String, code: String) {
-        self.email = email
+        self.type = "email"
+        self.value = email
+        self.code = code
+    }
+
+    public init(phone: String, code: String) {
+        self.type = "phone"
+        self.value = phone
         self.code = code
     }
 }
@@ -97,9 +121,9 @@ public struct CompleteRegistrationResponse: Decodable, Sendable {
 // MARK: - Login (returning user)
 
 /// Discriminated identifier per src/lib/schemas/common.ts IdentifierInput.
-/// Only `email` is implemented at v1. Apple/Google added in v1.1.
+/// 2026-05-13: `phone` variant added. Apple/Google land in v1.1.
 public struct LoginIdentifier: Codable, Sendable {
-    public let type: String  // "email" only at v1
+    public let type: String  // "email" | "phone"
     public let value: String
 
     public init(type: String, value: String) {
@@ -110,6 +134,10 @@ public struct LoginIdentifier: Codable, Sendable {
     public static func email(_ value: String) -> LoginIdentifier {
         LoginIdentifier(type: "email", value: value)
     }
+
+    public static func phone(_ value: String) -> LoginIdentifier {
+        LoginIdentifier(type: "phone", value: value)
+    }
 }
 
 public struct LoginRequest: Codable, Sendable {
@@ -118,6 +146,11 @@ public struct LoginRequest: Codable, Sendable {
 
     public init(email: String, password: String) {
         self.identifier = .email(email)
+        self.password = password
+    }
+
+    public init(phone: String, password: String) {
+        self.identifier = .phone(phone)
         self.password = password
     }
 }

@@ -6,7 +6,7 @@ import Foundation
 
 public enum AuthEndpoints {
 
-    // MARK: - Email OTP (existing in Wave 1)
+    // MARK: - OTP wizard step 1: send code (email or phone)
 
     public struct SendEmailCode: Endpoint {
         public typealias Response = SendCodeResponse
@@ -19,6 +19,19 @@ public enum AuthEndpoints {
         }
     }
 
+    public struct SendPhoneCode: Endpoint {
+        public typealias Response = SendCodeResponse
+        public let path = "/api/v1/auth/send-code"
+        public let method: HTTPMethod = .post
+        public let body: (any Encodable & Sendable)?
+
+        public init(phone: String) {
+            self.body = SendCodeRequest(phone: phone)
+        }
+    }
+
+    // MARK: - OTP wizard step 2: verify code
+
     public struct VerifyEmailCode: Endpoint {
         public typealias Response = VerifyCodeResponse
         public let path = "/api/v1/auth/verify-code"
@@ -27,6 +40,17 @@ public enum AuthEndpoints {
 
         public init(email: String, code: String) {
             self.body = VerifyCodeRequest(email: email, code: code)
+        }
+    }
+
+    public struct VerifyPhoneCode: Endpoint {
+        public typealias Response = VerifyCodeResponse
+        public let path = "/api/v1/auth/verify-code"
+        public let method: HTTPMethod = .post
+        public let body: (any Encodable & Sendable)?
+
+        public init(phone: String, code: String) {
+            self.body = VerifyCodeRequest(phone: phone, code: code)
         }
     }
 
@@ -57,6 +81,10 @@ public enum AuthEndpoints {
 
         public init(email: String, password: String) {
             self.body = LoginRequest(email: email, password: password)
+        }
+
+        public init(phone: String, password: String) {
+            self.body = LoginRequest(phone: phone, password: password)
         }
     }
 

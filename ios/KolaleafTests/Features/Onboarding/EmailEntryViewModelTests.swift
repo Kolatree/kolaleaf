@@ -64,7 +64,8 @@ final class EmailEntryViewModelTests: XCTestCase {
             for: String(describing: AuthEndpoints.SendEmailCode.self),
             as: SendCodeRequest.self
         )
-        XCTAssertEqual(body?.email, "user@example.com")
+        XCTAssertEqual(body?.type, "email")
+        XCTAssertEqual(body?.value, "user@example.com")
     }
 
     func test_submit_invokesOnCodeSent_withNormalizedEmail() async {

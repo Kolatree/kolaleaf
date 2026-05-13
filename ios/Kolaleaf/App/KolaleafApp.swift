@@ -145,16 +145,19 @@ struct KolaleafApp: App {
     // MARK: - Root content w/ Face ID gate
     //
     // Phase 11 · Face ID unlock. The gate overlays RootCoordinator
-    // when `biometricUnlock.isLocked(hasActiveSession:)` is true.
-    // We compose it as a ZStack inside the WindowGroup so the
-    // RootCoordinator's NavigationStack lifecycle is unaffected —
-    // the views behind the gate stay in memory and resume cleanly
-    // once Face ID succeeds.
+    // when `shouldShowGate(...)` is true. We compose it as a ZStack
+    // inside the WindowGroup so the RootCoordinator's NavigationStack
+    // lifecycle is unaffected — the views behind the gate stay in
+    // memory and resume cleanly once Face ID succeeds.
     @ViewBuilder
     private var rootContent: some View {
+        let shouldGate = Self.shouldShowGate(
+            hasActiveSession: appState.hasActiveSession,
+            isLocked: biometricUnlock.isLocked(hasActiveSession: appState.hasActiveSession)
+        )
         ZStack {
             RootCoordinator()
-            if biometricUnlock.isLocked(hasActiveSession: appState.hasActiveSession) {
+            if shouldGate {
                 BiometricLockView(
                     controller: biometricUnlock,
                     service: biometricsService,
@@ -166,7 +169,18 @@ struct KolaleafApp: App {
                 .zIndex(1)
             }
         }
-        .animation(KolaMotion.softFade, value: biometricUnlock.isLocked(hasActiveSession: appState.hasActiveSession))
+        .animation(KolaMotion.softFade, value: shouldGate)
+    }
+
+    /// D3 — pure composition rule for the Face ID gate. Lifted out of
+    /// `rootContent` so the truth table is testable without a SwiftUI
+    /// host (see `KolaleafAppGateCompositionTests`). Today the rule is
+    /// "active session AND controller-reports-locked"; if it grows
+    /// (e.g. emergency-call exemption, parental-controls override),
+    /// the test surface stays a single boolean predicate.
+    @MainActor
+    static func shouldShowGate(hasActiveSession: Bool, isLocked: Bool) -> Bool {
+        hasActiveSession && isLocked
     }
 
     // MARK: - App lifecycle

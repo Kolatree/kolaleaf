@@ -183,4 +183,80 @@ public struct PhoneNumber: Sendable, Hashable {
         }
         return .success(PhoneNumber(stripped))
     }
+
+    // MARK: - Display projection
+
+    /// Per-corridor grouping table for `displayFormatted`. Each entry
+    /// is `(dialCode, groupSizes)` where `groupSizes` describes how
+    /// to split the **local** portion (everything after the dial
+    /// code) into space-separated runs.
+    ///
+    /// AU `+61`: 3-3-3 (e.g. `400 000 000`)
+    /// NZ `+64`: 2-3-4 (e.g. `21 123 4567`)
+    /// GB `+44`: 4-6  (e.g. `7700 900123` — UK mobile shape)
+    /// US/CA `+1`: 3-3-4 (e.g. `415 555 0123`)
+    /// NG `+234`: 3-3-4 (e.g. `801 234 5678`)
+    /// ZA `+27`: 2-3-4 (e.g. `82 123 4567`)
+    private static let displayGroups: [(dialCode: String, groups: [Int])] = [
+        ("+61",  [3, 3, 3]),
+        ("+64",  [2, 3, 4]),
+        ("+44",  [4, 6]),
+        ("+234", [3, 3, 4]),
+        ("+27",  [2, 3, 4]),
+        ("+1",   [3, 3, 4]),
+    ]
+
+    /// Human display projection — e.g. `+61 400 000 000`.
+    ///
+    /// **Use at the View layer; do NOT use in network DTOs (use `.e164`).**
+    /// Single source of truth for human-display of a phone number
+    /// across the app; do not re-implement grouping at the View layer.
+    /// Defaults to grouped-3 (`"+999 123 456 78"`) for any dial code
+    /// not in the per-corridor table above. The grouping is purely
+    /// cosmetic — round-tripping through `parse(...)` recovers the
+    /// same `.e164`.
+    public var displayFormatted: String {
+        // Find the entry whose dial code is a prefix of e164. Order
+        // longest-first so `+234` wins over `+2` if both existed.
+        let entry = Self.displayGroups
+            .sorted { $0.dialCode.count > $1.dialCode.count }
+            .first { e164.hasPrefix($0.dialCode) }
+
+        guard let entry else {
+            // Unknown corridor: fall back to grouped-3 over the
+            // post-`+` digits. We can't isolate the dial code without
+            // a libphonenumber-class lookup, so we group the entire
+            // digit run including the country code digits.
+            let digits = String(e164.dropFirst())
+            return "+" + Self.group(digits, into: [3, 3, 3, 3, 3])
+        }
+
+        let local = String(e164.dropFirst(entry.dialCode.count))
+        return entry.dialCode + " " + Self.group(local, into: entry.groups)
+    }
+
+    /// Insert single-space separators into `digits` according to
+    /// `groups` (left-aligned). If `digits` is longer than the sum
+    /// of `groups`, any overflow is appended after the last group
+    /// (no trailing space). If shorter, the format truncates to the
+    /// digits available.
+    private static func group(_ digits: String, into groups: [Int]) -> String {
+        var remaining = Substring(digits)
+        var parts: [String] = []
+        for size in groups {
+            if remaining.isEmpty { break }
+            let take = min(size, remaining.count)
+            parts.append(String(remaining.prefix(take)))
+            remaining = remaining.dropFirst(take)
+        }
+        if !remaining.isEmpty {
+            // Overflow — append to the last part so we don't lose digits.
+            if parts.isEmpty {
+                parts.append(String(remaining))
+            } else {
+                parts[parts.count - 1] += String(remaining)
+            }
+        }
+        return parts.joined(separator: " ")
+    }
 }

@@ -12,7 +12,12 @@ import XCTest
 @MainActor
 final class PhoneOTPViewModelTests: XCTestCase {
 
-    private let PHONE = "+61400000000"
+    private let PHONE: PhoneNumber = {
+        guard case .success(let p) = PhoneNumber.parseE164("+61400000000") else {
+            fatalError("PhoneNumber.parseE164 regression — \"+61400000000\" should always parse")
+        }
+        return p
+    }()
 
     private func makeVM(
         api: AuthAPI,
@@ -56,7 +61,7 @@ final class PhoneOTPViewModelTests: XCTestCase {
             as: VerifyCodeRequest.self
         )
         XCTAssertEqual(body?.type, .phone)
-        XCTAssertEqual(body?.value, PHONE)
+        XCTAssertEqual(body?.value, PHONE.e164)
         XCTAssertEqual(body?.code, "123456")
     }
 
@@ -138,7 +143,7 @@ final class PhoneOTPViewModelTests: XCTestCase {
             as: SendCodeRequest.self
         )
         XCTAssertEqual(body?.type, .phone)
-        XCTAssertEqual(body?.value, PHONE)
+        XCTAssertEqual(body?.value, PHONE.e164)
     }
 
     func test_resend_blockedWhileCountdownActive() async {

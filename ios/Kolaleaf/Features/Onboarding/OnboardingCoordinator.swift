@@ -22,7 +22,7 @@ public enum OnboardingRoute: Hashable, Sendable {
     /// "or use email instead" fallback link.
     case phoneEntry
     /// Phase 11A-5 phone-first: 6-digit SMS code entry.
-    case phoneOTP(phone: String)
+    case phoneOTP(phone: PhoneNumber)
     case registrationDetails(email: String)
     case kycIntro
     /// Phase 2 · U22a — pre-warm shell shown briefly before mounting Sumsub.
@@ -74,8 +74,11 @@ public enum OnboardingTransition {
         .registrationDetails(email: email)
     }
 
-    /// Phone entry → Phone OTP with the normalised E.164 number.
-    public static func fromPhoneEntry(codeSentTo phone: String) -> OnboardingRoute {
+    /// Phone entry → Phone OTP with the typed `PhoneNumber`. The value
+    /// carries the parser's E.164 invariant through the NavigationPath;
+    /// the wire-format `String` is extracted only at the network DTO
+    /// boundary inside `PhoneOTPViewModel`.
+    public static func fromPhoneEntry(codeSentTo phone: PhoneNumber) -> OnboardingRoute {
         .phoneOTP(phone: phone)
     }
 

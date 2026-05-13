@@ -13,7 +13,7 @@ import Observation
 @Observable
 public final class PhoneOTPViewModel {
 
-    public let phone: String          // E.164 (normalised upstream)
+    public let phone: PhoneNumber     // Typed E.164 value carried from PhoneEntryViewModel
     public var code: String = ""
     public private(set) var isSubmitting: Bool = false
     public private(set) var errorMessage: String?
@@ -26,7 +26,7 @@ public final class PhoneOTPViewModel {
     private let onVerified: () -> Void
     private var countdownTask: Task<Void, Never>?
 
-    public init(phone: String, api: AuthAPI, onVerified: @escaping () -> Void) {
+    public init(phone: PhoneNumber, api: AuthAPI, onVerified: @escaping () -> Void) {
         self.phone = phone
         self.api = api
         self.onVerified = onVerified

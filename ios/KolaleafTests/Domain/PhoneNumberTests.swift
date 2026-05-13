@@ -127,6 +127,50 @@ final class PhoneNumberTests: XCTestCase {
         }
     }
 
+    // MARK: - displayFormatted (human projection)
+
+    /// View-layer projection: per-corridor grouping makes the number
+    /// human-scannable. Wire format (`.e164`) stays unchanged — this
+    /// is purely cosmetic and must never appear in network DTOs.
+    func test_displayFormatted_AU_groups_3_3_3() throws {
+        let phone = try unwrap(PhoneNumber.parseE164("+61400000000"))
+        XCTAssertEqual(phone.displayFormatted, "+61 400 000 000")
+    }
+
+    func test_displayFormatted_NG_groups_3_3_4() throws {
+        let phone = try unwrap(PhoneNumber.parseE164("+2348012345678"))
+        XCTAssertEqual(phone.displayFormatted, "+234 801 234 5678")
+    }
+
+    func test_displayFormatted_NZ_groups_2_3_4() throws {
+        let phone = try unwrap(PhoneNumber.parseE164("+64211234567"))
+        XCTAssertEqual(phone.displayFormatted, "+64 21 123 4567")
+    }
+
+    func test_displayFormatted_GB_groups_4_6() throws {
+        let phone = try unwrap(PhoneNumber.parseE164("+447700900123"))
+        XCTAssertEqual(phone.displayFormatted, "+44 7700 900123")
+    }
+
+    func test_displayFormatted_US_groups_3_3_4() throws {
+        let phone = try unwrap(PhoneNumber.parseE164("+14155550123"))
+        XCTAssertEqual(phone.displayFormatted, "+1 415 555 0123")
+    }
+
+    func test_displayFormatted_ZA_groups_2_3_4() throws {
+        let phone = try unwrap(PhoneNumber.parseE164("+27821234567"))
+        XCTAssertEqual(phone.displayFormatted, "+27 82 123 4567")
+    }
+
+    /// Unknown corridor → grouped-3 fallback over the post-`+`
+    /// digit run. Covers any dial code not in the curated
+    /// `displayGroups` table; defensive default so we never crash
+    /// or display a runtime nil in the View.
+    func test_displayFormatted_unknownDialCode_fallsBackToGroupedThrees() throws {
+        let phone = try unwrap(PhoneNumber.parseE164("+99912345678"))
+        XCTAssertEqual(phone.displayFormatted, "+999 123 456 78")
+    }
+
     // MARK: - CountryDialCodes curated list
 
     func test_supportedCountriesIncludesAUandNG() {
@@ -185,5 +229,23 @@ final class PhoneNumberTests: XCTestCase {
         let phoneData = try encoder.encode(IdentifierKind.phone)
         XCTAssertEqual(String(data: emailData, encoding: .utf8), "\"email\"")
         XCTAssertEqual(String(data: phoneData, encoding: .utf8), "\"phone\"")
+    }
+
+    // MARK: - Helpers
+
+    /// Unwraps a `Result<PhoneNumber, ParseError>` for the
+    /// displayFormatted tests, which only care about the happy path.
+    private func unwrap(
+        _ result: Result<PhoneNumber, PhoneNumber.ParseError>,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> PhoneNumber {
+        switch result {
+        case .success(let phone):
+            return phone
+        case .failure(let err):
+            XCTFail("expected success, got \(err)", file: file, line: line)
+            throw err
+        }
     }
 }

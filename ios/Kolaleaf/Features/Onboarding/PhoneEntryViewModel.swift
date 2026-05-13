@@ -7,14 +7,16 @@
 //
 // Behaviour:
 // • `country` is the selected CountryDialCode (defaults to AU).
-// • `phone` is what the user typed (kept verbatim for the UI; we
-//   do NOT format-as-you-type so the cursor doesn't jump around).
-//   E.164 normalisation happens only at submit time via
-//   PhoneNumber.parse(dialCode:localNumber:).
+// • `phoneInput` is the raw input buffer the user typed (kept
+//   verbatim for the UI; we do NOT format-as-you-type so the cursor
+//   doesn't jump around). E.164 normalisation happens only at submit
+//   time via PhoneNumber.parse(dialCode:localNumber:). The name
+//   makes the input-buffer-vs-validated-PhoneNumber distinction
+//   explicit; `PhoneOTPViewModel.phone` carries the validated value.
 // • `inlineError` surfaces backend 422 (fields.value) or a local
 //   parse failure (.empty / .malformed) for immediate feedback.
-// • `onCodeSent(normalisedE164)` fires on success so the parent
-//   coordinator can route to `PhoneOTPView(phone:)`.
+// • `onCodeSent(normalised)` fires with the typed `PhoneNumber` so the
+//   parent coordinator can route to `PhoneOTPView(phone:)`.
 
 import Foundation
 import Observation
@@ -24,7 +26,7 @@ import Observation
 public final class PhoneEntryViewModel {
 
     public var country: CountryDialCode = CountryDialCodes.default
-    public var phone: String = ""
+    public var phoneInput: String = ""
     /// Pre-checked per AUSTRAC-required transactional consent. Mirror
     /// of EmailEntryViewModel.transactionalOptIn so the legal-comms
     /// screen later can flip both opt-ins via a single control.
@@ -35,22 +37,22 @@ public final class PhoneEntryViewModel {
 
     public var canSubmit: Bool {
         guard !isSubmitting else { return false }
-        if case .success = PhoneNumber.parse(dialCode: country.dialCode, localNumber: phone) {
+        if case .success = PhoneNumber.parse(dialCode: country.dialCode, localNumber: phoneInput) {
             return true
         }
         return false
     }
 
     private let api: AuthAPI
-    private let onCodeSent: (String) -> Void
+    private let onCodeSent: (_ phone: PhoneNumber) -> Void
 
-    public init(api: AuthAPI, onCodeSent: @escaping (String) -> Void) {
+    public init(api: AuthAPI, onCodeSent: @escaping (_ phone: PhoneNumber) -> Void) {
         self.api = api
         self.onCodeSent = onCodeSent
     }
 
     public func submit() async {
-        let parsed = PhoneNumber.parse(dialCode: country.dialCode, localNumber: phone)
+        let parsed = PhoneNumber.parse(dialCode: country.dialCode, localNumber: phoneInput)
         let normalised: PhoneNumber
         switch parsed {
         case .success(let p):
@@ -64,10 +66,10 @@ public final class PhoneEntryViewModel {
         inlineError = nil
         defer { isSubmitting = false }
 
-        let result = await api.send(AuthEndpoints.SendPhoneCode(phone: normalised.e164))
+        let result = await api.send(AuthEndpoints.SendPhoneCode(phone: normalised))
         switch result {
         case .success:
-            onCodeSent(normalised.e164)
+            onCodeSent(normalised)
         case .failure(let error):
             inlineError = userFacingMessage(for: error)
         }

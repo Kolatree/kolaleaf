@@ -19,14 +19,19 @@ public enum AuthEndpoints {
         }
     }
 
+    /// Accepts the typed `PhoneNumber` so the cascade survives all
+    /// the way to DTO construction; the `.e164` projection happens
+    /// here at the wire boundary. The email-rail twin
+    /// (`SendEmailCode`) will tighten the same way when an
+    /// `EmailAddress` value type lands.
     public struct SendPhoneCode: Endpoint {
         public typealias Response = SendCodeResponse
         public let path = "/api/v1/auth/send-code"
         public let method: HTTPMethod = .post
         public let body: (any Encodable & Sendable)?
 
-        public init(phone: String) {
-            self.body = SendCodeRequest(phone: phone)
+        public init(phone: PhoneNumber) {
+            self.body = SendCodeRequest(phone: phone.e164)
         }
     }
 
@@ -49,8 +54,8 @@ public enum AuthEndpoints {
         public let method: HTTPMethod = .post
         public let body: (any Encodable & Sendable)?
 
-        public init(phone: String, code: String) {
-            self.body = VerifyCodeRequest(phone: phone, code: code)
+        public init(phone: PhoneNumber, code: String) {
+            self.body = VerifyCodeRequest(phone: phone.e164, code: code)
         }
     }
 
@@ -83,8 +88,8 @@ public enum AuthEndpoints {
             self.body = LoginRequest(email: email, password: password)
         }
 
-        public init(phone: String, password: String) {
-            self.body = LoginRequest(phone: phone, password: password)
+        public init(phone: PhoneNumber, password: String) {
+            self.body = LoginRequest(phone: phone.e164, password: password)
         }
     }
 

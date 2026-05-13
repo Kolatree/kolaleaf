@@ -13,7 +13,7 @@ final class PhoneEntryViewModelTests: XCTestCase {
 
     private func makeVM(
         api: AuthAPI,
-        onCodeSent: @escaping (String) -> Void = { _ in }
+        onCodeSent: @escaping (PhoneNumber) -> Void = { _ in }
     ) -> PhoneEntryViewModel {
         PhoneEntryViewModel(api: api, onCodeSent: onCodeSent)
     }
@@ -27,13 +27,13 @@ final class PhoneEntryViewModelTests: XCTestCase {
 
     func test_canSubmit_falseWhenInvalid() {
         let vm = makeVM(api: FakeAPIClient())
-        vm.phone = "abc"
+        vm.phoneInput = "abc"
         XCTAssertFalse(vm.canSubmit)
     }
 
     func test_canSubmit_trueWhenValid() {
         let vm = makeVM(api: FakeAPIClient())
-        vm.phone = "0400000000"  // AU local, default +61 dial
+        vm.phoneInput = "0400000000"  // AU local, default +61 dial
         XCTAssertTrue(vm.canSubmit)
     }
 
@@ -42,12 +42,12 @@ final class PhoneEntryViewModelTests: XCTestCase {
     func test_submit_normalisesAndCallsAPI() async {
         let api = FakeAPIClient()
         await api.stageSuccess(AuthEndpoints.SendPhoneCode.self, SendCodeResponse(ok: true))
-        var capturedSent: String?
+        var capturedSent: PhoneNumber?
         let vm = makeVM(api: api) { capturedSent = $0 }
-        vm.phone = "0400 000 000"
+        vm.phoneInput = "0400 000 000"
         await vm.submit()
 
-        XCTAssertEqual(capturedSent, "+61400000000")
+        XCTAssertEqual(capturedSent?.e164, "+61400000000")
         let body = await api.lastBody(
             for: String(describing: AuthEndpoints.SendPhoneCode.self),
             as: SendCodeRequest.self
@@ -61,7 +61,7 @@ final class PhoneEntryViewModelTests: XCTestCase {
     func test_submit_localValidationFailure_doesNotCallAPI() async {
         let api = FakeAPIClient()
         let vm = makeVM(api: api)
-        vm.phone = "abc"
+        vm.phoneInput = "abc"
         await vm.submit()
 
         XCTAssertEqual(vm.inlineError, "That doesn't look like a valid number.")
@@ -87,7 +87,7 @@ final class PhoneEntryViewModelTests: XCTestCase {
             .validation(fields: ["value": ["Number invalid for region"]])
         )
         let vm = makeVM(api: api)
-        vm.phone = "0400000000"
+        vm.phoneInput = "0400000000"
         await vm.submit()
         XCTAssertEqual(vm.inlineError, "Number invalid for region")
     }
@@ -96,7 +96,7 @@ final class PhoneEntryViewModelTests: XCTestCase {
         let api = FakeAPIClient()
         await api.stageFailure(AuthEndpoints.SendPhoneCode.self, .rateLimited(retryAfter: 42))
         let vm = makeVM(api: api)
-        vm.phone = "0400000000"
+        vm.phoneInput = "0400000000"
         await vm.submit()
         XCTAssertEqual(vm.inlineError, "Too many attempts. Try again in 42 seconds.")
     }
@@ -105,7 +105,7 @@ final class PhoneEntryViewModelTests: XCTestCase {
         let api = FakeAPIClient()
         await api.stageFailure(AuthEndpoints.SendPhoneCode.self, .transport("offline"))
         let vm = makeVM(api: api)
-        vm.phone = "0400000000"
+        vm.phoneInput = "0400000000"
         await vm.submit()
         XCTAssertEqual(vm.inlineError, "Connection problem. Please check your network.")
     }
@@ -124,7 +124,7 @@ final class PhoneEntryViewModelTests: XCTestCase {
         // SHORTER one). "12345" + "+234" = "+23412345" = 8 digits
         // valid; "12345" + "+1" = "+112345" = 6 digits invalid.
         let vm = makeVM(api: FakeAPIClient())
-        vm.phone = "12345"
+        vm.phoneInput = "12345"
         guard let ng = CountryDialCodes.first(matchingDialCode: "+234"),
               let us = CountryDialCodes.first(matchingDialCode: "+1") else {
             return XCTFail("expected NG + US in curated country list")

@@ -78,7 +78,7 @@ public struct PhoneOTPView: View {
                 .font(KolaFont.headline)
                 .kerning(KolaKerning.headline)
                 .foregroundStyle(KolaColors.whiteOnGradient)
-            Text("We texted a 6-digit code to \(vm.phone).")
+            Text("We texted a 6-digit code to \(vm.phone.displayFormatted).")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.whiteOnGradientMuted)
         }

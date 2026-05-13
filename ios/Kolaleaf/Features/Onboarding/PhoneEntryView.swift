@@ -99,7 +99,7 @@ public struct PhoneEntryView: View {
                     .frame(height: 28)
                     .background(KolaColors.whiteOnGradient.opacity(0.25))
                     .padding(.vertical, KolaSpacing.m)
-                TextField("400 000 000", text: $vm.phone)
+                TextField("400 000 000", text: $vm.phoneInput)
                     .keyboardType(.phonePad)
                     .textContentType(.telephoneNumber)
                     .submitLabel(.continue)

@@ -24,6 +24,10 @@ import SwiftUI
 public struct MainTabView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.apiClient) private var apiClient
+    /// Phase 11 · Face ID unlock: injected from KolaleafApp's WindowGroup.
+    /// Optional so the Account-tab fallback can render in previews/tests
+    /// that don't wire the controller.
+    @Environment(\.biometricUnlock) private var biometricUnlock
 
     // Per-tab navigation paths. We hold them at MainTabView level so a
     // tab switch doesn't reset the destination stack of any tab —
@@ -104,7 +108,17 @@ public struct MainTabView: View {
                         case .myPayID:
                             MyPayIDView(api: apiClient)
                         case .security:
-                            TabPlaceholderView(title: "Security & 2FA")
+                            // Phase 11 / Face ID unlock: SecurityMenuView is
+                            // the slim Phase-11 surface — Face ID toggle plus
+                            // "Coming soon" rows for the 2FA/alert work still
+                            // ahead. Falls back to the placeholder if the
+                            // unlock controller isn't injected (previews /
+                            // tests that don't wire \.biometricUnlock).
+                            if let unlock = biometricUnlock {
+                                SecurityMenuView(controller: unlock)
+                            } else {
+                                TabPlaceholderView(title: "Security & 2FA")
+                            }
                         case .refer:
                             ReferView()
                         case .help:

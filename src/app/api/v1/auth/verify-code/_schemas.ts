@@ -2,6 +2,7 @@ import { z } from "zod";
 import { registry } from "@/lib/openapi/registry";
 import {
   Email,
+  PhoneE164,
   SixDigitCode,
   ErrorEnvelope,
   ValidationErrorEnvelope,
@@ -12,10 +13,6 @@ import {
 // 2026-05-13 phone-first widening: the body is now a discriminated
 // union on `type`. The legacy `{ email, code }` shape stays accepted
 // via the route's normalisation so older clients keep working.
-
-const PhoneE164 = z
-  .string()
-  .regex(/^\+\d{7,15}$/, "Phone must be E.164 (e.g. +61400000000)");
 
 const VerifyEmailBody = z.object({
   type: z.literal("email"),

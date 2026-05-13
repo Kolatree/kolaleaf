@@ -177,7 +177,10 @@ struct KolaleafApp: App {
             appState.markBackgrounded()
             // Phase 11 · Face ID unlock: re-lock on background so the
             // next foreground entry re-presents the gate (when the
-            // preference is on).
+            // preference is on). `.inactive` is handled below — the
+            // OS fires it for control-center pulls / notification
+            // banners / multitasker switches, all of which expose
+            // the screen contents to a bystander.
             biometricUnlock.lockForBackground()
         case .active:
             // r2 fix #3: compute reauth FIRST, then mark foreground. Otherwise
@@ -194,8 +197,13 @@ struct KolaleafApp: App {
                 Task { await syncService.syncAll() }
             }
         case .inactive:
-            // Scene resigning active — switcher snapshot moment. SwitcherBlur installs the overlay.
-            break
+            // Scene resigning active — switcher snapshot moment.
+            // SwitcherBlur installs the overlay. 4-lens review fix
+            // (silent-failure-hunter #5): also re-lock on .inactive
+            // so a control-center pull / notification banner /
+            // multitasker peek that never reaches .background can't
+            // leak an unlocked session to a bystander.
+            biometricUnlock.lockForBackground()
         @unknown default:
             break
         }

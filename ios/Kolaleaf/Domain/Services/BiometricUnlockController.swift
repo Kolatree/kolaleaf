@@ -53,6 +53,15 @@ public final class BiometricUnlockController {
     /// unlock flag is in-memory.
     public private(set) var unlockedThisSession: Bool = false
 
+    /// 4-lens review fix (pr-test-analyzer #4): generation counter
+    /// guards against the async race where `lockForBackground()`
+    /// fires while an in-flight `unlock(using:)` is awaiting
+    /// LAContext. Without this, the unlock continuation can land
+    /// AFTER the background lock and set `unlockedThisSession =
+    /// true` against the new (re-locked) session — leaking a Face
+    /// ID success across a background hop.
+    private var unlockGeneration: Int = 0
+
     private let defaults: UserDefaults
     private static let kFaceIDEnabled = "kola.faceIDUnlockEnabled"
 
@@ -73,26 +82,67 @@ public final class BiometricUnlockController {
     /// success. Failure cases (cancel / lockout / not enrolled) are
     /// returned verbatim so the gate view can surface the right
     /// banner.
+    ///
+    /// 4-lens review fix (silent-failure-hunter): emit a DEBUG log
+    /// for non-success results so Sentry / Console.app correlate the
+    /// gate's "stuck in a re-prompt loop" symptom with the actual
+    /// LAError code on iOS 18 betas where biometryNotAvailable
+    /// surfaced unexpectedly. `.userCancel` is omitted from the log
+    /// because it's the expected first-tap-cancel UX and would drown
+    /// the signal.
     @discardableResult
     public func unlock(using service: any BiometricsService) async -> BiometricsResult {
+        // 4-lens review fix (pr-test-analyzer #4): snapshot the
+        // generation at entry. If `lockForBackground()` or
+        // `clearForLogout()` runs while we're awaiting the LAContext
+        // prompt, the generation increments and our post-await flip
+        // becomes a no-op — the user must Face-ID again on next
+        // foreground.
+        let entryGeneration = unlockGeneration
         let result = await service.authenticate(intent: .unlockApp)
+        guard entryGeneration == unlockGeneration else {
+            // Race: a background hop / logout invalidated this
+            // unlock attempt. Return the LAContext result so the
+            // caller knows what happened, but don't flip the flag.
+            #if DEBUG
+            print("[BiometricUnlockController] unlock result discarded (stale generation \(entryGeneration) vs \(unlockGeneration))")
+            #endif
+            return result
+        }
         if case .success = result {
             unlockedThisSession = true
+        } else {
+            #if DEBUG
+            switch result {
+            case .userCancel, .userFallback, .success:
+                break
+            case .authFailed, .lockedOut, .notEnrolled, .noHardware:
+                print("[BiometricUnlockController] unlock failed: \(result)")
+            case .unknownError(let message):
+                print("[BiometricUnlockController] unlock unknown error: \(message)")
+            }
+            #endif
         }
         return result
     }
 
     /// Re-lock on background — every cold launch / foreground hop
     /// of an authenticated session re-presents the gate when the
-    /// setting is on.
+    /// setting is on. Increments the generation counter so any
+    /// in-flight `unlock(using:)` that resumes after this point
+    /// becomes a no-op.
     public func lockForBackground() {
         unlockedThisSession = false
+        unlockGeneration &+= 1
     }
 
     /// Logout clears the per-session unlock flag too — a fresh
     /// sign-in for a different user shouldn't inherit the prior
-    /// owner's already-unlocked state.
+    /// owner's already-unlocked state. Bumps the generation so an
+    /// in-flight unlock from the previous session can't flip the
+    /// flag on the new session.
     public func clearForLogout() {
         unlockedThisSession = false
+        unlockGeneration &+= 1
     }
 }

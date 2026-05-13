@@ -77,8 +77,15 @@ public final class PhoneOTPViewModel {
             // any user-recoverable backend reason so the digits
             // re-render visibly empty and onChange-based auto-submit
             // doesn't silently drop the next entry attempt.
+            //
+            // 4-lens review fix (silent-failure-hunter): `no_token`
+            // and `too_many_attempts` also require a fresh code via
+            // Resend — leaving stale digits in the field would cause
+            // the OTPField's auto-submit to re-fire the same bad
+            // code immediately on next render.
             if case .codeInvalid(let reason) = error,
-               ["wrong_code", "expired", "used"].contains(reason) {
+               ["wrong_code", "expired", "used",
+                "no_token", "too_many_attempts"].contains(reason) {
                 code = ""
             }
         }

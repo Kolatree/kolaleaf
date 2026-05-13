@@ -130,4 +130,95 @@ final class BiometricUnlockControllerTests: XCTestCase {
         XCTAssertTrue(c.faceIDUnlockEnabled,
                       "Logout must not erase the device-local Face ID setting")
     }
+
+    // MARK: - Async race (4-lens review · pr-test-analyzer #4)
+
+    /// A `lockForBackground()` that fires while `unlock(using:)` is
+    /// awaiting the LAContext prompt MUST invalidate the in-flight
+    /// authentication. Without the generation guard, the unlock's
+    /// post-await flip would land AFTER the background reset and
+    /// leak a Face-ID success across the background hop.
+    func test_unlockDuringBackgroundHop_doesNotLeakAcrossSession() async {
+        let c = BiometricUnlockController(defaults: defaults)
+        c.faceIDUnlockEnabled = true
+
+        // PausableBiometricsService blocks on a continuation until
+        // resume() is called. Lets us interleave lockForBackground()
+        // between the prompt start and its resolution.
+        let pausable = PausableBiometricsService()
+        let unlockTask = Task { await c.unlock(using: pausable) }
+
+        // Wait for the unlock to enter the await — at least one
+        // yield to give Task scheduling a chance to land.
+        await Task.yield()
+        await pausable.waitUntilAuthenticating()
+
+        // Background hop while authenticating.
+        c.lockForBackground()
+
+        // Resume the prompt with a SUCCESS result. Without the
+        // generation guard, this would set unlockedThisSession=true
+        // against the now-locked session.
+        pausable.resume(with: .success)
+        _ = await unlockTask.value
+
+        XCTAssertFalse(c.unlockedThisSession,
+                       "Unlock that started before background MUST NOT flip the flag after lockForBackground")
+        XCTAssertTrue(c.isLocked(hasActiveSession: true),
+                      "Gate must still show after the discarded unlock")
+    }
+
+    func test_unlockDuringLogout_doesNotLeakIntoNewSession() async {
+        let c = BiometricUnlockController(defaults: defaults)
+        c.faceIDUnlockEnabled = true
+        let pausable = PausableBiometricsService()
+        let unlockTask = Task { await c.unlock(using: pausable) }
+        await Task.yield()
+        await pausable.waitUntilAuthenticating()
+
+        c.clearForLogout()
+        pausable.resume(with: .success)
+        _ = await unlockTask.value
+
+        XCTAssertFalse(c.unlockedThisSession,
+                       "Unlock from the prior session MUST NOT flip the flag after clearForLogout")
+    }
+}
+
+/// Test-only BiometricsService that blocks `authenticate(intent:)`
+/// on an internal continuation. Lets the race tests interleave
+/// `lockForBackground()` between the prompt-start and the
+/// prompt-resolve so the controller's generation guard is
+/// exercised deterministically.
+@MainActor
+final class PausableBiometricsService: BiometricsService {
+    private var continuation: CheckedContinuation<BiometricsResult, Never>?
+    private var authenticatingContinuation: CheckedContinuation<Void, Never>?
+    private var isAuthenticating: Bool = false
+
+    func authenticate(intent: BiometricsIntent) async -> BiometricsResult {
+        isAuthenticating = true
+        // Wake any test waiting for the prompt to enter the await.
+        authenticatingContinuation?.resume()
+        authenticatingContinuation = nil
+        return await withCheckedContinuation { c in
+            self.continuation = c
+        }
+    }
+
+    /// Suspends until the service is actually inside the
+    /// `authenticate(...)` await, so the test can interleave
+    /// state changes deterministically.
+    func waitUntilAuthenticating() async {
+        guard !isAuthenticating else { return }
+        await withCheckedContinuation { c in
+            self.authenticatingContinuation = c
+        }
+    }
+
+    func resume(with result: BiometricsResult) {
+        continuation?.resume(returning: result)
+        continuation = nil
+        isAuthenticating = false
+    }
 }

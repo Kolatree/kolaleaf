@@ -247,16 +247,34 @@ public struct OnboardingCoordinator: View {
                 phone: phone,
                 api: apiClient,
                 onVerified: {
-                    // Phase 11A-5 follow-up gap: RegistrationDetailsView
-                    // still requires an `email` identifier. The
-                    // registration widening (iOS + backend
-                    // /complete-registration accepting a phone-identified
-                    // claim) lands in the next commit. Until then, route
-                    // verified phone users into the email-equivalent
-                    // landing so the wizard at least completes — copy
-                    // change will land alongside the registration
-                    // widening so we don't confuse users with a
-                    // half-wired flow.
+                    // 4-lens review fix (silent-failure-hunter +
+                    // code-reviewer): the previous placeholder pushed
+                    // .emailEntry, which would have been a silent UX
+                    // regression for any user who reached this path
+                    // (they'd just verified a phone number and would
+                    // be asked for an email with no explanation). The
+                    // assertionFailure makes the gap LOUD in debug
+                    // and dev builds so QA catches a future Welcome
+                    // flip that accidentally exposes the unfinished
+                    // journey. In release the fallback is still
+                    // .emailEntry — better degraded UX than a crash
+                    // on a real user device.
+                    //
+                    // Closes when:
+                    //   • backend /complete-registration accepts a
+                    //     phone-identified pending claim;
+                    //   • iOS RegistrationDetailsViewModel widens to
+                    //     accept a LoginIdentifier instead of an
+                    //     email-only identifier;
+                    //   • a `.registrationDetailsPhone(phone:)` route
+                    //     (or a single discriminated route) replaces
+                    //     this placeholder.
+                    assertionFailure(
+                        "Phone-first registration is not yet wired. " +
+                        "/complete-registration must accept a phone " +
+                        "identifier before this route can reach a real " +
+                        "next-step. Hold .phoneEntry behind WelcomeView."
+                    )
                     path.append(.emailEntry)
                 }
             ))

@@ -113,17 +113,25 @@ final class PhoneEntryViewModelTests: XCTestCase {
     // MARK: - country switching
 
     func test_canSubmit_recalculatesWhenCountryChanges() {
+        // 4-lens review fix (pr-test-analyzer): the prior assertion
+        // was a no-op — `canSubmit` stayed `true` under both AU and
+        // NG dial codes for the same digit string, so a broken
+        // recompute would also have passed. We now use a string
+        // that's VALID under +61 (7+ digits total: "+61400") but
+        // INVALID under +1 (7 digits is the E.164 minimum so still
+        // valid actually — pick a string that's specifically valid
+        // for the LONGER dial code prefix and invalid for the
+        // SHORTER one). "12345" + "+234" = "+23412345" = 8 digits
+        // valid; "12345" + "+1" = "+112345" = 6 digits invalid.
         let vm = makeVM(api: FakeAPIClient())
-        vm.phone = "8012345678"  // NG-style local digits, no leading 0
-        // Default country is AU (+61) — the AU validator would accept
-        // this as +61 8012345678 (10 digits, within range), so canSubmit=true.
-        // Switching to a longer-prefix country still produces an E.164
-        // string within the 7-15 digit window.
-        if let ng = CountryDialCodes.first(matchingDialCode: "+234") {
-            vm.country = ng
-            XCTAssertTrue(vm.canSubmit, "NG dial code with valid local should pass")
-        } else {
-            XCTFail("expected NG in curated country list")
+        vm.phone = "12345"
+        guard let ng = CountryDialCodes.first(matchingDialCode: "+234"),
+              let us = CountryDialCodes.first(matchingDialCode: "+1") else {
+            return XCTFail("expected NG + US in curated country list")
         }
+        vm.country = ng
+        XCTAssertTrue(vm.canSubmit, "NG dial code (+234) + 5 local digits = 8 total — should pass E.164 7-15 range")
+        vm.country = us
+        XCTAssertFalse(vm.canSubmit, "US dial code (+1) + 5 local digits = 6 total — should fail E.164 minimum")
     }
 }

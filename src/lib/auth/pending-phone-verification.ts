@@ -48,6 +48,20 @@ export async function issuePendingPhoneCode(
   opts: IssuePendingPhoneOptions,
 ): Promise<IssuePendingPhoneResult> {
   const { phone } = opts;
+
+  // 4-lens review fix (code-reviewer): defense-in-depth E.164 guard
+  // at the helper boundary so a future caller bypassing the route
+  // (admin tooling, worker job, script) cannot pass an unvalidated
+  // string to Twilio. Regex matches the route's Zod schema verbatim
+  // (src/app/api/v1/auth/send-code/_schemas.ts PhoneE164).
+  if (!/^\+\d{7,15}$/.test(phone)) {
+    return {
+      ok: false,
+      reason: "send_failed",
+      providerError: "Phone must be E.164 (e.g. +61400000000)",
+    };
+  }
+
   const now = new Date();
   const windowMs = 60 * 60 * 1000;
   const windowOpenedAt = new Date(now.getTime() - windowMs);
@@ -150,6 +164,16 @@ export async function verifyPendingPhoneCode(opts: {
   code: string;
 }): Promise<VerifyPendingPhoneOutcome> {
   const { phone, code } = opts;
+
+  // 4-lens review fix (code-reviewer): same defense-in-depth guard
+  // as the issue path. An unvalidated identifier on the verify side
+  // would hit Prisma with a string that can't possibly match (the
+  // backend never wrote a non-E.164 row), so this is functionally a
+  // no-op fast-path — but it documents the contract at the helper
+  // boundary and short-circuits the DB round-trip.
+  if (!/^\+\d{7,15}$/.test(phone)) {
+    return { ok: false, reason: "no_token" };
+  }
 
   const row = await prisma.pendingVerification.findUnique({
     where: { kind_identifier: { kind: "PHONE", identifier: phone } },

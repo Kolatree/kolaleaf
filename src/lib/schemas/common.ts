@@ -126,6 +126,22 @@ export const SixDigitCode = z
   .string()
   .regex(/^\d{6}$/, "Code must be 6 digits");
 
+// E.164 phone number. Single source of truth for the wizard's
+// /send-code, /verify-code, /login phone variants — keeping the
+// regex in one place prevents drift across the three schemas.
+// iOS PhoneNumber.swift normalises to this exact shape before
+// hitting the wire; if the regex changes here, mirror the change
+// in `ios/Kolaleaf/Domain/PhoneNumber.swift`.
+//
+// Note: this is the same "placeholder regex-only" check
+// `src/lib/auth/phone.ts` documents — swap to libphonenumber when
+// that dep lands. Until then, stricter shape validation lives in
+// the application layer (country-aware trunk-prefix stripping in
+// PhoneNumber.parse).
+export const PhoneE164 = z
+  .string()
+  .regex(/^\+\d{7,15}$/, "Phone must be E.164 (e.g. +61400000000)");
+
 // Password. Min 12 matches the complexity helper in /lib/auth/password.
 // Upper bound caps bcrypt cost.
 export const Password = z

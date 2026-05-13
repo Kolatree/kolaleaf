@@ -53,10 +53,9 @@ final class PhoneNumberTests: XCTestCase {
     }
 
     func test_parseRejectsTooShort() {
-        // 5 digits after dial code = 8 total digits; E.164 minimum is 7
-        // and we need at least the dial-code length on top.
-        // +61 + "12345" = +6112345 = 7 digits → at the boundary.
-        // Push below with 4 local digits:
+        // E.164 minimum is 7 digits total (including dial code).
+        // +61 contributes 2 digits, so 4 local digits = 6 total =
+        // below the minimum. Anything ≥5 local digits would pass.
         let result = PhoneNumber.parse(dialCode: "+61", localNumber: "1234")
         guard case .failure(.malformed) = result else {
             return XCTFail("expected .malformed failure, got \(result)")

@@ -598,6 +598,14 @@ public final class LiveActivityService {
         guard let api else {
             #if DEBUG
             print("[LiveActivityService] reconcileOnLaunch skipped refetch — api is nil (CA-3002). \(fresh.count) survivor(s) will keep their last-known state until the next backend push.")
+            // 4-lens review fix (silent-failure-hunter #8): a nil
+            // api in DEBUG is a wiring bug — KolaleafApp injects the
+            // APIClient, so reaching here in a dev build means a
+            // future refactor dropped the wire. Trip the assertion
+            // so the gap surfaces immediately. Production stays a
+            // soft no-op so a hot-fix release-build doesn't crash
+            // on an unrelated wiring mishap.
+            assertionFailure("LiveActivityService.api is nil — refetch on reconcile is skipped. Check KolaleafApp wiring.")
             #endif
             return
         }
@@ -614,8 +622,23 @@ public final class LiveActivityService {
                         TransfersEndpoints.Get(id: transferId),
                         origin: .system
                     )
-                    if case .success(let envelope) = result {
+                    switch result {
+                    case .success(let envelope):
                         await self.apply(envelope.transfer)
+                    case .failure(let error):
+                        // 4-lens review fix (silent-failure-hunter
+                        // #11): refetch failures were silently
+                        // swallowed — a survivor activity stayed on
+                        // its last-known band until the next push.
+                        // For a transfer that completed-while-
+                        // suspended, that meant the lock-screen
+                        // could show "Processing NGN" until the 8h
+                        // TTL elapsed. Log so the failure is at
+                        // least observable; the activity will retry
+                        // on the next reconcile (next cold start).
+                        #if DEBUG
+                        print("[LiveActivityService] reconcile refetch failed for \(transferId): \(error)")
+                        #endif
                     }
                 }
                 inflight += 1

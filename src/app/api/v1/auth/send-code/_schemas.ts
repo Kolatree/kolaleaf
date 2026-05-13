@@ -2,6 +2,7 @@ import { z } from "zod";
 import { registry } from "@/lib/openapi/registry";
 import {
   Email,
+  PhoneE164,
   ErrorEnvelope,
   ValidationErrorEnvelope,
 } from "@/lib/schemas/common";
@@ -19,10 +20,6 @@ import {
 // `.or(LegacyEmailOnlyBody)` fallback so any in-flight clients on
 // older API contracts keep working — the route normalises both
 // shapes to the discriminated form before branching.
-
-const PhoneE164 = z
-  .string()
-  .regex(/^\+\d{7,15}$/, "Phone must be E.164 (e.g. +61400000000)");
 
 const EmailIdentifier = z.object({
   type: z.literal("email"),

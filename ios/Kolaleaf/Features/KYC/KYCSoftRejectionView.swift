@@ -58,9 +58,11 @@ public struct KYCSoftRejectionView: View {
                 .font(KolaFont.headline)
                 .kerning(KolaKerning.headline)
                 .foregroundStyle(KolaColors.whiteOnGradient)
+                .accessibilityAddTraits(.isHeader)
             Text("We couldn't verify your identity from the documents you sent.")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.whiteOnGradientMuted)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, KolaSpacing.l)
     }
@@ -87,12 +89,14 @@ public struct KYCSoftRejectionView: View {
             Text("•")
                 .font(KolaFont.row)
                 .foregroundStyle(KolaColors.greenLight)
+                .accessibilityHidden(true)
             Text(text)
                 .font(KolaFont.row)
                 .foregroundStyle(KolaColors.whiteOnGradient)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .accessibilityElement(children: .combine)
     }
 
     private var retryButton: some View {
@@ -117,6 +121,8 @@ public struct KYCSoftRejectionView: View {
             )
         }
         .disabled(vm.isSubmitting)
+        .accessibilityLabel(vm.isSubmitting ? "Retrying" : "Try again")
+        .accessibilityHint("Restart the identity verification flow with new documents")
     }
 
     private var supportButton: some View {
@@ -126,6 +132,7 @@ public struct KYCSoftRejectionView: View {
                 .foregroundStyle(KolaColors.whiteOnGradient)
                 .frame(maxWidth: .infinity, minHeight: KolaSpacing.hitTarget)
         }
+        .accessibilityHint("Open the help centre in a web view")
     }
 
     /// Maps known Sumsub rejection codes to friendly copy. Unknown codes

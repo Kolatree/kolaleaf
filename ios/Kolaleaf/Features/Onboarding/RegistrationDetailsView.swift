@@ -67,9 +67,11 @@ public struct RegistrationDetailsView: View {
                 .font(KolaFont.headline)
                 .kerning(KolaKerning.headline)
                 .foregroundStyle(KolaColors.whiteOnGradient)
+                .accessibilityAddTraits(.isHeader)
             Text("A few details so we can comply with AUSTRAC.")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.whiteOnGradientMuted)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, KolaSpacing.l)
     }
@@ -174,6 +176,7 @@ public struct RegistrationDetailsView: View {
             .font(KolaFont.section)
             .foregroundStyle(KolaColors.whiteOnGradient)
             .padding(.top, KolaSpacing.s)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private func fieldLabel(_ text: String) -> some View {
@@ -228,5 +231,7 @@ public struct RegistrationDetailsView: View {
         }
         .disabled(!vm.canSubmit)
         .animation(KolaMotion.fade(reduce: reduceMotion), value: vm.canSubmit)
+        .accessibilityLabel(vm.isSubmitting ? "Creating account" : "Create account")
+        .accessibilityHint("Submit your details and create your Kolaleaf account")
     }
 }

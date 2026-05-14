@@ -74,9 +74,11 @@ public struct PayIDInstructionsView: View {
                 .font(KolaFont.pageTitle)
                 .kerning(KolaKerning.headline)
                 .foregroundStyle(KolaColors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
             Text("Open your bank's app and send to this PayID. We'll handle the rest once funds arrive.")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

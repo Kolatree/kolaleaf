@@ -90,11 +90,14 @@ public struct SignInView: View {
                 .font(KolaFont.headline)
                 .kerning(KolaKerning.headline)
                 .foregroundStyle(KolaColors.whiteOnGradient)
+                .accessibilityAddTraits(.isHeader)
             Text("Sign in to send your next transfer.")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.whiteOnGradientMuted)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, KolaSpacing.l)
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
@@ -256,6 +259,8 @@ public struct SignInView: View {
         }
         .disabled(!vm.canSubmit)
         .animation(KolaMotion.fade(reduce: reduceMotion), value: vm.canSubmit)
+        .accessibilityLabel(vm.isSubmitting ? "Signing in" : "Sign in")
+        .accessibilityHint("Sign in with the credentials you entered above")
     }
 
     private func fieldLabel(_ text: String) -> some View {
@@ -352,9 +357,11 @@ public struct TwoFactorSignInView: View {
                     .font(KolaFont.headline)
                     .kerning(KolaKerning.headline)
                     .foregroundStyle(KolaColors.whiteOnGradient)
+                    .accessibilityAddTraits(.isHeader)
                 Text(vm.subtitle)
                     .font(KolaFont.tagline)
                     .foregroundStyle(KolaColors.whiteOnGradientMuted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.top, KolaSpacing.xxxl)
 
@@ -369,6 +376,8 @@ public struct TwoFactorSignInView: View {
                 .padding(KolaSpacing.l)
                 .kolaFrosted(.card)
                 .privacySensitive()
+                .accessibilityLabel("Two-factor code")
+                .accessibilityHint("Enter the 6-digit code or an unused backup code")
 
             if let error = vm.errorMessage {
                 Text(error)
@@ -400,6 +409,8 @@ public struct TwoFactorSignInView: View {
                 )
             }
             .disabled(vm.isSubmitting || vm.code.isEmpty)
+            .accessibilityLabel(vm.isSubmitting ? "Verifying" : "Verify")
+            .accessibilityHint("Confirm your two-factor code to finish signing in")
         }
         .padding(.horizontal, KolaSpacing.xl)
         .padding(.bottom, KolaSpacing.homeIndicator)

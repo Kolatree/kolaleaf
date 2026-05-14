@@ -86,9 +86,11 @@ public struct KYCProcessingView: View {
                 .font(KolaFont.headline)
                 .kerning(KolaKerning.headline)
                 .foregroundStyle(KolaColors.whiteOnGradient)
+                .accessibilityAddTraits(.isHeader)
             Text("This usually takes 30 seconds.")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.whiteOnGradientMuted)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .multilineTextAlignment(.center)
     }
@@ -107,11 +109,14 @@ public struct KYCProcessingView: View {
             Image(systemName: isComplete ? "checkmark.circle.fill" : "circle")
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(isComplete ? KolaColors.greenLight : KolaColors.whiteOnGradientMuted)
+                .accessibilityHidden(true)
             Text(title)
                 .font(KolaFont.row)
                 .foregroundStyle(KolaColors.whiteOnGradient)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer()
         }
         .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title): \(isComplete ? "complete" : "in progress")")
     }
 }

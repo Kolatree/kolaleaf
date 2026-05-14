@@ -91,12 +91,15 @@ public struct ReceiptView: View {
                 .kerning(KolaKerning.headline)
                 .foregroundStyle(KolaColors.textPrimary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             Text("To \(vm.recipientName)")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(vm.headline). To \(vm.recipientName)")
+        .accessibilityAddTraits(.isHeader)
         .frame(maxWidth: .infinity)
     }
 

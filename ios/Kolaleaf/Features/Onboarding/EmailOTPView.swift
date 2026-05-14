@@ -88,9 +88,11 @@ public struct EmailOTPView: View {
                 .font(KolaFont.headline)
                 .kerning(KolaKerning.headline)
                 .foregroundStyle(KolaColors.whiteOnGradient)
+                .accessibilityAddTraits(.isHeader)
             Text("We sent a 6-digit code to \(vm.email).")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.whiteOnGradientMuted)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, KolaSpacing.l)
     }
@@ -117,10 +119,12 @@ public struct EmailOTPView: View {
                 }
                 .font(KolaFont.cta)
                 .foregroundStyle(KolaColors.greenLight)
+                .accessibilityHint("Resend a fresh 6-digit code to your email")
             } else {
                 Text("Resend in \(vm.resendCountdown)s")
                     .font(KolaFont.tagline)
                     .foregroundStyle(KolaColors.whiteOnGradientMuted)
+                    .accessibilityLabel("Resend available in \(vm.resendCountdown) seconds")
             }
             Spacer()
         }
@@ -149,5 +153,7 @@ public struct EmailOTPView: View {
         }
         .disabled(!vm.canSubmit)
         .animation(KolaMotion.fade(reduce: reduceMotion), value: vm.canSubmit)
+        .accessibilityLabel(vm.isSubmitting ? "Verifying" : "Verify")
+        .accessibilityHint("Confirm the 6-digit code you received")
     }
 }

@@ -56,10 +56,12 @@ public struct KYCUnderReviewView: View {
                 .font(KolaFont.headline)
                 .kerning(KolaKerning.headline)
                 .foregroundStyle(KolaColors.whiteOnGradient)
+                .accessibilityAddTraits(.isHeader)
             Text("A human reviewer is taking a closer look at your documents.")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.whiteOnGradientMuted)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, KolaSpacing.xl)
     }
@@ -74,14 +76,18 @@ public struct KYCUnderReviewView: View {
             Text("Under 24 hours")
                 .font(KolaFont.rowValue)
                 .foregroundStyle(KolaColors.whiteOnGradient)
+                .fixedSize(horizontal: false, vertical: true)
             Text("We'll let you know as soon as it's done.")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.whiteOnGradientMuted)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, KolaSpacing.xl)
         .padding(.vertical, KolaSpacing.l)
         .kolaFrosted(.card)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Typical wait: under 24 hours. We'll let you know as soon as it's done.")
     }
 
     private var notifyButton: some View {
@@ -92,6 +98,7 @@ public struct KYCUnderReviewView: View {
             HStack(spacing: KolaSpacing.s) {
                 Image(systemName: notifyRequested ? "bell.badge.fill" : "bell")
                     .font(.system(size: 18, weight: .semibold))
+                    .accessibilityHidden(true)
                 Text(notifyRequested ? "We'll let you know" : "Notify me when done")
                     .font(KolaFont.cta)
                     .kerning(KolaKerning.cta)
@@ -105,6 +112,8 @@ public struct KYCUnderReviewView: View {
         }
         .disabled(notifyRequested)
         .animation(KolaMotion.fade(reduce: reduceMotion), value: notifyRequested)
+        .accessibilityLabel(notifyRequested ? "We'll let you know" : "Notify me when done")
+        .accessibilityHint(notifyRequested ? "You'll receive a push notification when review completes" : "Get a push notification when verification finishes")
     }
 
     private var supportButton: some View {
@@ -114,5 +123,6 @@ public struct KYCUnderReviewView: View {
                 .foregroundStyle(KolaColors.whiteOnGradient)
                 .frame(maxWidth: .infinity, minHeight: KolaSpacing.hitTarget)
         }
+        .accessibilityHint("Open the help centre in a web view")
     }
 }

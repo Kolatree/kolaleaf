@@ -85,9 +85,11 @@ public struct PhoneEntryView: View {
                 .font(KolaFont.headline)
                 .kerning(KolaKerning.headline)
                 .foregroundStyle(KolaColors.whiteOnGradient)
+                .accessibilityAddTraits(.isHeader)
             Text("We'll text you a 6-digit code to verify it. Standard SMS rates apply.")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.whiteOnGradientMuted)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, KolaSpacing.l)
     }
@@ -110,6 +112,7 @@ public struct PhoneEntryView: View {
                     .foregroundStyle(KolaColors.whiteOnGradient)
                     .padding(.horizontal, KolaSpacing.l)
                     .padding(.vertical, KolaSpacing.l)
+                    .accessibilityLabel("Phone number")
             }
             .kolaFrosted(.card)
 
@@ -198,5 +201,7 @@ public struct PhoneEntryView: View {
         }
         .disabled(!vm.canSubmit)
         .animation(KolaMotion.fade(reduce: reduceMotion), value: vm.canSubmit)
+        .accessibilityLabel(vm.isSubmitting ? "Sending code" : "Continue")
+        .accessibilityHint("Send a 6-digit verification code to this phone")
     }
 }

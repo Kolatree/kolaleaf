@@ -63,9 +63,11 @@ public struct EmailEntryView: View {
                 .font(KolaFont.headline)
                 .kerning(KolaKerning.headline)
                 .foregroundStyle(KolaColors.whiteOnGradient)
+                .accessibilityAddTraits(.isHeader)
             Text("We'll send you a 6-digit code to verify it.")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.whiteOnGradientMuted)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, KolaSpacing.l)
     }
@@ -85,6 +87,7 @@ public struct EmailEntryView: View {
                 .padding(.horizontal, KolaSpacing.xl)
                 .padding(.vertical, KolaSpacing.l)
                 .kolaFrosted(.card)
+                .accessibilityLabel("Email address")
 
             if let error = vm.inlineError {
                 Text(error)
@@ -137,5 +140,7 @@ public struct EmailEntryView: View {
         }
         .disabled(!vm.canSubmit)
         .animation(KolaMotion.fade(reduce: reduceMotion), value: vm.canSubmit)
+        .accessibilityLabel(vm.isSubmitting ? "Sending code" : "Continue")
+        .accessibilityHint("Send a 6-digit verification code to this email")
     }
 }

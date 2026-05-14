@@ -83,9 +83,11 @@ public struct KYCIntroView: View {
                 .font(KolaFont.headline)
                 .kerning(KolaKerning.headline)
                 .foregroundStyle(KolaColors.whiteOnGradient)
+                .accessibilityAddTraits(.isHeader)
             Text("AUSTRAC requires this for every Australian remittance customer. It takes about 3 minutes.")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.whiteOnGradientMuted)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, KolaSpacing.l)
     }
@@ -114,6 +116,7 @@ public struct KYCIntroView: View {
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(KolaColors.greenLight)
             }
+            .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Step \(number)")
                     .font(KolaFont.fieldLabel)
@@ -123,15 +126,19 @@ public struct KYCIntroView: View {
                 Text(title)
                     .font(KolaFont.rowValue)
                     .foregroundStyle(KolaColors.whiteOnGradient)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(subtitle)
                     .font(KolaFont.tagline)
                     .foregroundStyle(KolaColors.whiteOnGradientMuted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
         }
         .padding(.horizontal, KolaSpacing.xl)
         .padding(.vertical, KolaSpacing.l)
         .kolaFrosted(.card)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Step \(number). \(title). \(subtitle)")
     }
 
     private var rationaleLink: some View {
@@ -146,8 +153,10 @@ public struct KYCIntroView: View {
                     Image(systemName: rationaleExpanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(KolaColors.greenLight)
+                        .accessibilityHidden(true)
                 }
             }
+            .accessibilityHint(rationaleExpanded ? "Collapse the rationale" : "Show why we ask for identity verification")
             if rationaleExpanded {
                 Text("Kolaleaf is registered with AUSTRAC as a money-transfer business. Verifying your identity protects you from fraud and is required by Australian law for every transfer. Your documents are processed by Sumsub, our regulated identity provider.")
                     .font(KolaFont.tagline)
@@ -179,5 +188,7 @@ public struct KYCIntroView: View {
             )
         }
         .disabled(vm.isFetchingToken)
+        .accessibilityLabel(vm.isFetchingToken ? "Starting verification" : "Start verification")
+        .accessibilityHint("Begin the 3-step identity verification flow")
     }
 }

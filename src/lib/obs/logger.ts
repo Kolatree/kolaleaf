@@ -1,5 +1,6 @@
 import pino from 'pino'
 import { currentRequestId } from './request-context'
+import { scrubPiiForLogs } from './pii-scrubber'
 
 // Single pino instance. Base fields land on every line so SaaS
 // ingestion can filter by service + env without per-call-site code.
@@ -24,6 +25,8 @@ export function log(
   data?: Record<string, unknown>,
 ): void {
   const requestId = currentRequestId()
-  const payload = requestId ? { event, requestId, ...data } : { event, ...data }
+  const payload = scrubPiiForLogs(
+    requestId ? { event, requestId, ...data } : { event, ...data },
+  )
   logger[level](payload)
 }

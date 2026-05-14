@@ -1,3 +1,38 @@
+# Review Request -- Wave 2a Phase 11.5 Notification Preferences + PII Scrubber Slice
+
+**Ready for Review:** YES for local notification preference gating and reusable PII scrubber. Sentry package installation/DSN wiring remains Phase 12 production setup.
+**Date:** 2026-05-14
+**Branch / worktree:** `feat/ios-swiftui-app` in `/Users/ao/Documents/projects/Kolaleaf`
+
+## Summary
+
+Replaces the Security menu's placeholder alert rows with real toggles for new-device sign-in alerts and transfer push notifications. The new-device preference gates the Phase 11.5 device alert before it is shown, and the transfer preference prevents APNs permission prompts when disabled. Backend structured logging now passes payloads through a reusable PII scrubber that redacts sensitive keys, emails, E.164 phone numbers, auth cookies, and bearer tokens while preserving useful diagnostics like dates and sanitized error messages; the same function is exported as `scrubPiiForSentry` for future Sentry `beforeSend` wiring.
+
+## Files Changed In This Slice
+
+- `ios/Kolaleaf/Features/Security/SecurityMenuView.swift` — real notification toggles.
+- `ios/Kolaleaf/Domain/Services/PushPermissionService.swift` — shared preference keys and prompt gating.
+- `ios/Kolaleaf/App/KolaleafApp.swift` — gates new-device alert by preference.
+- `ios/KolaleafTests/Domain/Services/PushPermissionServiceTests.swift` — verifies disabled transfer preference suppresses APNs prompt.
+- `src/lib/obs/pii-scrubber.ts` — reusable log/Sentry scrubber.
+- `src/lib/obs/logger.ts` — applies scrubber to every structured log payload.
+- `tests/lib/obs/pii-scrubber.test.ts` and `tests/lib/obs/logger.test.ts` — scrubber/logger coverage.
+
+## Validation
+
+- `npm test -- --run tests/lib/obs/pii-scrubber.test.ts tests/lib/obs/logger.test.ts` — 6 tests passed.
+- `npx tsc --noEmit` — passed.
+- `xcodebuild test -project ios/Kolaleaf.xcodeproj -scheme Kolaleaf -destination 'platform=iOS Simulator,id=8E29B537-7E71-44A8-BA8D-F221CF7CBC97' -only-testing:KolaleafTests/PushPermissionServiceTests` — 9 tests passed.
+- `npm run build` — passed.
+- Physical iPhone Debug build/install/launch — passed on `iPhone.coredevice.local`.
+
+## Remaining Review Scope
+
+- Sentry SDK install, DSN/environment wiring, source maps, and release tagging remain Phase 12 production setup.
+- Notification preferences are local iOS preferences in this slice; cross-device preference persistence can be added if product wants settings to roam.
+
+---
+
 # Review Request -- Wave 2a Phase 11.5 Device Attestation Slice
 
 **Ready for Review:** YES for local device registration/audit and user alert wiring. Full Apple attestation-object cryptographic verification remains a production hardening item, not claimed here.

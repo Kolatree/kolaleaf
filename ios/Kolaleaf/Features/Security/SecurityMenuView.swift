@@ -47,6 +47,10 @@ public struct SecurityMenuView: View {
 private struct SecurityMenuContent: View {
     @Bindable var vm: SecurityMenuViewModel
     @Bindable var controller: BiometricUnlockController
+    @AppStorage(NotificationPreferenceKeys.newDeviceAlerts)
+    private var newDeviceAlertsEnabled = true
+    @AppStorage(NotificationPreferenceKeys.transferPushAlerts)
+    private var transferPushAlertsEnabled = true
 
     var body: some View {
         List {
@@ -160,14 +164,27 @@ private struct SecurityMenuContent: View {
 
     private var alertSection: some View {
         Section("Alerts") {
-            comingSoonRow(
-                title: "New-device sign-in",
-                subtitle: "Email alert when a new device accesses your account."
-            )
-            comingSoonRow(
-                title: "Transfer notifications",
-                subtitle: "Push alerts for successful or failed transfers."
-            )
+            Toggle(isOn: $newDeviceAlertsEnabled) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("New-device sign-in alerts")
+                        .font(KolaFont.row)
+                    Text("Warns you when this account opens on a device we have not seen before.")
+                        .font(KolaFont.tagline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .tint(KolaColors.greenLight)
+
+            Toggle(isOn: $transferPushAlertsEnabled) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Transfer notifications")
+                        .font(KolaFont.row)
+                    Text("Allows push alerts for successful, delayed, or failed transfers.")
+                        .font(KolaFont.tagline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .tint(KolaColors.greenLight)
         }
     }
 
@@ -238,29 +255,6 @@ private struct SecurityMenuContent: View {
         .contentShape(Rectangle())
     }
 
-    private func comingSoonRow(title: String, subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack {
-                Text(title)
-                    .font(KolaFont.row)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text("Coming soon")
-                    .font(KolaFont.tagline)
-                    .padding(.horizontal, KolaSpacing.s)
-                    .padding(.vertical, 4)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(.secondary.opacity(0.15))
-                    )
-                    .foregroundStyle(.secondary)
-            }
-            Text(subtitle)
-                .font(KolaFont.tagline)
-                .foregroundStyle(.secondary)
-        }
-        .accessibilityElement(children: .combine)
-    }
 }
 
 @MainActor

@@ -24,6 +24,19 @@ public enum PushAuthorizationStatus: Sendable, Equatable {
     case ephemeral
 }
 
+public enum NotificationPreferenceKeys {
+    public static let newDeviceAlerts = "kola.notifications.newDeviceAlerts"
+    public static let transferPushAlerts = "kola.notifications.transferPushAlerts"
+
+    public static func newDeviceAlertsEnabled(defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: newDeviceAlerts) as? Bool ?? true
+    }
+
+    public static func transferPushAlertsEnabled(defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: transferPushAlerts) as? Bool ?? true
+    }
+}
+
 /// Surface PushPermissionService consumes — tests substitute a fake.
 /// `UNUserNotificationCenter` is a non-Sendable singleton, so we wrap it in
 /// `SystemUserNotificationCenter` rather than conforming it directly.
@@ -100,6 +113,9 @@ public actor PushPermissionService {
     /// the current authorization state. Caller handles the UI fallback when
     /// authorization is denied (in-app explainer screen).
     public func promptIfNeeded() async -> PromptOutcome {
+        guard NotificationPreferenceKeys.transferPushAlertsEnabled() else {
+            return .alreadyDetermined(authorized: false)
+        }
         let status = await center.currentAuthorizationStatus()
         switch status {
         case .authorized, .provisional, .ephemeral:

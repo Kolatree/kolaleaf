@@ -162,7 +162,8 @@ struct KolaleafApp: App {
         let result = await deviceAttestationService.registerCurrentDevice()
         if case .success(let response) = result,
            response.shouldAlert,
-           let alert = response.alert {
+           let alert = response.alert,
+           NotificationPreferenceKeys.newDeviceAlertsEnabled() {
             appState.showNewDeviceAlert(title: alert.title, message: alert.message)
         }
     }

@@ -71,6 +71,19 @@ final class PushPermissionServiceTests: XCTestCase {
         XCTAssertTrue(opts?.contains(.sound) ?? false)
     }
 
+    func test_promptIfNeeded_transferPreferenceDisabled_doesNotPrompt() async {
+        UserDefaults.standard.set(false, forKey: NotificationPreferenceKeys.transferPushAlerts)
+        defer { UserDefaults.standard.removeObject(forKey: NotificationPreferenceKeys.transferPushAlerts) }
+        let fake = FakeNotifCenter(status: .notDetermined, grantNext: true)
+        let svc = PushPermissionService(api: FakeAPIClient(), center: fake)
+
+        let outcome = await svc.promptIfNeeded()
+
+        XCTAssertEqual(outcome, .alreadyDetermined(authorized: false))
+        let opts = await fake.capturedOptions()
+        XCTAssertNil(opts)
+    }
+
     func test_promptIfNeeded_notDetermined_userDenies_returnsDenied() async {
         let fake = FakeNotifCenter(status: .notDetermined, grantNext: false)
         let svc = PushPermissionService(api: FakeAPIClient(), center: fake)

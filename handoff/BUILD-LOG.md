@@ -7,9 +7,9 @@ _Owned by Architect. Updated by Builder after each step._
 ## Current Status
 
 **Active step:** Wave 2a iOS Phase 11 complete locally; Phase 11.5 implementation in progress.
-**Last cleared:** Web KYC recovery patch committed locally as `3e439c5`; Phase 11 iOS 2FA/security committed locally as `ac3b0d8`; Phase 11.5 privacy/deep-link slice committed locally as `90be9b2`; Phase 11.5 device-attestation slice validating for commit.
+**Last cleared:** Web KYC recovery patch committed locally as `3e439c5`; Phase 11 iOS 2FA/security committed locally as `ac3b0d8`; Phase 11.5 privacy/deep-link slice committed locally as `90be9b2`; Phase 11.5 device-attestation slice committed locally as `d1717ce`; Phase 11.5 notification/Sentry-scrubber slice validating for commit.
 **Pending deploy:** All Pile B + Wave 1 commits local past 6d3db06, plus Wave 2a iOS/mobile commits. Production KYC 500 remains operationally blocked on Railway/Sumsub access.
-**Tests:** Latest validation: device-attestation Vitest 6/6; `npx tsc --noEmit`; `npm run build`; targeted iOS `AppStateTests` 12/12; physical iPhone Debug build/install succeeded. Launch retry was blocked because the iPhone was locked.
+**Tests:** Latest validation: PII scrubber/logger Vitest 6/6; `npx tsc --noEmit`; targeted iOS `PushPermissionServiceTests` 9/9; `npm run build`; physical iPhone Debug build/install/launch succeeded.
 
 ### Active recovery todo — 2026-05-14
 
@@ -27,6 +27,7 @@ _Owned by Architect. Updated by Builder after each step._
 - [x] Reconcile Phase 11 status: U73-U76 implemented locally in `ac3b0d8`; Phase 11 is complete pending external review.
 - [x] Start Phase 11.5 local implementation: Live Activity lock-screen privacy redaction, HTTPS universal-link transfer routing, referral universal-link capture, and AASA scope for `/transfer/*` + `/refer/*`.
 - [x] Start Phase 11.5 device security: authenticated device-attestation registration, hashed App Attest key audit, and new-device login alert wiring.
+- [x] Start Phase 11.5 notification/privacy hardening: user-facing alert preferences gate new-device alerts and transfer push prompts; structured logs now pass through reusable PII scrubber suitable for Sentry `beforeSend`.
 - [ ] Reconcile remaining Phase 11.5 scope against code already moved earlier (switcher blur, idle timeout primitives, referral capture primitives, Live Activity redaction).
 
 ### Wave 1 commit ledger (closes WAVE-1-AUDIT.md gaps)

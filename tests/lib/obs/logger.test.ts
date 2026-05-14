@@ -9,9 +9,13 @@ describe('log() emits structured lines', () => {
 
   it('emits event + data through the pino instance', () => {
     const spy = vi.spyOn(logger, 'info').mockImplementation(() => {})
-    log('info', 'test.event', { widgetId: 'w1' })
+    log('info', 'test.event', { widgetId: 'w1', email: 'ambrose@example.com' })
     expect(spy).toHaveBeenCalledOnce()
-    expect(spy.mock.calls[0][0]).toMatchObject({ event: 'test.event', widgetId: 'w1' })
+    expect(spy.mock.calls[0][0]).toMatchObject({
+      event: 'test.event',
+      widgetId: 'w1',
+      email: '[REDACTED]',
+    })
   })
 
   it('injects requestId when inside runWithRequestContext', () => {

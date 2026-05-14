@@ -18,6 +18,7 @@
     "db:prepare": "tsx scripts/db/prepare.ts",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
+    "openapi:snapshot": "tsx scripts/export-openapi-snapshot.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

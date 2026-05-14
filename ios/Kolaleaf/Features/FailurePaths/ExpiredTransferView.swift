@@ -185,7 +185,7 @@ public struct ExpiredTransferView: View {
                 Text("Today's rate is \(pct)% lower")
                     .font(KolaFont.cta)
                     .foregroundStyle(KolaColors.coral)
-                Text("You'll receive less than your original quote.")
+                Text("You'll receive less Naira than your original quote showed.")
                     .font(KolaFont.tagline)
                     .foregroundStyle(KolaColors.textSecondary)
             }

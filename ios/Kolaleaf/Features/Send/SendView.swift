@@ -160,6 +160,8 @@ public struct SendView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.4)
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Send amount \(vm.amountStore.displayString) Australian dollars")
             rateLine
             ngnPreviewLine
             if vm.isRateStale && vm.rateEffectiveAt != nil {
@@ -174,6 +176,7 @@ public struct SendView: View {
             Text("1 AUD = \(Self.formatRate(rate)) NGN")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.textSecondary)
+                .accessibilityLabel("Exchange rate 1 Australian dollar equals \(Self.formatRate(rate)) Nigerian naira")
         } else if vm.isLoadingRateInFlight {
             Text("Loading rate…")
                 .font(KolaFont.tagline)
@@ -187,6 +190,7 @@ public struct SendView: View {
             Text("≈ \(Self.formatNGN(ngn)) NGN")
                 .font(KolaFont.ngnAccent)
                 .foregroundStyle(KolaColors.trustGreen)
+                .accessibilityLabel("Recipient gets approximately \(Self.formatNGN(ngn)) Nigerian naira")
         } else {
             Text(" ")
                 .font(KolaFont.ngnAccent)
@@ -248,6 +252,8 @@ public struct SendView: View {
                     .fill(KolaColors.coral.opacity(0.08))
             )
             .accessibilityIdentifier("send.error")
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Send error: \(err.message)")
         }
     }
 

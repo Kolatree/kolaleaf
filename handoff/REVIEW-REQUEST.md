@@ -1,3 +1,43 @@
+# Review Request -- Wave 2a Phase 12 Accessibility + Dynamic Type Send Flow Slice
+
+**Ready for Review:** YES for the focused money-path accessibility/Dynamic Type slice. This is not a claim that the whole app accessibility audit is complete.
+**Date:** 2026-05-14
+**Branch / worktree:** `feat/ios-swiftui-app` in `/Users/ao/Documents/projects/Kolaleaf`
+
+## Summary
+
+Closes the next local Phase 12 readiness slice for the send flow. The app now bundles the Inter font files declared by the generated Info.plist, typography tokens use Dynamic Type-aware custom fonts, and the core send/PayID/receipt surfaces have clearer VoiceOver labels for amounts, exchange rates, PayID/reference values, receipt totals, and destructive/continuation actions.
+
+Review found and fixed two implementation risks before handoff:
+
+- The generated `ios/Kolaleaf.xcodeproj` and `ios/Kolaleaf/Info.plist` are ignored; `ios/project.yml` is canonical. Regenerating with XcodeGen flattens `Kolaleaf/Resources/Inter-fonts` into app-bundle font files, so `UIAppFonts` must stay as flat filenames.
+- A first pass accidentally grouped the entire `SendView` as one accessibility element. That was narrowed to only the amount display so recipient selection, keypad controls, slide confirmation, and error actions remain reachable.
+
+## Files Changed In This Slice
+
+- `ios/Kolaleaf/Resources/Inter-fonts/*` — Inter TTF files and upstream license, used by the existing app font declarations.
+- `ios/Kolaleaf/Design/Tokens/KolaTypography.swift` — custom Inter tokens now scale relative to Dynamic Type text styles.
+- `ios/Kolaleaf/Features/Send/SendView.swift` — amount/rate/NGN/error accessibility labels without collapsing the whole screen.
+- `ios/Kolaleaf/Features/Send/PayIDInstructionsView.swift` — PayID/reference/countdown/step/action accessibility labels and hints.
+- `ios/Kolaleaf/Features/Send/ReceiptView.swift` — receipt headline, amount, summary, share, and repeat-send accessibility labels/hints.
+- `ios/KolaleafTests/Features/Send/SendFlowAccessibilityTests.swift` — AX5 render smoke coverage for Send, PayID instructions, and Receipt.
+- `handoff/BUILD-LOG.md` and `handoff/REVIEW-REQUEST.md` — current Phase 12 status and validation evidence.
+
+## Validation
+
+- `xcodegen generate` — regenerated the ignored project and generated plist from `ios/project.yml`.
+- `xcodebuild test -project ios/Kolaleaf.xcodeproj -scheme Kolaleaf -destination 'platform=iOS Simulator,id=8E29B537-7E71-44A8-BA8D-F221CF7CBC97' -only-testing:KolaleafTests/SendFlowAccessibilityTests` — 3 tests passed; no missing Inter font parser warnings after the source-of-truth fix.
+- `xcodebuild -project ios/Kolaleaf.xcodeproj -scheme Kolaleaf -configuration Debug -destination 'platform=iOS,name=iPhone' -derivedDataPath ios/build/DerivedData build` — passed; build output copies Inter TTFs into the app bundle.
+- `xcrun devicectl device install app --device iPhone.coredevice.local /Users/ao/Documents/projects/Kolaleaf/ios/build/DerivedData/Build/Products/Debug-iphoneos/Kolaleaf.app` — installed `com.kolaleaf.app`.
+- `xcrun devicectl device process launch --device iPhone.coredevice.local com.kolaleaf.app` — launched.
+
+## Remaining Review Scope
+
+- This is a focused send-flow slice. Full whole-app accessibility, VoiceOver rotor order, Reduce Motion behavior, localization, and iPad review remain Phase 12 work.
+- The generated `.xcodeproj` and `Info.plist` remain intentionally ignored; reviewers should regenerate from `ios/project.yml` when validating project-resource behavior.
+
+---
+
 # Review Request -- Wave 2a Phase 12 OpenAPI Contract Hardening Slice
 
 **Ready for Review:** YES for local contract registration and `issue-payid` canonical error envelopes.

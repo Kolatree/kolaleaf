@@ -12,33 +12,41 @@ import SwiftUI
 public enum KolaFont {
     private static let family = "Inter"
 
+    private static func custom(
+        _ face: String,
+        size: CGFloat,
+        relativeTo textStyle: Font.TextStyle
+    ) -> Font {
+        .custom("\(family)-\(face)", size: size, relativeTo: textStyle)
+    }
+
     // MARK: - Headline & body
-    public static let logo:        Font = .custom("\(family)-Bold",      size: 22)
-    public static let tagline:     Font = .custom("\(family)-Regular",   size: 13)
-    public static let headline:    Font = .custom("\(family)-ExtraBold", size: 32)
-    public static let pageTitle:   Font = .custom("\(family)-ExtraBold", size: 22)
-    public static let section:     Font = .custom("\(family)-Bold",      size: 18)
+    public static let logo:        Font = custom("Bold",      size: 22, relativeTo: .title3)
+    public static let tagline:     Font = custom("Regular",   size: 13, relativeTo: .subheadline)
+    public static let headline:    Font = custom("ExtraBold", size: 32, relativeTo: .largeTitle)
+    public static let pageTitle:   Font = custom("ExtraBold", size: 22, relativeTo: .title2)
+    public static let section:     Font = custom("Bold",      size: 18, relativeTo: .headline)
 
     // MARK: - Field labels
     /// Render with `.textCase(.uppercase)` and `.kerning(KolaKerning.label)` at the call site.
-    public static let fieldLabel:  Font = .custom("\(family)-SemiBold",  size: 11)
-    public static let row:         Font = .custom("\(family)-Regular",   size: 14)
-    public static let rowValue:    Font = .custom("\(family)-SemiBold",  size: 14)
-    public static let rowTotal:    Font = .custom("\(family)-Bold",      size: 14)
+    public static let fieldLabel:  Font = custom("SemiBold",  size: 11, relativeTo: .caption)
+    public static let row:         Font = custom("Regular",   size: 14, relativeTo: .body)
+    public static let rowValue:    Font = custom("SemiBold",  size: 14, relativeTo: .body)
+    public static let rowTotal:    Font = custom("Bold",      size: 14, relativeTo: .body)
 
     // MARK: - Amounts (tabular numerals)
-    public static let amountHero:    Font = .custom("\(family)-ExtraBold", size: 96).monospacedDigit()
-    public static let amountLarge:   Font = .custom("\(family)-Bold",      size: 56).monospacedDigit()
-    public static let amountMedium:  Font = .custom("\(family)-Bold",      size: 36).monospacedDigit()
-    public static let amountSmall:   Font = .custom("\(family)-SemiBold",  size: 18).monospacedDigit()
-    public static let ngnAccent:     Font = .custom("\(family)-SemiBold",  size: 32).monospacedDigit()
-    public static let timestamp:     Font = .custom("\(family)-Regular",   size: 11).monospacedDigit()
+    public static let amountHero:    Font = custom("ExtraBold", size: 96, relativeTo: .largeTitle).monospacedDigit()
+    public static let amountLarge:   Font = custom("Bold",      size: 56, relativeTo: .largeTitle).monospacedDigit()
+    public static let amountMedium:  Font = custom("Bold",      size: 36, relativeTo: .title).monospacedDigit()
+    public static let amountSmall:   Font = custom("SemiBold",  size: 18, relativeTo: .title3).monospacedDigit()
+    public static let ngnAccent:     Font = custom("SemiBold",  size: 32, relativeTo: .title).monospacedDigit()
+    public static let timestamp:     Font = custom("Regular",   size: 11, relativeTo: .caption2).monospacedDigit()
 
     // MARK: - CTAs and chips
-    public static let cta:         Font = .custom("\(family)-Bold",      size: 16)
-    public static let chip:        Font = .custom("\(family)-SemiBold",  size: 11)
-    public static let trust:       Font = .custom("\(family)-SemiBold",  size: 11)
-    public static let navLabel:    Font = .custom("\(family)-Medium",    size: 10)
+    public static let cta:         Font = custom("Bold",      size: 16, relativeTo: .body)
+    public static let chip:        Font = custom("SemiBold",  size: 11, relativeTo: .caption)
+    public static let trust:       Font = custom("SemiBold",  size: 11, relativeTo: .caption)
+    public static let navLabel:    Font = custom("Medium",    size: 10, relativeTo: .caption2)
 }
 
 /// Kerning constants applied at the Text view level (SwiftUI's Font has no kerning API).

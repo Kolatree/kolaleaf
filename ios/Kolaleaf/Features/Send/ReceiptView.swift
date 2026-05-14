@@ -95,6 +95,8 @@ public struct ReceiptView: View {
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.textSecondary)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(vm.headline). To \(vm.recipientName)")
         .frame(maxWidth: .infinity)
     }
 
@@ -110,6 +112,8 @@ public struct ReceiptView: View {
                 .foregroundStyle(KolaColors.leafGreen)
                 .accessibilityIdentifier("receipt.amount.received")
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Sent \(vm.sendAmountText). Received \(vm.receivedAmountText)")
     }
 
     private var summaryCard: some View {
@@ -153,6 +157,8 @@ public struct ReceiptView: View {
                 .foregroundStyle(KolaColors.textPrimary)
                 .multilineTextAlignment(.trailing)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(value)")
     }
 
     /// W11: opt-in toggle for revealing the recipient's full name on
@@ -201,6 +207,8 @@ public struct ReceiptView: View {
                 )
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Share receipt")
+            .accessibilityHint("Opens the share sheet with a privacy-safe receipt image")
             .simultaneousGesture(TapGesture().onEnded {
                 Task {
                     await analyticsService?.track(
@@ -240,6 +248,7 @@ public struct ReceiptView: View {
         }
         .buttonStyle(.plain)
         .disabled(vm.didSendAnother)
+        .accessibilityHint("Starts another transfer to the same recipient")
     }
 
     // MARK: - Helpers

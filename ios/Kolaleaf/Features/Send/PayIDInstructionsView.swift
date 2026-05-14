@@ -114,6 +114,7 @@ public struct PayIDInstructionsView: View {
             RoundedRectangle(cornerRadius: KolaRadius.cardLg, style: .continuous)
                 .strokeBorder(KolaColors.border, lineWidth: 1)
         )
+        .accessibilityLabel("Generating your PayID")
     }
 
     private func loadedCard(payId: String, reference: String) -> some View {
@@ -132,10 +133,12 @@ public struct PayIDInstructionsView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
                 .accessibilityIdentifier("payid.value")
+                .accessibilityLabel("PayID \(payId)")
             if !reference.isEmpty {
                 Text("Reference: \(reference)")
                     .font(KolaFont.timestamp)
                     .foregroundStyle(KolaColors.textSecondary)
+                    .accessibilityLabel("Reference \(reference)")
             }
             HStack(spacing: KolaSpacing.s) {
                 Button(action: { copyPayId(payId) }) {
@@ -210,6 +213,8 @@ public struct PayIDInstructionsView: View {
                     .font(KolaFont.timestamp)
             }
             .foregroundStyle(KolaColors.textSecondary)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Push within \(Self.formatRemaining(remaining))")
         }
     }
 
@@ -233,6 +238,8 @@ public struct PayIDInstructionsView: View {
                 .font(KolaFont.row)
                 .foregroundStyle(KolaColors.textPrimary)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Step \(number). \(text)")
     }
 
     private var ctaStack: some View {
@@ -249,6 +256,7 @@ public struct PayIDInstructionsView: View {
                     )
             }
             .buttonStyle(.plain)
+            .accessibilityHint("Opens live tracking for this transfer")
 
             // Phase 9 · U62: user-initiated cancel hatch. Hidden when
             // the parent didn't wire a handler (defensive — keeps the
@@ -262,6 +270,7 @@ public struct PayIDInstructionsView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("payid.cancel")
+                .accessibilityHint("Cancels this transfer before funds are received")
             }
         }
     }

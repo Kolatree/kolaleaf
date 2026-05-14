@@ -54,6 +54,7 @@ struct KolaleafApp: App {
     private let biometricsService: any BiometricsService = LABiometricsService()
 
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Phase 2 review fix (P1, adversarial adv-003): wire APNs callbacks so
     /// the device token actually reaches PushPermissionService.register().
     @UIApplicationDelegateAdaptor(PushNotificationDelegate.self) private var pushDelegate
@@ -206,7 +207,7 @@ struct KolaleafApp: App {
                 .zIndex(1)
             }
         }
-        .animation(KolaMotion.softFade, value: shouldGate)
+        .animation(KolaMotion.fade(reduce: reduceMotion), value: shouldGate)
     }
 
     // MARK: - App lifecycle

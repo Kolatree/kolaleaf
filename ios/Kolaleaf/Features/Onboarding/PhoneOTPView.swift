@@ -9,6 +9,7 @@ import SwiftUI
 public struct PhoneOTPView: View {
     @State private var vm: PhoneOTPViewModel
     @StateObject private var otpModel: OTPFieldModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
 
     public init(vm: PhoneOTPViewModel) {
@@ -138,6 +139,6 @@ public struct PhoneOTPView: View {
             )
         }
         .disabled(!vm.canSubmit)
-        .animation(KolaMotion.softFade, value: vm.canSubmit)
+        .animation(KolaMotion.fade(reduce: reduceMotion), value: vm.canSubmit)
     }
 }

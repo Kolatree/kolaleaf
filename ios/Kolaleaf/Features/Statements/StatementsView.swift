@@ -9,6 +9,7 @@ import SwiftUI
 public struct StatementsView: View {
 
     @Environment(\.apiClient) private var apiClient
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var vm: StatementsViewModel?
     /// Toast banner driven by PDF / CSV taps.
     @State private var banner: String?
@@ -204,10 +205,10 @@ public struct StatementsView: View {
     }
 
     private func presentToast(_ text: String) {
-        withAnimation { banner = text }
+        withAnimation(KolaMotion.fade(reduce: reduceMotion)) { banner = text }
         Task {
             try? await Task.sleep(nanoseconds: 1_500_000_000)
-            withAnimation { banner = nil }
+            withAnimation(KolaMotion.fade(reduce: reduceMotion)) { banner = nil }
         }
     }
 }

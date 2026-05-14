@@ -12,6 +12,7 @@ import SwiftUI
 public struct SignInView: View {
     @State private var vm: SignInViewModel
     @State private var pickerShown: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
     @Environment(AppState.self) private var appState
     @FocusState private var focus: Field?
@@ -254,7 +255,7 @@ public struct SignInView: View {
             )
         }
         .disabled(!vm.canSubmit)
-        .animation(KolaMotion.softFade, value: vm.canSubmit)
+        .animation(KolaMotion.fade(reduce: reduceMotion), value: vm.canSubmit)
     }
 
     private func fieldLabel(_ text: String) -> some View {

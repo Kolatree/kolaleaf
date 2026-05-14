@@ -14,6 +14,7 @@ import SwiftUI
 public struct PhoneEntryView: View {
     @State private var vm: PhoneEntryViewModel
     @State private var pickerShown: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
     @FocusState private var phoneFocused: Bool
 
@@ -196,6 +197,6 @@ public struct PhoneEntryView: View {
             )
         }
         .disabled(!vm.canSubmit)
-        .animation(KolaMotion.softFade, value: vm.canSubmit)
+        .animation(KolaMotion.fade(reduce: reduceMotion), value: vm.canSubmit)
     }
 }

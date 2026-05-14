@@ -8,6 +8,8 @@ import SwiftUI
 
 public struct KYCUnderReviewView: View {
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     public let onNotifyMe: () -> Void
     public let onTalkToSupport: () -> Void
 
@@ -102,7 +104,7 @@ public struct KYCUnderReviewView: View {
             )
         }
         .disabled(notifyRequested)
-        .animation(KolaMotion.softFade, value: notifyRequested)
+        .animation(KolaMotion.fade(reduce: reduceMotion), value: notifyRequested)
     }
 
     private var supportButton: some View {

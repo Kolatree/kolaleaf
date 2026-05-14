@@ -1,3 +1,39 @@
+# Review Request -- Wave 2a Phase 12 Reduce Motion Accessibility Slice
+
+**Ready for Review:** YES for the broader iOS Reduce Motion hardening slice. This does not claim the full Phase 12 accessibility/localization/iPad pass is complete.
+**Date:** 2026-05-14
+**Branch / worktree:** `feat/ios-swiftui-app` in `/Users/ao/Documents/projects/Kolaleaf`
+
+## Summary
+
+Closes the next Phase 12 accessibility slice after the send-flow Dynamic Type work. Review found remaining raw fade/implicit animation paths in onboarding CTAs, the KYC review/processing surfaces, referral/statements toast banners, and the Phase 11 biometric gate overlay. These now use `KolaMotion.fade(reduce:)` or suppress the continuous spinner when Reduce Motion is enabled.
+
+One test approach was rejected during validation: this SDK exposes `\.accessibilityReduceMotion` as read-only to test code, so direct environment injection does not compile. The final coverage uses representative render smoke tests plus a source guard that fails if the hardened call sites reintroduce raw `KolaMotion.softFade` or unqualified `withAnimation { ... }`.
+
+## Files Changed In This Slice
+
+- `ios/Kolaleaf/App/KolaleafApp.swift` — biometric gate overlay uses Reduce Motion-aware fade timing.
+- `ios/Kolaleaf/Features/Onboarding/{EmailEntryView,EmailOTPView,PhoneEntryView,PhoneOTPView,RegistrationDetailsView,SignInView}.swift` — CTA enabled/disabled transitions use Reduce Motion-aware fade timing.
+- `ios/Kolaleaf/Features/KYC/{KYCProcessingView,KYCUnderReviewView}.swift` — processing spinner stops under Reduce Motion; notify CTA uses reduced fade timing.
+- `ios/Kolaleaf/Features/{Refer/ReferView,Statements/StatementsView}.swift` — copy/export toast animations use reduced fade timing.
+- `ios/KolaleafTests/Accessibility/ReducedMotionRenderTests.swift` — representative render coverage and source guard for hardened motion call sites.
+- `handoff/BUILD-LOG.md` and `handoff/REVIEW-REQUEST.md` — current Phase 12 status and validation evidence.
+
+## Validation
+
+- `xcodegen generate` — regenerated the ignored project and generated plist from `ios/project.yml`.
+- XcodeBuildMCP `test_sim` with `-only-testing:KolaleafTests/ReducedMotionRenderTests -only-testing:KolaleafTests/SendFlowAccessibilityTests` — 6 tests passed.
+- `xcodebuild -project ios/Kolaleaf.xcodeproj -scheme Kolaleaf -configuration Debug -destination 'platform=iOS,name=iPhone' -derivedDataPath ios/build/DerivedData build` — passed; only the pre-existing orientation warning was emitted.
+- `xcrun devicectl device install app --device iPhone.coredevice.local /Users/ao/Documents/projects/Kolaleaf/ios/build/DerivedData/Build/Products/Debug-iphoneos/Kolaleaf.app` — installed `com.kolaleaf.app`.
+- `xcrun devicectl device process launch --device iPhone.coredevice.local com.kolaleaf.app` — launched.
+
+## Remaining Review Scope
+
+- Full VoiceOver walkthrough, localization, launch/app-icon review, iPad support posture, and shake-to-report decision remain Phase 12.
+- `\.accessibilityReduceMotion` is read-only in the current SwiftUI test environment, so behavior-level automated injection should be revisited if the SDK exposes a writable test seam later.
+
+---
+
 # Review Request -- Wave 2a Phase 12 Sentry Production Wiring Slice
 
 **Ready for Review:** YES for local Sentry wiring, PII scrubber enforcement, source-map build config, and dependency-audit cleanup. Real event delivery still requires production Sentry project credentials.

@@ -8,6 +8,7 @@ import SwiftUI
 public struct KYCProcessingView: View {
     @State private var vm: KYCProcessingViewModel
     @State private var rotation: Double = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     public var onTerminal: (KYCProcessingViewModel.Terminal) -> Void
 
@@ -41,6 +42,10 @@ public struct KYCProcessingView: View {
             // Phase 2 review fix (swift-ios-004): kick off the rotation
             // animation from the top-level body.onAppear so it's not
             // triggered from within a recomputed subview.
+            guard !reduceMotion else {
+                rotation = 0
+                return
+            }
             withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) {
                 rotation = 360
             }

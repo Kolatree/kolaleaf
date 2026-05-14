@@ -11,6 +11,7 @@ import UIKit
 public struct ReferView: View {
 
     @Environment(\.apiClient) private var apiClient
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var vm: ReferViewModel?
     @State private var showCopied: Bool = false
 
@@ -206,10 +207,10 @@ public struct ReferView: View {
                 .localOnly: true,
             ]
         )
-        withAnimation { showCopied = true }
+        withAnimation(KolaMotion.fade(reduce: reduceMotion)) { showCopied = true }
         Task {
             try? await Task.sleep(nanoseconds: 1_500_000_000)
-            withAnimation { showCopied = false }
+            withAnimation(KolaMotion.fade(reduce: reduceMotion)) { showCopied = false }
         }
     }
 }

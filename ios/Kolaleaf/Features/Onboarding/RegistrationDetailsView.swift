@@ -7,6 +7,7 @@ import SwiftUI
 
 public struct RegistrationDetailsView: View {
     @State private var vm: RegistrationDetailsViewModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
 
     public init(vm: RegistrationDetailsViewModel) {
@@ -226,6 +227,6 @@ public struct RegistrationDetailsView: View {
             )
         }
         .disabled(!vm.canSubmit)
-        .animation(KolaMotion.softFade, value: vm.canSubmit)
+        .animation(KolaMotion.fade(reduce: reduceMotion), value: vm.canSubmit)
     }
 }

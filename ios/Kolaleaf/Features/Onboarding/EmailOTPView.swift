@@ -13,6 +13,7 @@ import SwiftUI
 public struct EmailOTPView: View {
     @State private var vm: EmailOTPViewModel
     @StateObject private var otpModel: OTPFieldModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
 
     public init(vm: EmailOTPViewModel) {
@@ -147,6 +148,6 @@ public struct EmailOTPView: View {
             )
         }
         .disabled(!vm.canSubmit)
-        .animation(KolaMotion.softFade, value: vm.canSubmit)
+        .animation(KolaMotion.fade(reduce: reduceMotion), value: vm.canSubmit)
     }
 }

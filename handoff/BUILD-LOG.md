@@ -6,10 +6,10 @@ _Owned by Architect. Updated by Builder after each step._
 
 ## Current Status
 
-**Active step:** Wave 2a Phase 12 next candidate selection: localization, Xcode Cloud/TestFlight prep, iPad posture, or shake-to-report decision.
-**Last cleared:** Web KYC recovery patch committed locally as `3e439c5`; Phase 11 iOS 2FA/security committed locally as `ac3b0d8`; Phase 11.5 privacy/deep-link slice committed locally as `90be9b2`; Phase 11.5 device-attestation slice committed locally as `d1717ce`; Phase 11.5 notification/Sentry-scrubber slice committed locally as `f0ac381`; Phase 11.6 privacy-first analytics/coordinator slice committed locally as `7099d96`; Phase 12 issue-PayID OpenAPI contract slice committed locally as `8e925fc`; Phase 12 accessibility/Dynamic Type send-flow slice committed locally as `8f44ce4`; Phase 12 Sentry production wiring committed locally as `55c9b0b`; Phase 12 Reduce Motion accessibility slice committed locally as `59a8a9b`; Phase 12 app icon/launch slice committed locally.
+**Active step:** Wave 2a Phase 12 next candidate selection: localization, Xcode Cloud/TestFlight prep, or shake-to-report decision.
+**Last cleared:** Web KYC recovery patch committed locally as `3e439c5`; Phase 11 iOS 2FA/security committed locally as `ac3b0d8`; Phase 11.5 privacy/deep-link slice committed locally as `90be9b2`; Phase 11.5 device-attestation slice committed locally as `d1717ce`; Phase 11.5 notification/Sentry-scrubber slice committed locally as `f0ac381`; Phase 11.6 privacy-first analytics/coordinator slice committed locally as `7099d96`; Phase 12 issue-PayID OpenAPI contract slice committed locally as `8e925fc`; Phase 12 accessibility/Dynamic Type send-flow slice committed locally as `8f44ce4`; Phase 12 Sentry production wiring committed locally as `55c9b0b`; Phase 12 Reduce Motion accessibility slice committed locally as `59a8a9b`; Phase 12 app icon/launch slice committed locally; Phase 12 iPad orientation posture committed locally.
 **Pending deploy:** All Pile B + Wave 1 commits local past 6d3db06, plus Wave 2a iOS/mobile commits. Production KYC 500 remains operationally blocked on Railway/Sumsub access.
-**Tests:** Latest validation: `xcodegen generate`; generated `Info.plist` shows `UILaunchScreen` with `UIColorName=launchBackground`, `UIImageName=LogoPrimary`, `UIImageRespectsSafeAreaInsets=true`; XcodeBuildMCP targeted simulator run `KolaleafTests/LaunchAssetsTests` (4/4); physical Debug build/install/launch succeeded on `iPhone.coredevice.local`. Earlier validation: Reduce Motion targeted simulator run (6/6); Sentry web `npx tsc --noEmit`, focused obs tests (6/6), `npm run build`, and audit 0 high/critical.
+**Tests:** Latest validation: `xcodegen generate`; generated `Info.plist` now has iPhone portrait orientation and iPad portrait/landscape orientations; XcodeBuildMCP targeted simulator run `KolaleafTests/LaunchAssetsTests` (5/5); physical Debug build succeeded on `iPhone.coredevice.local` with the prior orientation warning gone; physical install succeeded, launch blocked because the device was locked. Earlier app-icon/launch validation: generated `UILaunchScreen` uses `launchBackground` + `LogoPrimary`; physical build/install/launch succeeded while device was unlocked.
 
 ### Active recovery todo — 2026-05-14
 
@@ -35,7 +35,8 @@ _Owned by Architect. Updated by Builder after each step._
 - [x] Phase 12 Sentry production wiring: Next.js SDK setup, server/client/edge initialization, global App Router error capture, PII scrubber in event hooks, source-map upload gated by `SENTRY_AUTH_TOKEN`, and dependency audit high/critical cleanup.
 - [x] Phase 12 broader accessibility/Reduce Motion slice: onboarding CTA fade paths, KYC review/processing motion, referral/statements toasts, and biometric-gate overlay now use Reduce Motion-aware paths; targeted render/source guard tests added.
 - [x] Phase 12 app icon/launch review: canonical launch screen now displays `LogoPrimary` on the existing cream launch background, app icon marketing PNG is guarded at 1024x1024, and source tests protect the launch/icon catalog wiring.
-- [ ] Phase 12 next candidate: localization, Xcode Cloud/TestFlight prep, iPad posture, or shake-to-report decision. Defer provider checks until signing/App Store Connect/Railway access is confirmed.
+- [x] Phase 12 iPad posture: app remains iPhone+iPad, keeps iPhone portrait-only, and declares all iPad orientations explicitly so release builds do not trip the orientation warning.
+- [ ] Phase 12 next candidate: localization, Xcode Cloud/TestFlight prep, or shake-to-report decision. Defer provider checks until signing/App Store Connect/Railway access is confirmed.
 
 ### Remaining phase execution plan — 2026-05-14
 

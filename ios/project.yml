@@ -55,6 +55,11 @@ targets:
           UIImageRespectsSafeAreaInsets: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         # r2 fix #6: armv7 (32-bit) is invalid for iOS 17.2 (arm64-only). Removed key entirely;
         # iOS derives required architecture from the build slice.
         NSCameraUsageDescription: "Kolaleaf scans your photo ID and a selfie to verify your identity, as required for Australian money-transfer regulations. Images are processed by our identity provider Sumsub."

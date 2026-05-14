@@ -16,6 +16,16 @@ final class LaunchAssetsTests: XCTestCase {
         XCTAssertTrue(projectYAML.contains("UIImageRespectsSafeAreaInsets: true"))
     }
 
+    func test_projectKeepsIPadOrientationSupportExplicit() throws {
+        let projectYAML = try String(contentsOf: iosRoot().appendingPathComponent("project.yml"))
+
+        XCTAssertTrue(projectYAML.contains("TARGETED_DEVICE_FAMILY: \"1,2\""))
+        XCTAssertTrue(projectYAML.contains("UISupportedInterfaceOrientations~ipad:"))
+        XCTAssertTrue(projectYAML.contains("UIInterfaceOrientationPortraitUpsideDown"))
+        XCTAssertTrue(projectYAML.contains("UIInterfaceOrientationLandscapeLeft"))
+        XCTAssertTrue(projectYAML.contains("UIInterfaceOrientationLandscapeRight"))
+    }
+
     func test_appIconIsMarketingSizeSquarePNG() throws {
         let iconURL = assetCatalogRoot()
             .appendingPathComponent("AppIcon.appiconset/AppIcon-1024.png")

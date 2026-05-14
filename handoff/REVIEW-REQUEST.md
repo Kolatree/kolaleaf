@@ -1,3 +1,35 @@
+# Review Request -- Wave 2a Phase 12 iPad Orientation Posture Slice
+
+**Ready for Review:** YES for target/orientation posture. This does not claim a full iPad UX redesign.
+**Date:** 2026-05-14
+**Branch / worktree:** `feat/ios-swiftui-app` in `/Users/ao/Documents/projects/Kolaleaf`
+
+## Summary
+
+Closes the Phase 12 iPad support posture gap that was showing up as a physical-device build warning. The app target already declares `TARGETED_DEVICE_FAMILY = "1,2"` for iPhone + iPad, but the plist only declared portrait orientation globally. Rather than removing iPad support or forcing full-screen mode, `ios/project.yml` now keeps iPhone portrait-only and declares all four orientations for iPad via `UISupportedInterfaceOrientations~ipad`.
+
+## Files Changed In This Slice
+
+- `ios/project.yml` — adds iPad-specific portrait, upside-down, landscape-left, and landscape-right supported orientations.
+- `ios/KolaleafTests/App/LaunchAssetsTests.swift` — adds a source guard that iPad targeting and orientation support stay explicit.
+- `handoff/BUILD-LOG.md` and `handoff/REVIEW-REQUEST.md` — current Phase 12 status and validation evidence.
+
+## Validation
+
+- `xcodegen generate` — regenerated the ignored project and generated plist from `ios/project.yml`.
+- `plutil -p ios/Kolaleaf/Info.plist` — generated iPad orientation array includes portrait, upside-down, landscape-left, and landscape-right.
+- XcodeBuildMCP `test_sim` with `-only-testing:KolaleafTests/LaunchAssetsTests` — 5 tests passed.
+- `xcodebuild -project ios/Kolaleaf.xcodeproj -scheme Kolaleaf -configuration Debug -destination 'platform=iOS,name=iPhone' -derivedDataPath ios/build/DerivedData build` — passed; the earlier orientation warning is gone.
+- `xcrun devicectl device install app --device iPhone.coredevice.local /Users/ao/Documents/projects/Kolaleaf/ios/build/DerivedData/Build/Products/Debug-iphoneos/Kolaleaf.app` — installed `com.kolaleaf.app`.
+- `xcrun devicectl device process launch --device iPhone.coredevice.local com.kolaleaf.app` — blocked because the iPhone was locked.
+
+## Remaining Review Scope
+
+- Full iPad layout QA on an iPad simulator/device remains separate from the plist posture fix.
+- TestFlight/App Store review may still require a product decision on whether iPad is first-class at beta or simply compatible.
+
+---
+
 # Review Request -- Wave 2a Phase 12 App Icon + Launch Slice
 
 **Ready for Review:** YES for local app icon and launch-screen wiring. App Store Connect upload still requires the later TestFlight/signing pass.

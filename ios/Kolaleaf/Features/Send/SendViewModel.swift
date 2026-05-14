@@ -138,8 +138,6 @@ public final class SendViewModel {
     private let rateService: RateQuoteService
     private let submitter: TransferSubmissionService
     private let biometrics: BiometricsService
-    private let stepUpAuth: StepUpAuthService
-    private let stepUpInputsProvider: (@MainActor (Recipient) -> StepUpRuleInputs)?
     private weak var appState: AppState?
 
     // MARK: - Inputs
@@ -154,24 +152,6 @@ public final class SendViewModel {
     /// renders don't re-route navigation. (C6)
     private var pendingCreatedTransfer: Transfer?
 
-    // MARK: - Step-up auth state (U76c)
-    //
-    // Non-nil when Face ID succeeded but the StepUpAuthService says we
-    // need a TOTP confirmation before posting the transfer. SendView
-    // presents `StepUpAuthSheet` while this is non-nil. The sheet calls
-    // `completeStepUp()` on success or `cancelStepUp()` on dismissal.
-    public private(set) var stepUpDecision: StepUpAuthService.Decision?
-
-    /// Frozen at the moment Face ID succeeded so the eventual
-    /// POST /transfers carries the same recipient / quote / amount the
-    /// user was looking at when they passed the biometric — even if
-    /// they tab away and the rate refreshes during the TOTP prompt.
-    /// Iter logic: the submitter still re-validates rate freshness
-    /// against the captured `effectiveAt` (C5), so a refresh-during-
-    /// step-up surfaces `.rateStale` rather than silently transacting
-    /// at the new rate.
-    private var pendingStepUpContext: PendingStepUpContext?
-
     // MARK: - Init
 
     public init(
@@ -180,17 +160,13 @@ public final class SendViewModel {
         appState: AppState? = nil,
         amountStore: AmountStore = AmountStore(),
         rateService: RateQuoteService? = nil,
-        submitter: TransferSubmissionService? = nil,
-        stepUpAuth: StepUpAuthService = StepUpAuthService(),
-        stepUpInputsProvider: (@MainActor (Recipient) -> StepUpRuleInputs)? = nil
+        submitter: TransferSubmissionService? = nil
     ) {
         self.biometrics = biometrics
         self.appState = appState
         self.amountStore = amountStore
         self.rateService = rateService ?? RateQuoteService(api: api)
         self.submitter = submitter ?? TransferSubmissionService(api: api, appState: appState)
-        self.stepUpAuth = stepUpAuth
-        self.stepUpInputsProvider = stepUpInputsProvider
     }
 
     // MARK: - Re-binding (legacy)
@@ -307,30 +283,6 @@ public final class SendViewModel {
             return
         }
 
-        // U76c · StepUpAuth: between Face ID success and the POST,
-        // evaluate the high-risk gate. When required, freeze the
-        // submission context and surface `stepUpDecision` for the View
-        // to present the TOTP sheet. Submission resumes via
-        // `completeStepUp()`; user dismissal flows through
-        // `cancelStepUp()`.
-        let sendAmount = amountStore.decimalAmount
-        let inputs = stepUpRuleInputs(for: recipient)
-        let decision = stepUpAuth.evaluate(
-            amountAUD: sendAmount,
-            recipientHasCompletedTransfer: inputs.recipientHasCompletedTransfer,
-            recentTransferCount: inputs.recentTransferCount
-        )
-        if decision.isRequired {
-            pendingStepUpContext = PendingStepUpContext(
-                recipientId: recipient.id,
-                quote: quote,
-                slideStartEffectiveAt: slideStartEffectiveAt,
-                sendAmount: sendAmount
-            )
-            stepUpDecision = decision
-            return
-        }
-
         // Re-resolve current quote (rate may have refreshed during
         // biometrics) and let the submitter perform the final gate.
         let currentEffectiveAt = rateService.quote?.effectiveAt ?? slideStartEffectiveAt
@@ -339,53 +291,9 @@ public final class SendViewModel {
             recipientId: recipient.id,
             rateQuote: quote,
             currentRateQuoteAt: currentEffectiveAt,
-            sendAmount: sendAmount
+            sendAmount: amountStore.decimalAmount
         )
         apply(result)
-    }
-
-    // MARK: - Step-up auth (U76c)
-
-    /// Called by `StepUpAuthSheet` after the TOTP code verifies
-    /// against the backend. Drains the frozen context and runs the
-    /// same POST /transfers path `confirmAndSubmit` would have run
-    /// directly when the gate isn't triggered.
-    public func completeStepUp() async {
-        guard let ctx = pendingStepUpContext else { return }
-        pendingStepUpContext = nil
-        stepUpDecision = nil
-
-        // Re-resolve in case the rate refreshed during the TOTP
-        // prompt; the submitter still rejects on mismatch (C5).
-        let currentEffectiveAt = rateService.quote?.effectiveAt ?? ctx.slideStartEffectiveAt
-
-        let result = await submitter.submit(
-            recipientId: ctx.recipientId,
-            rateQuote: ctx.quote,
-            currentRateQuoteAt: currentEffectiveAt,
-            sendAmount: ctx.sendAmount
-        )
-        apply(result)
-    }
-
-    /// Called by `StepUpAuthSheet` when the user dismisses the sheet
-    /// before verifying. Clears state and returns the user to the
-    /// send screen unchanged — they can re-slide whenever they like.
-    public func cancelStepUp() {
-        pendingStepUpContext = nil
-        stepUpDecision = nil
-    }
-
-    /// Bridges the rule inputs from the SwiftData mirror (when a
-    /// provider was injected) into the pure `StepUpAuthService`.
-    /// Falls back to the "treat as known + no velocity" inputs when
-    /// no provider is wired — this matches previews and unit tests
-    /// where the gate should default to OFF unless explicitly tested.
-    private func stepUpRuleInputs(for recipient: Recipient) -> StepUpRuleInputs {
-        if let provider = stepUpInputsProvider {
-            return provider(recipient)
-        }
-        return StepUpRuleInputs(recipientHasCompletedTransfer: true, recentTransferCount: 0)
     }
 
     /// Consumes the sticky pending transfer. SendView calls this from
@@ -452,32 +360,6 @@ public final class SendViewModel {
             return .unknown(err.errorDescription ?? "Could not submit transfer.")
         }
     }
-}
-
-// MARK: - Step-up auth supporting types (U76c)
-
-/// Inputs the step-up gate needs that the VM doesn't already own.
-/// Lives here (rather than on `StepUpAuthService`) so the provider
-/// closure has a single concrete return type the caller can build
-/// from any source — `SyncService`, a fixture, or a test stub.
-public struct StepUpRuleInputs: Sendable, Hashable {
-    public let recipientHasCompletedTransfer: Bool
-    public let recentTransferCount: Int
-
-    public init(recipientHasCompletedTransfer: Bool, recentTransferCount: Int) {
-        self.recipientHasCompletedTransfer = recipientHasCompletedTransfer
-        self.recentTransferCount = recentTransferCount
-    }
-}
-
-/// Captured at the moment Face ID succeeded so the eventual
-/// POST /transfers carries the exact same intent the user authorised.
-/// Reused by `completeStepUp()` once the TOTP sheet returns.
-private struct PendingStepUpContext {
-    let recipientId: String
-    let quote: RateQuote
-    let slideStartEffectiveAt: Date
-    let sendAmount: Decimal
 }
 
 // MARK: - Banner sanitiser (C4)

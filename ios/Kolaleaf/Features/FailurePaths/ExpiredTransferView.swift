@@ -64,7 +64,7 @@ public struct ExpiredTransferView: View {
                 .font(KolaFont.pageTitle)
                 .kerning(KolaKerning.headline)
                 .foregroundStyle(KolaColors.textPrimary)
-            Text("We didn't receive your AUD within 24 hours, so we let the rate go.")
+            Text("Your locked rate expired after 24 hours.")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.textSecondary)
         }
@@ -173,7 +173,7 @@ public struct ExpiredTransferView: View {
         case .silent:
             EmptyView()
         case .slight:
-            Text("Today's rate is slightly lower than your locked rate.")
+            Text("Today's rate is lower than your locked rate.")
                 .font(KolaFont.timestamp)
                 .foregroundStyle(KolaColors.textSecondary)
         case .moderate(let pct):

@@ -57,7 +57,7 @@ public struct EmptySendView: View {
                 .kerning(KolaKerning.headline)
                 .foregroundStyle(KolaColors.textPrimary)
                 .multilineTextAlignment(.center)
-            Text("Add a recipient to send Naira home in seconds.")
+            Text("Add a recipient to send Naira home.")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.textSecondary)
                 .multilineTextAlignment(.center)

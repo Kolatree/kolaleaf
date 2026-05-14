@@ -73,7 +73,7 @@ public struct KYCUnderReviewView: View {
                 .kerning(KolaKerning.label)
                 .textCase(.uppercase)
                 .foregroundStyle(KolaColors.whiteOnGradientMuted)
-            Text("Under 24 hours")
+            Text("Most are reviewed within 24 hours.")
                 .font(KolaFont.rowValue)
                 .foregroundStyle(KolaColors.whiteOnGradient)
                 .fixedSize(horizontal: false, vertical: true)

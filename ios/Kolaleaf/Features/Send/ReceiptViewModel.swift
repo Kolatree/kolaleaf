@@ -90,7 +90,7 @@ public final class ReceiptViewModel {
         case .completed:
             return String(
                 localized: "receipt.headline.completed",
-                defaultValue: "Money's home"
+                defaultValue: "Transfer complete"
             )
         default:
             return String(
@@ -106,7 +106,7 @@ public final class ReceiptViewModel {
     public var savingsLineCopy: String {
         String(
             localized: "receipt.savings.best_available",
-            defaultValue: "Best available rate"
+            defaultValue: "Today's exchange rate"
         )
     }
 

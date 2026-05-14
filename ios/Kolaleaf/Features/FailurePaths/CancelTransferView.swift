@@ -107,7 +107,7 @@ public struct CancelTransferView: View {
         // The user hasn't pushed AUD yet (cancel is only reachable in
         // AWAITING_AUD), so there is nothing to refund. Surface that
         // up-front so the user can cancel without anxiety.
-        Text("Your AUD never left your bank — nothing to refund.")
+        Text("You haven't sent us any AUD yet — there's nothing to refund.")
             .font(KolaFont.row)
             .foregroundStyle(KolaColors.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -229,7 +229,7 @@ public struct CancelTransferView: View {
                 tint: KolaColors.warning,
                 iconSystemName: "exclamationmark.triangle.fill",
                 title: "Too late",
-                message: "Your AUD has arrived. Track it instead.",
+                message: "Your AUD has already arrived, so this transfer can't be cancelled. You can track its progress instead.",
                 retry: nil
             )
             Button(action: { onTrackTransfer(transferId) }) {

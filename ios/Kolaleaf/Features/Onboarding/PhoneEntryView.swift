@@ -86,7 +86,7 @@ public struct PhoneEntryView: View {
                 .kerning(KolaKerning.headline)
                 .foregroundStyle(KolaColors.whiteOnGradient)
                 .accessibilityAddTraits(.isHeader)
-            Text("We'll text you a 6-digit code to verify it. Standard SMS rates apply.")
+            Text("We'll text you a 6-digit code. Your mobile carrier's standard SMS charges may apply.")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.whiteOnGradientMuted)
                 .fixedSize(horizontal: false, vertical: true)

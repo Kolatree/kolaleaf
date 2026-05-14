@@ -36,13 +36,13 @@ public enum TransferStateLabels {
         case .awaitingAud:
             return "Push AUD to your PayID. We'll handle the rest."
         case .audReceived:
-            return "Your funds are with us."
+            return "We've received your AUD."
         case .processingNgn:
             return "Sending NGN to your recipient's bank."
         case .ngnSent:
             return "Funds have left for the recipient."
         case .completed:
-            return "Your recipient has the money."
+            return "We've paid out to your recipient's bank."
         default:
             return nil
         }

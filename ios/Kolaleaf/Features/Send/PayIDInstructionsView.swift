@@ -70,12 +70,12 @@ public struct PayIDInstructionsView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: KolaSpacing.s) {
-            Text("Push your AUD")
+            Text("Send your AUD")
                 .font(KolaFont.pageTitle)
                 .kerning(KolaKerning.headline)
                 .foregroundStyle(KolaColors.textPrimary)
                 .accessibilityAddTraits(.isHeader)
-            Text("Open your bank's app and send to this PayID. We'll handle the rest once funds arrive.")
+            Text("Open your bank's app and send to this PayID. Once we receive it, we'll start your transfer.")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)

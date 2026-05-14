@@ -77,10 +77,10 @@ public struct FloatPausedView: View {
         HStack(spacing: KolaSpacing.s) {
             PulseDot()
             VStack(alignment: .leading, spacing: 2) {
-                Text("We're holding briefly while we top up.")
+                Text("We're holding briefly while we get things ready.")
                     .font(KolaFont.rowValue)
                     .foregroundStyle(KolaColors.textPrimary)
-                Text("Your transfer will continue automatically.")
+                Text("We'll resume your transfer as soon as we can.")
                     .font(KolaFont.tagline)
                     .foregroundStyle(KolaColors.textSecondary)
             }

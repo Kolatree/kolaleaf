@@ -104,12 +104,12 @@ final class ReceiptViewModelTests: XCTestCase {
 
     // MARK: - Headline
 
-    func test_headline_isMoneysHome_whenCompleted() {
+    func test_headline_isTransferComplete_whenCompleted() {
         let vm = ReceiptViewModel(
             transfer: makeTransfer(status: .completed),
             recipient: makeRecipient()
         )
-        XCTAssertEqual(vm.headline, "Money's home")
+        XCTAssertEqual(vm.headline, "Transfer complete")
     }
 
     func test_headline_isSentAndOnTheWay_whenNotYetCompleted() {
@@ -165,9 +165,9 @@ final class ReceiptViewModelTests: XCTestCase {
 
     // MARK: - Summary card
 
-    func test_summary_includesBestRateLine() {
+    func test_summary_includesTodaysRateLine() {
         // Backend doesn't ship a saved-vs-bank-rate delta yet. The
-        // receipt surfaces a "Best available rate" line in its place
+        // receipt surfaces a "Today's exchange rate" line in its place
         // so the value-prop doesn't disappear from the design.
         // S2 / OO-007: renamed to `savingsLineCopy`.
         let vm = ReceiptViewModel(
@@ -175,7 +175,7 @@ final class ReceiptViewModelTests: XCTestCase {
             recipient: makeRecipient()
         )
         XCTAssertTrue(
-            vm.savingsLineCopy.contains("Best available rate"),
+            vm.savingsLineCopy.contains("Today's exchange rate"),
             "Expected savings-line copy to mention the rate value-prop."
         )
     }

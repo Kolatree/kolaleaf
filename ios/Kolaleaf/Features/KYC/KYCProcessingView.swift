@@ -87,7 +87,7 @@ public struct KYCProcessingView: View {
                 .kerning(KolaKerning.headline)
                 .foregroundStyle(KolaColors.whiteOnGradient)
                 .accessibilityAddTraits(.isHeader)
-            Text("This usually takes 30 seconds.")
+            Text("We're checking your documents now. It usually takes a few minutes and we'll write to you if any issue.")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.whiteOnGradientMuted)
                 .fixedSize(horizontal: false, vertical: true)

@@ -57,7 +57,7 @@ public struct ConfirmAddressView: View {
                 .font(KolaFont.headline)
                 .kerning(KolaKerning.headline)
                 .foregroundStyle(KolaColors.textPrimary)
-            Text("AUSTRAC requires us to keep your residential address current.")
+            Text("We need to keep your residential address up to date so we can comply with AUSTRAC rules.")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.textSecondary)
         }
@@ -75,7 +75,7 @@ public struct ConfirmAddressView: View {
                 }
             }
         )) {
-            Text("I still live at this address")
+            Text("I confirm this is still my residential address.")
                 .font(KolaFont.row)
                 .foregroundStyle(KolaColors.textPrimary)
         }

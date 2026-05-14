@@ -34,7 +34,7 @@ final class WelcomeViewSnapshotTests: SnapshotTestCase {
         let labels = WelcomeAccessibilityLabels.self
         XCTAssertEqual(labels.primary, "Get started, sign up for an account")
         XCTAssertEqual(labels.secondary, "Sign in, returning user")
-        XCTAssertEqual(labels.trust, "Licensed Australian money transmitter, AUSTRAC reference RG 105")
+        XCTAssertEqual(labels.trust, "Registered Australian money transmitter, AUSTRAC Registered")
         XCTAssertEqual(labels.wordmark, "Kolaleaf")
     }
 }
@@ -45,6 +45,6 @@ final class WelcomeViewSnapshotTests: SnapshotTestCase {
 enum WelcomeAccessibilityLabels {
     static let primary = "Get started, sign up for an account"
     static let secondary = "Sign in, returning user"
-    static let trust = "Licensed Australian money transmitter, AUSTRAC reference RG 105"
+    static let trust = "Registered Australian money transmitter, AUSTRAC Registered"
     static let wordmark = "Kolaleaf"
 }

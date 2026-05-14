@@ -84,7 +84,7 @@ public struct KYCIntroView: View {
                 .kerning(KolaKerning.headline)
                 .foregroundStyle(KolaColors.whiteOnGradient)
                 .accessibilityAddTraits(.isHeader)
-            Text("AUSTRAC requires this for every Australian remittance customer. It takes about 3 minutes.")
+            Text("AUSTRAC requires this for every Australian remittance customer. It usually takes a few minutes.")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.whiteOnGradientMuted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -158,7 +158,7 @@ public struct KYCIntroView: View {
             }
             .accessibilityHint(rationaleExpanded ? "Collapse the rationale" : "Show why we ask for identity verification")
             if rationaleExpanded {
-                Text("Kolaleaf is registered with AUSTRAC as a money-transfer business. Verifying your identity protects you from fraud and is required by Australian law for every transfer. Your documents are processed by Sumsub, our regulated identity provider.")
+                Text("Kolaleaf is registered with AUSTRAC as a money-transfer business. Verifying your identity is required by Australian law for every transfer. Your documents are processed by our third party regulated identity provider.")
                     .font(KolaFont.tagline)
                     .foregroundStyle(KolaColors.whiteOnGradientMuted)
                     .fixedSize(horizontal: false, vertical: true)

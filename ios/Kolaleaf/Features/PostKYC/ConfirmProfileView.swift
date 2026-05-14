@@ -60,7 +60,7 @@ public struct ConfirmProfileView: View {
 
     private var legalNameField: some View {
         VStack(alignment: .leading, spacing: KolaSpacing.s) {
-            fieldLabel("Legal name (verified)")
+            fieldLabel("From your verified ID")
             Text(vm.legalName.isEmpty ? "—" : vm.legalName)
                 .font(KolaFont.row)
                 .foregroundStyle(KolaColors.textSecondary)

@@ -201,7 +201,7 @@ public struct SendView: View {
         Button(action: { Task { await vm.loadRate() } }) {
             HStack(spacing: KolaSpacing.s) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                Text("Rate is out of date. Tap to refresh.")
+                Text("Rate has refreshed. Tap to use the new rate.")
                     .font(KolaFont.tagline)
             }
             .foregroundStyle(KolaColors.warning)

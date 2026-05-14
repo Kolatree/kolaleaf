@@ -68,7 +68,7 @@ public struct RegistrationDetailsView: View {
                 .kerning(KolaKerning.headline)
                 .foregroundStyle(KolaColors.whiteOnGradient)
                 .accessibilityAddTraits(.isHeader)
-            Text("A few details so we can comply with AUSTRAC.")
+            Text("A few details so we can verify your identity under Australian law.")
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.whiteOnGradientMuted)
                 .fixedSize(horizontal: false, vertical: true)

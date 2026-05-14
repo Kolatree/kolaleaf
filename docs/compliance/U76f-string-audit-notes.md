@@ -65,7 +65,7 @@ sees, and several make either a regulatory-status claim or a speed claim.
   hold or manual review.
 - **Suggested rewrite:** "Add a recipient to send Naira home." (drop the
   speed claim entirely) or "Add a recipient to start your first
-  transfer."
+  transfer." **Accept this**
 
 #### S-002: `ios/Kolaleaf/Features/KYC/KYCIntroView.swift:86` — `"AUSTRAC requires this for every Australian remittance customer. It takes about 3 minutes."`
 
@@ -74,23 +74,22 @@ sees, and several make either a regulatory-status claim or a speed claim.
   manual review. Officer should confirm whether the time estimate is
   defensible or should be softer.
 - **Suggested rewrite:** "It usually takes a few minutes." or drop the
-  duration sentence.
+  duration sentence. **Accept**
 
 #### S-003: `ios/Kolaleaf/Features/KYC/KYCProcessingView.swift:89` — `"This usually takes 30 seconds."`
 
 - **Why flagged:** Same shape as S-002 — narrower window, more aggressive
   promise. The polling fallback can take materially longer (the VM
   surfaces "Pausing for Xs" rate-limit messages).
-- **Suggested rewrite:** "We're checking your documents now." (drop the
-  duration).
+- **Suggested rewrite:** "We're checking your documents now. It usually takes a few minutes and we will write you if any issue. " (drop the
+  duration). **Accept**
 
 #### S-004: `ios/Kolaleaf/Features/KYC/KYCUnderReviewView.swift:74` — `"Under 24 hours"`
 
 - **Why flagged:** Posted as a "Typical wait" claim on the under-review
   screen. AUSTRAC-triggered manual reviews can exceed 24h. Officer should
   decide if this is a soft norm or a commitment.
-- **Suggested rewrite:** "Usually within one business day." or "Most are
-  reviewed within 24 hours."
+- **Suggested rewrite:** "Most are reviewed within 24 hours." **Accept**
 
 ---
 
@@ -103,20 +102,20 @@ sees, and several make either a regulatory-status claim or a speed claim.
   word is mild, but in combination they form an aggregate promise.
   Compliance officer should confirm comfort with each leg.
 - **Suggested rewrite:** "Kolaleaf helps Africans abroad support loved
-  ones across borders." (drop all three adverbs) or keep one if defensible.
+  ones across borders." (drop all three adverbs) or keep one if defensible. Keep.
 
 #### S-102: `ios/Kolaleaf/Features/Onboarding/WelcomeView.swift:94` — `"Send money home with\ntrust, care, and confidence."`
 
 - **Why flagged:** "trust" framed as a product attribute the user gets,
   not as a brand value. Lighter weight than S-101 but worth a look.
-- **Suggested rewrite:** Accept, or "Send money home with care."
+- **Suggested rewrite:** "Send money home with care." **Accept**
 
-#### S-103: `ios/Kolaleaf/Features/Send/TransferStateLabels.swift:35` — `"We've reserved your rate."`
+#### S-103: `ios/Kolaleaf/Features/Send/TransferStateLabels.swift:35` — `"We've reserved your rate."` keep this. 
 
 - **Why flagged:** "Reserved" sounds like a firm commitment for a fixed
   amount of time. The transfer expires at 24h (see S-501 below) but the
   word "reserved" without a duration could imply something stronger.
-- **Suggested rewrite:** "Your rate is held for 24 hours."
+- **Suggested rewrite:** "Your rate is held for 24 hours." 
 
 #### S-104: `ios/Kolaleaf/Features/Send/ReceiptViewModel.swift:93` — `"Money's home"` (headline on COMPLETED receipt)
 
@@ -124,14 +123,14 @@ sees, and several make either a regulatory-status claim or a speed claim.
   fires on `TransferStatus.completed`, but the recipient bank may still
   hold the money briefly after `COMPLETED` settles. Officer should
   confirm "home" reads as "delivered" and is acceptable.
-- **Suggested rewrite:** "Money delivered" or "Transfer complete".
+- **Suggested rewrite:** "Transfer complete". Use this
 
 #### S-105: `ios/Kolaleaf/Features/Send/TransferStateLabels.swift:45` — `"Your recipient has the money."`
 
 - **Why flagged:** Same risk class as S-104. Stated as a fact on the
   `.completed` row even if the recipient bank hasn't fully credited the
   account.
-- **Suggested rewrite:** "We've paid out to your recipient's bank."
+- **Suggested rewrite:** "We've paid out to your recipient's bank." use this
 
 ---
 
@@ -145,10 +144,9 @@ sees, and several make either a regulatory-status claim or a speed claim.
   registers, not licences). The README/CLAUDE.md correctly calls Kolaleaf
   "AUSTRAC-registered", so the trust strip currently says something
   stronger than the rest of the codebase.
-- **Suggested rewrite:** "AUSTRAC-registered remittance provider" or
-  "Registered money transfer provider, Australia" — both more precise.
+- **Suggested rewrite:** "AUSTRAC-registered remittance provider" use this
 
-#### S-202: `ios/Kolaleaf/Features/Onboarding/WelcomeView.swift:163` — `"AUSTRAC RG 105"`
+#### S-202: `ios/Kolaleaf/Features/Onboarding/WelcomeView.swift:163` — `"AUSTRAC RG 105"` - Use "Austrac Registered".
 
 - **Why flagged:** AUSTRAC issues a _registration number_ (or AUS RA
   number) to remitters; "RG 105" is the AUSTRAC _Remittance Sector
@@ -168,14 +166,14 @@ sees, and several make either a regulatory-status claim or a speed claim.
 
 - **Why flagged:** Screen-reader version of S-201 + S-202. Must match
   whatever wording the officer approves above.
-- **Suggested rewrite:** Mirror the resolved S-201/S-202 wording.
+- **Suggested rewrite:** Mirror the resolved S-201/S-202 wording. use: Registerd Australian money transmitter
 
 #### S-204: `ios/Kolaleaf/Features/Send/PayIDInstructionsView.swift:73` — `"Push your AUD"`
 
 - **Why flagged:** "Push" is the bank-API verb for PayID transfers and
   is industry-standard, but a non-technical user could read it as "give
   us your funds" framing. Marginal; officer's call.
-- **Suggested rewrite:** Accept, or "Send your AUD".
+- **Suggested rewrite:**  "Send your AUD". use this. 
 
 #### S-205: `ios/Kolaleaf/Features/Send/PayIDInstructionsView.swift:77` — `"Open your bank's app and send to this PayID. We'll handle the rest once funds arrive."`
 
@@ -183,8 +181,7 @@ sees, and several make either a regulatory-status claim or a speed claim.
   but worth confirming. (Engineering note: the float-paused / NGN-retry
   paths can intervene between AUD arrival and NGN settlement, so "the
   rest" is not always automatic in the user's lifetime view.)
-- **Suggested rewrite:** Accept, or "Once we receive it, we'll start
-  your transfer."
+- **Suggested rewrite:** "Once we receive it, we'll start your transfer." use this.
 
 #### S-206: `ios/Kolaleaf/Features/FailurePaths/FloatPausedView.swift:80` — `"We're holding briefly while we top up."`
 
@@ -196,7 +193,7 @@ sees, and several make either a regulatory-status claim or a speed claim.
   user-facing language, or should this become "while we get things
   ready"?
 - **Suggested rewrite:** "We're holding briefly while we get things
-  ready." or "Your transfer is paused. We'll resume shortly."
+  ready." use this
 
 #### S-207: `ios/Kolaleaf/Features/FailurePaths/FloatPausedView.swift:83` — `"Your transfer will continue automatically."`
 
@@ -204,22 +201,21 @@ sees, and several make either a regulatory-status claim or a speed claim.
   branch can fail (the VM has an "Estimated time to resume" + "Still
   holding" fallback at lines 133–145), so "will continue automatically"
   may overpromise.
-- **Suggested rewrite:** "We'll resume your transfer as soon as we can."
+- **Suggested rewrite:** "We'll resume your transfer as soon as we can." use this
 
 #### S-208: `ios/Kolaleaf/Features/FailurePaths/FloatPausedView.swift:140` — `"Still holding"`
 
 - **Why flagged:** Pairs with S-207. Once the ETA elapses, copy flips to
   "Still holding" — fine, but worth officer sign-off as a connected pair
   with S-206/S-207.
-- **Suggested rewrite:** Accept.
+- **Suggested rewrite:** Accept. okay
 
 #### S-209: `ios/Kolaleaf/Features/Send/PayIDInstructionsView.swift:73` (header context) and `ios/Kolaleaf/Features/Send/TransferStateLabels.swift:39` — `"Your funds are with us."`
 
 - **Why flagged:** Subtitle on `AUD_RECEIVED`. "With us" is fine but
   loosely implies custody; AUSTRAC's settlement-account view of this
   step may have a preferred phrasing.
-- **Suggested rewrite:** "We've received your AUD." (action-oriented,
-  same information).
+- **Suggested rewrite:** "We've received your AUD." use this
 
 ---
 
@@ -233,8 +229,7 @@ sees, and several make either a regulatory-status claim or a speed claim.
   - ACCC would treat "best available rate" as an unsubstantiated
     superlative claim. This is engineering's highest-confidence rewrite
     candidate.
-- **Suggested rewrite:** "Today's exchange rate" or remove the row
-  entirely until a real savings figure is wired up.
+- **Suggested rewrite:** "Today's exchange rate" use this
 
 #### S-302: `ios/Kolaleaf/Features/PostKYC/ConfirmProfileView.swift:63` — `"Legal name (verified)"`
 
@@ -242,8 +237,7 @@ sees, and several make either a regulatory-status claim or a speed claim.
   pre-populated from the Sumsub KYC return, but the user may have
   rejected/edited it earlier. Officer should confirm "verified" is the
   right framing for the _legal_ name shown here (read-only).
-- **Suggested rewrite:** Accept (the field is read-only and reflects the
-  KYC-returned name), or "From your verified ID".
+- **Suggested rewrite:** "From your verified ID". use this
 
 #### S-303: `ios/Kolaleaf/Features/PostKYC/ConfirmAddressView.swift:60` — `"AUSTRAC requires us to keep your residential address current."`
 
@@ -252,7 +246,7 @@ sees, and several make either a regulatory-status claim or a speed claim.
   Rules require — the rule applies to the _reporting entity_, not
   directly to the customer.
 - **Suggested rewrite:** "We need to keep your residential address up to
-  date so we can comply with AUSTRAC rules."
+  date so we can comply with AUSTRAC rules." use this
 
 #### S-304: `ios/Kolaleaf/Features/PostKYC/ConfirmAddressView.swift:78` — `"I still live at this address"`
 
@@ -261,9 +255,9 @@ sees, and several make either a regulatory-status claim or a speed claim.
   audit-trail purposes (`transfer_events` / equivalent will record the
   attestation).
 - **Suggested rewrite:** Accept, or "I confirm this is still my
-  residential address."
+  residential address." use this
 
-#### S-305: `ios/Kolaleaf/Features/KYC/KYCIntroView.swift:152` — `"Kolaleaf is registered with AUSTRAC as a money-transfer business. Verifying your identity protects you from fraud and is required by Australian law for every transfer. Your documents are processed by Sumsub, our regulated identity provider."`
+#### S-305: `ios/Kolaleaf/Features/KYC/KYCIntroView.swift:152` — `"Kolaleaf is registered with AUSTRAC as a money-transfer business. Verifying your identity is required by Australian law for every transfer. Your documents are processed our third party regulated identity provider."` use this
 
 - **Why flagged:** Most-load-bearing single sentence in the app. Three
   legal/regulatory claims in one paragraph:
@@ -282,13 +276,13 @@ sees, and several make either a regulatory-status claim or a speed claim.
 - **Why flagged:** Same shape as S-303. "Comply with AUSTRAC" is a soft
   paraphrase. Officer should confirm framing.
 - **Suggested rewrite:** "A few details so we can verify your identity
-  under Australian law."
+  under Australian law." use this. 
 
 ---
 
 ### Customer obligation precision
 
-#### S-401: `ios/Kolaleaf/Features/Onboarding/EmailEntryView.swift:106` — `"I agree to receive transactional emails about my transfers (required for compliance)."`
+#### S-401: `ios/Kolaleaf/Features/Onboarding/EmailEntryView.swift:106` — `"I agree to receive transactional emails about my transfers (required for compliance)."` use this
 
 - **Why flagged:** Consent checkbox. Officer should confirm:
   (a) "transactional emails" is the right scope wording,
@@ -298,7 +292,7 @@ sees, and several make either a regulatory-status claim or a speed claim.
 - **Suggested rewrite:** Defer to legal — the wording is fine but
   needs sign-off.
 
-#### S-402: `ios/Kolaleaf/Features/Onboarding/PhoneEntryView.swift:158` — `"I agree to receive transactional SMS about my transfers (required for compliance)."`
+#### S-402: `ios/Kolaleaf/Features/Onboarding/PhoneEntryView.swift:158` — `"I agree to receive transactional SMS about my transfers (required for compliance)."` use this
 
 - **Why flagged:** Same as S-401 for SMS. Spam Act has specific
   carve-outs for transactional messages; officer should confirm.
@@ -309,8 +303,8 @@ sees, and several make either a regulatory-status claim or a speed claim.
 - **Why flagged:** "Standard SMS rates apply" is a common disclaimer, but
   AUSTRAC's parent regulator framework (and ACCC) like to see precise
   pricing disclosures. Officer's call whether this is enough.
-- **Suggested rewrite:** Accept, or "We'll text you a 6-digit code. Your
-  mobile carrier's standard SMS charges may apply."
+- **Suggested rewrite:** "We'll text you a 6-digit code. Your
+  mobile carrier's standard SMS charges may apply." use this
 
 #### S-404: `ios/Kolaleaf/Features/FailurePaths/ExpiredTransferView.swift:67` — `"We didn't receive your AUD within 24 hours, so we let the rate go."`
 
@@ -319,7 +313,7 @@ sees, and several make either a regulatory-status claim or a speed claim.
   expectation. Officer should confirm the wording matches the T&Cs
   governing transfer expiry.
 - **Suggested rewrite:** "Your locked rate expired after 24 hours." (and
-  link to the T&Cs).
+  link to the T&Cs). use this
 
 #### S-405: `ios/Kolaleaf/Features/FailurePaths/CancelTransferView.swift:110` — `"Your AUD never left your bank — nothing to refund."`
 
@@ -328,7 +322,7 @@ sees, and several make either a regulatory-status claim or a speed claim.
   universally true on this screen.
 - **Suggested rewrite:** Accept (the screen is only reachable in
   `AWAITING_AUD`), or "You haven't sent us any AUD yet — there's nothing
-  to refund."
+  to refund." use this
 
 #### S-406: `ios/Kolaleaf/Features/FailurePaths/CancelTransferView.swift:232` — `"Your AUD has arrived. Track it instead."`
 
@@ -337,7 +331,7 @@ sees, and several make either a regulatory-status claim or a speed claim.
   customer-cancellation rights after AUD receipt are correctly
   represented.
 - **Suggested rewrite:** "Your AUD has already arrived, so this transfer
-  can't be cancelled. You can track its progress instead."
+  can't be cancelled. You can track its progress instead." use this
 
 #### S-407: `ios/Kolaleaf/Features/Send/StepUpAuthSheet.swift:134` — `"You've sent a few transfers recently. Confirm with your authenticator to keep your account safe."`
 
@@ -346,7 +340,7 @@ sees, and several make either a regulatory-status claim or a speed claim.
   generic "extra confirmation needed" prompt — naming the trigger may
   give bad actors information about thresholds.
 - **Suggested rewrite:** "Please confirm this transfer with your
-  authenticator." (drop the velocity hint).
+  authenticator." (drop the velocity hint). use this. 
 
 ---
 
@@ -358,8 +352,7 @@ sees, and several make either a regulatory-status claim or a speed claim.
   underlying rate is refreshed every 15 min by the rate engine; this
   banner appears when the cached quote ages out. Officer should confirm
   wording is acceptable.
-- **Suggested rewrite:** Accept, or "Rate has refreshed. Tap to use the
-  new rate."
+- **Suggested rewrite:** "Rate has refreshed. Tap to use the new rate." use this
 
 #### S-502: `ios/Kolaleaf/Features/FailurePaths/ExpiredTransferView.swift:176` — `"Today's rate is slightly lower than your locked rate."`
 
@@ -369,7 +362,7 @@ sees, and several make either a regulatory-status claim or a speed claim.
   warning). Officer should confirm that subjective copy stacked on top
   of a true numeric delta is OK.
 - **Suggested rewrite:** Accept (the precise pct is shown below it), or
-  remove "slightly" and let the next-line percentage do the work.
+  remove "slightly" and let the next-line percentage do the work. remove "slightly"
 
 #### S-503: `ios/Kolaleaf/Features/FailurePaths/ExpiredTransferView.swift:185` and `:180` — `"Today's rate is X% lower than your locked rate."` / `"Today's rate is X% lower"`
 
@@ -383,8 +376,7 @@ sees, and several make either a regulatory-status claim or a speed claim.
 - **Why flagged:** Negative-outcome disclosure on the hard-warning
   branch (>10% rate move). Wording is fine but should be confirmed as
   the consumer-protection-grade disclosure.
-- **Suggested rewrite:** Accept, or "You'll receive less Naira than your
-  original quote showed."
+- **Suggested rewrite:** "You'll receive less Naira than your original quote showed."
 
 #### S-505: `ios/Kolaleaf/Features/Help/HelpViewModel.swift:70` — `"Daily limits, FX rates and service fees."`
 
@@ -392,7 +384,7 @@ sees, and several make either a regulatory-status claim or a speed claim.
   officer to confirm the help-card subtitle accurately reflects what the
   user finds at that URL, and that "service fees" matches the wording
   the legal team uses in T&Cs.
-- **Suggested rewrite:** Accept (after URL content sign-off).
+- **Suggested rewrite:** Accept 
 
 ---
 

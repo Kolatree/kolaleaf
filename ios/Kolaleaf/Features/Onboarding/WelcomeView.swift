@@ -91,7 +91,7 @@ public struct WelcomeView: View {
 
     /// Hero copy from Vectors §8 hero recommendation.
     private var pitch: some View {
-        Text("Send money home with\ntrust, care, and confidence.")
+        Text("Send money home with care.")
             .font(KolaFont.headline)
             .kerning(KolaKerning.headline)
             .foregroundStyle(KolaColors.ink)
@@ -156,17 +156,17 @@ public struct WelcomeView: View {
     /// 70/20/10 colour ratio: gold = 10% accent moments only.
     private var trustStrip: some View {
         HStack(spacing: KolaSpacing.s) {
-            Text("Licensed AU money transmitter")
+            Text("AUSTRAC-registered remittance provider")
                 .foregroundStyle(KolaColors.muted)
             Text("·")
                 .foregroundStyle(KolaColors.hopeGold)
-            Text("AUSTRAC RG 105")
+            Text("AUSTRAC Registered")
                 .foregroundStyle(KolaColors.muted)
         }
         .font(KolaFont.trust)
         .kerning(KolaKerning.label)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Licensed Australian money transmitter, AUSTRAC reference RG 105")
+        .accessibilityLabel("Registered Australian money transmitter, AUSTRAC Registered")
     }
 
     // MARK: - Pasteboard one-shot

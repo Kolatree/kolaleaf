@@ -104,6 +104,27 @@ public struct SendView: View {
             )
             .presentationDetents([.large])
         }
+        // U76c · StepUpAuth: present TOTP confirmation sheet when the
+        // rule engine flagged the transfer as high-risk. The sheet
+        // resolves via `completeStepUp()` (success) or `cancelStepUp()`
+        // (dismiss); both clear `stepUpDecision`.
+        .sheet(isPresented: Binding(
+            get: { vm.stepUpDecision != nil },
+            set: { presenting in
+                if !presenting && vm.stepUpDecision != nil {
+                    vm.cancelStepUp()
+                }
+            }
+        )) {
+            if let decision = vm.stepUpDecision {
+                StepUpAuthSheet(
+                    decision: decision,
+                    onVerified: { Task { await vm.completeStepUp() } },
+                    onCancelled: { vm.cancelStepUp() }
+                )
+                .presentationDetents([.medium, .large])
+            }
+        }
         // C6 / ADV-P6-C4: pull the transfer through the consume gate
         // on the in-flight → idle edge.
         .onChange(of: vm.isSubmittingTransfer) { _, nowSubmitting in

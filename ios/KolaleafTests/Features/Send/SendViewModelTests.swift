@@ -274,4 +274,143 @@ final class SendViewModelTests: XCTestCase {
 
         XCTAssertEqual(vm.lastError, .sessionExpired)
     }
+
+    // MARK: - U76c · StepUpAuth
+
+    /// Helper that drives the VM through Face ID with a step-up
+    /// provider injected for the fixture inputs.
+    private func makeStepUpVM(
+        api: FakeAPIClient,
+        inputs: StepUpRuleInputs
+    ) -> SendViewModel {
+        SendViewModel(
+            api: api,
+            biometrics: FakeBiometricsService(staged: .success),
+            appState: makeAppState(),
+            stepUpAuth: StepUpAuthService(),
+            stepUpInputsProvider: { _ in inputs }
+        )
+    }
+
+    private func sealAmountAndRecipient(
+        on vm: SendViewModel,
+        digits: [Int]
+    ) async {
+        await vm.loadRate()
+        vm.selectedRecipient = makeSampleRecipient()
+        for d in digits { vm.amountStore.append(d) }
+    }
+
+    func test_confirmAndSubmit_stepUpRequired_shortCircuitsBeforePost() async {
+        let api = FakeAPIClient()
+        await api.stageSuccess(RatesEndpoints.Quote.self, makeRateResponse())
+        // Stage a Create response so a regression that fails the gate
+        // open would surface as a successful POST below.
+        await api.stageSuccess(
+            TransfersEndpoints.Create.self,
+            CreateTransferResponse(transfer: sampleTransfer())
+        )
+
+        let vm = makeStepUpVM(
+            api: api,
+            inputs: StepUpRuleInputs(
+                recipientHasCompletedTransfer: false, // new recipient
+                recentTransferCount: 0
+            )
+        )
+        // $10 to a new recipient → firstSend gate.
+        await sealAmountAndRecipient(on: vm, digits: [1, 0, 0, 0])
+
+        await vm.confirmAndSubmit()
+
+        XCTAssertNotNil(vm.stepUpDecision,
+                        "Gate must surface a decision for the View to present.")
+        XCTAssertEqual(vm.stepUpDecision?.reasons, [.firstSendToRecipient])
+        let creates = await api.calls.filter { $0.path == "/api/v1/transfers" }
+        XCTAssertEqual(creates.count, 0,
+                       "POST /transfers must NOT fire when step-up is required.")
+    }
+
+    func test_completeStepUp_resumesPostExactlyOnce() async {
+        let api = FakeAPIClient()
+        await api.stageSuccess(RatesEndpoints.Quote.self, makeRateResponse())
+        await api.stageSuccess(
+            TransfersEndpoints.Create.self,
+            CreateTransferResponse(transfer: sampleTransfer())
+        )
+
+        let vm = makeStepUpVM(
+            api: api,
+            inputs: StepUpRuleInputs(
+                recipientHasCompletedTransfer: false,
+                recentTransferCount: 0
+            )
+        )
+        await sealAmountAndRecipient(on: vm, digits: [1, 0, 0, 0])
+        await vm.confirmAndSubmit()
+        XCTAssertNotNil(vm.stepUpDecision)
+
+        await vm.completeStepUp()
+
+        XCTAssertNil(vm.stepUpDecision, "Decision cleared after step-up completes.")
+        let creates = await api.calls.filter { $0.path == "/api/v1/transfers" }
+        XCTAssertEqual(creates.count, 1,
+                       "completeStepUp must fire POST /transfers exactly once.")
+        let consumed = vm.consumeLastCreated()
+        XCTAssertEqual(consumed?.id, "txn_001")
+    }
+
+    func test_cancelStepUp_doesNotPost() async {
+        let api = FakeAPIClient()
+        await api.stageSuccess(RatesEndpoints.Quote.self, makeRateResponse())
+        await api.stageSuccess(
+            TransfersEndpoints.Create.self,
+            CreateTransferResponse(transfer: sampleTransfer())
+        )
+
+        let vm = makeStepUpVM(
+            api: api,
+            inputs: StepUpRuleInputs(
+                recipientHasCompletedTransfer: false,
+                recentTransferCount: 0
+            )
+        )
+        await sealAmountAndRecipient(on: vm, digits: [1, 0, 0, 0])
+        await vm.confirmAndSubmit()
+        XCTAssertNotNil(vm.stepUpDecision)
+
+        vm.cancelStepUp()
+
+        XCTAssertNil(vm.stepUpDecision)
+        let creates = await api.calls.filter { $0.path == "/api/v1/transfers" }
+        XCTAssertEqual(creates.count, 0, "cancelStepUp must not POST.")
+    }
+
+    func test_confirmAndSubmit_stepUpNotRequired_proceedsToPostAsBefore() async {
+        // With provider injected returning "known recipient + zero
+        // velocity", the gate only trips on amount. $10 is below
+        // threshold, so the existing happy-path applies.
+        let api = FakeAPIClient()
+        await api.stageSuccess(RatesEndpoints.Quote.self, makeRateResponse())
+        await api.stageSuccess(
+            TransfersEndpoints.Create.self,
+            CreateTransferResponse(transfer: sampleTransfer())
+        )
+
+        let vm = makeStepUpVM(
+            api: api,
+            inputs: StepUpRuleInputs(
+                recipientHasCompletedTransfer: true,
+                recentTransferCount: 0
+            )
+        )
+        await sealAmountAndRecipient(on: vm, digits: [1, 0, 0, 0])
+
+        await vm.confirmAndSubmit()
+
+        XCTAssertNil(vm.stepUpDecision,
+                     "Gate must remain off for low-value known-recipient submit.")
+        let consumed = vm.consumeLastCreated()
+        XCTAssertEqual(consumed?.id, "txn_001")
+    }
 }

@@ -14,7 +14,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    DEVELOPMENT_TEAM: "5VCH6937XM" # Acuoos Pty Ltd
+    DEVELOPMENT_TEAM: "XV85Z6GMF7" # Kolatree Pty Ltd
     CODE_SIGN_STYLE: Automatic
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     CLANG_ENABLE_MODULES: YES

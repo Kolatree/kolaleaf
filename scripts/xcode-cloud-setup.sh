@@ -124,16 +124,25 @@ say "  macos: $MACOS_VERSION_ID"
 # -------------------------------------------------------------------
 say "writing workflow payloads → $work_dir/ …"
 
-# Shared action: test on iPhone 16 Pro + iPhone SE 3rd gen, both
-# require pass.
+# Shared action: test on the iPhone simulator pool. Apple's
+# `destination` is a STRING enum (not an object); ANY_IOS_SIMULATOR
+# picks the current default sim runner.
 TEST_ACTION='{
   "actionType": "TEST",
   "name": "Test",
   "scheme": "Kolaleaf",
   "platform": "IOS",
   "isRequiredToPass": true,
-  "destination": {
-    "deviceTypeName": "iPhone 16 Pro"
+  "testConfiguration": {
+    "testDestinations": [
+      {
+        "kind": "SIMULATOR",
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro",
+        "deviceTypeName": "iPhone 16 Pro",
+        "runtimeIdentifier": "com.apple.CoreSimulator.SimRuntime.iOS-26-0",
+        "runtimeName": "iOS 26.0"
+      }
+    ]
   }
 }'
 
@@ -144,19 +153,20 @@ BUILD_ACTION='{
   "scheme": "Kolaleaf",
   "platform": "IOS",
   "isRequiredToPass": true,
-  "destination": {
-    "deviceTypeName": "iPhone 16 Pro"
-  }
+  "destination": "ANY_IOS_SIMULATOR"
 }'
 
-# Archive action — used by main-beta. Distribution to TestFlight
-# Internal is the post-action.
+# Archive action — used by main-beta. Archive runs against the
+# `ANY_IOS_DEVICE` slice so Xcode Cloud produces a Distribution
+# IPA suitable for TestFlight upload (signing via the managed
+# certs Xcode Cloud creates against the Kolatree team).
 ARCHIVE_ACTION='{
   "actionType": "ARCHIVE",
   "name": "Archive",
   "scheme": "Kolaleaf",
   "platform": "IOS",
-  "isRequiredToPass": true
+  "isRequiredToPass": true,
+  "destination": "ANY_IOS_DEVICE"
 }'
 
 # pr-validate — fires on every PR.

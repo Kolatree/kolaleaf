@@ -1,0 +1,190 @@
+# Kolaleaf · TestFlight + App Store distribution lanes
+#
+# Two-phase release surface:
+#   bundle exec fastlane ios beta            # archive + upload to TestFlight (internal)
+#   bundle exec fastlane ios beta_external   # promote latest TestFlight build to external testers
+#   bundle exec fastlane ios release         # full App Store submission
+#   bundle exec fastlane ios pre_flight      # local sanity (tests + a11y + contract); no upload
+#
+# Auth:
+#   Prefer App Store Connect API key. Set these env vars (or pass on the CLI):
+#     ASC_KEY_ID          — the API key ID (10 chars, ASCC console)
+#     ASC_ISSUER_ID       — the issuer ID (UUID, ASCC console)
+#     ASC_KEY_FILEPATH    — absolute path to the .p8 file you downloaded
+#   Fallback: spaceship session via your Apple ID. Run `fastlane spaceauth -u <email>`
+#   once a month to refresh, OR set ASC_APPLE_ID + FASTLANE_SESSION env vars.
+#
+# Code signing:
+#   Assumes you have the Distribution certificate + App Store provisioning
+#   profile in the Acuoos Pty Ltd (5VCH6937XM) team. fastlane will pick them
+#   up via the keychain + Xcode's automatic-signing path; if you prefer
+#   match-managed certs, add `match(type: "appstore")` at the top of `beta`.
+
+default_platform(:ios)
+
+# Project paths — relative to ios/ (this Fastfile's dir).
+PROJECT     = "Kolaleaf.xcodeproj"
+SCHEME      = "Kolaleaf"
+BUILD_DIR   = "./build"
+ARCHIVE_DIR = "#{BUILD_DIR}/archive"
+
+# Bundle IDs — must match project.yml.
+APP_BUNDLE     = "com.kolaleaf.app"
+WIDGETS_BUNDLE = "com.kolaleaf.app.widgets"
+
+platform :ios do
+  before_all do
+    setup_ci if ENV["CI"]
+  end
+
+  desc "Local sanity: xcodegen + build_sim + focused test suites. No upload."
+  lane :pre_flight do
+    sh("xcodegen", "generate")
+    run_tests(
+      project: PROJECT,
+      scheme: SCHEME,
+      devices: ["iPhone 16 Pro"],
+      ensure_devices_found: true,
+      clean: false,
+      only_testing: [
+        "KolaleafTests/OpenAPIContractTests",
+        "KolaleafTests/CoreFlowsAX5Tests",
+        "KolaleafTests/SendFlowAccessibilityTests",
+        "KolaleafTests/ReducedMotionRenderTests",
+        "KolaleafTests/OnboardingTransitionTests",
+        "KolaleafTests/PhoneNumberTests",
+        "KolaleafTests/PhoneOTPViewModelTests",
+        "KolaleafTests/PhoneEntryViewModelTests",
+        "KolaleafTests/RegistrationDetailsViewModelTests",
+        "KolaleafTests/SignInViewModelTests",
+        "KolaleafTests/KolaleafAppGateCompositionTests",
+        "KolaleafTests/BiometricUnlockControllerTests",
+        "KolaleafTests/LiveActivityServiceTests",
+        "KolaleafTests/LaunchAssetsTests",
+        "KolaleafTests/XcodeCloudScriptsTests"
+      ]
+    )
+    UI.success("pre_flight green — safe to run `fastlane ios beta`.")
+  end
+
+  desc "Build + upload a TestFlight Internal build."
+  lane :beta do
+    asc_api_key
+
+    # Bump build number so TestFlight accepts the upload.
+    increment_build_number(
+      xcodeproj: PROJECT,
+      build_number: number_for_next_upload
+    )
+
+    sh("xcodegen", "generate")
+
+    build_app(
+      project: PROJECT,
+      scheme: SCHEME,
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: BUILD_DIR,
+      archive_path: "#{ARCHIVE_DIR}/Kolaleaf.xcarchive",
+      clean: true,
+      include_bitcode: false,
+      include_symbols: true,
+      export_options: {
+        provisioningProfiles: {
+          APP_BUNDLE     => "match AppStore #{APP_BUNDLE}",
+          WIDGETS_BUNDLE => "match AppStore #{WIDGETS_BUNDLE}"
+        }
+      }
+    )
+
+    upload_to_testflight(
+      skip_waiting_for_build_processing: false,
+      distribute_external: false,
+      notify_external_testers: false,
+      changelog: ENV["KOLA_TESTFLIGHT_CHANGELOG"] || "Phone-first onboarding wave + StepUpAuth (currently disabled) + Sentry wiring + iPad orientation + Xcode Cloud bootstrap + localization scaffolding + accessibility pass."
+    )
+  end
+
+  desc "Promote the latest TestFlight build to external testers."
+  lane :beta_external do
+    asc_api_key
+
+    latest = latest_testflight_build_number(
+      app_identifier: APP_BUNDLE,
+      version: ENV["KOLA_VERSION"] # optional; defaults to latest version train
+    )
+
+    pilot(
+      app_identifier: APP_BUNDLE,
+      build_number: latest.to_s,
+      distribute_external: true,
+      notify_external_testers: true,
+      groups: ["External Beta"],
+      changelog: ENV["KOLA_TESTFLIGHT_CHANGELOG"] || "External beta — phone-first onboarding ready for end-to-end testing."
+    )
+  end
+
+  desc "Full App Store submission. Requires release notes + screenshots in fastlane/metadata."
+  lane :release do
+    asc_api_key
+
+    sh("xcodegen", "generate")
+
+    build_app(
+      project: PROJECT,
+      scheme: SCHEME,
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: BUILD_DIR,
+      archive_path: "#{ARCHIVE_DIR}/Kolaleaf.xcarchive",
+      clean: true,
+      include_bitcode: false,
+      include_symbols: true
+    )
+
+    upload_to_app_store(
+      submission_information: {
+        export_compliance_uses_encryption: true,
+        export_compliance_is_exempt: true,
+        export_compliance_contains_third_party_cryptography: false,
+        export_compliance_contains_proprietary_cryptography: false,
+        export_compliance_available_on_french_store: true
+      },
+      precheck_include_in_app_purchases: false,
+      submit_for_review: false,        # gated for safety; flip when ready
+      automatic_release: false
+    )
+  end
+
+  # ---------------------------------------------------------------------
+  # Helpers
+  # ---------------------------------------------------------------------
+
+  desc "Load App Store Connect API key from env vars."
+  private_lane :asc_api_key do
+    if ENV["ASC_KEY_ID"] && ENV["ASC_ISSUER_ID"] && ENV["ASC_KEY_FILEPATH"]
+      app_store_connect_api_key(
+        key_id: ENV["ASC_KEY_ID"],
+        issuer_id: ENV["ASC_ISSUER_ID"],
+        key_filepath: ENV["ASC_KEY_FILEPATH"],
+        duration: 1200,
+        in_house: false
+      )
+    else
+      UI.important("ASC API key env vars not set — falling back to spaceship session.")
+      UI.important("Set ASC_KEY_ID + ASC_ISSUER_ID + ASC_KEY_FILEPATH for non-interactive auth.")
+    end
+  end
+
+  desc "Compute the next TestFlight build number (latest + 1)."
+  private_lane :number_for_next_upload do
+    begin
+      latest = latest_testflight_build_number(app_identifier: APP_BUNDLE)
+      (latest + 1).to_s
+    rescue => e
+      UI.important("Could not fetch latest TestFlight build number: #{e.message}")
+      UI.important("Falling back to timestamp-based number.")
+      Time.now.strftime("%Y%m%d%H%M")
+    end
+  end
+end

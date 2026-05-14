@@ -1,0 +1,12 @@
+# Kolaleaf · App Store Connect identity
+#
+# Bundle IDs match `ios/project.yml`. Team ID is the Acuoos Pty Ltd
+# Apple Developer Program account (5VCH6937XM).
+
+app_identifier "com.kolaleaf.app"
+team_id "5VCH6937XM"
+
+# apple_id is read from ASC_APPLE_ID env var (preferred). Set when you
+# don't use API-key auth and fastlane needs to drive spaceship via your
+# login. Leave commented to fall back to the API-key path in the Fastfile.
+# apple_id ENV["ASC_APPLE_ID"]

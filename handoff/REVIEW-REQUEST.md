@@ -1,3 +1,34 @@
+# Review Request -- Wave 2a Phase 12 Xcode Cloud Bootstrap Slice
+
+**Ready for Review:** YES for the repository-side Xcode Cloud bootstrap. Workflow creation still needs Xcode/App Store Connect access.
+**Date:** 2026-05-14
+**Branch / worktree:** `feat/ios-swiftui-app` in `/Users/ao/Documents/projects/Kolaleaf`
+
+## Summary
+
+The Phase 12 plan mentioned `.xcode-cloud/workflows/*.yml`, but Apple’s current Xcode Cloud documentation uses workflows configured in Xcode/App Store Connect and repository-side custom scripts under `ci_scripts`. Because Kolaleaf’s generated `.xcodeproj` is intentionally ignored and `ios/project.yml` is canonical, this slice adds the post-clone script Xcode Cloud needs to install XcodeGen when absent and regenerate `ios/Kolaleaf.xcodeproj` before build actions.
+
+## Files Changed In This Slice
+
+- `ios/ci_scripts/ci_post_clone.sh` — executable Xcode Cloud post-clone bootstrap using `brew install xcodegen` when needed, then `xcodegen generate`.
+- `ios/KolaleafTests/App/XcodeCloudScriptsTests.swift` — guards script existence, executable bit, shebang, XcodeGen install, and generation command.
+- `handoff/BUILD-LOG.md` and `handoff/REVIEW-REQUEST.md` — current Phase 12 status and validation evidence.
+
+## Validation
+
+- `ios/ci_scripts/ci_post_clone.sh` — ran locally and regenerated the ignored Xcode project.
+- XcodeBuildMCP `test_sim` with `-only-testing:KolaleafTests/XcodeCloudScriptsTests` — 2 tests passed.
+- `xcodebuild -project ios/Kolaleaf.xcodeproj -scheme Kolaleaf -configuration Debug -destination 'platform=iOS,name=iPhone' -derivedDataPath ios/build/DerivedData build` — passed.
+- `xcrun devicectl device install app --device iPhone.coredevice.local /Users/ao/Documents/projects/Kolaleaf/ios/build/DerivedData/Build/Products/Debug-iphoneos/Kolaleaf.app` — installed `com.kolaleaf.app`.
+- `xcrun devicectl device process launch --device iPhone.coredevice.local com.kolaleaf.app` — launched.
+
+## Remaining Review Scope
+
+- Xcode Cloud workflows themselves still need to be created in Xcode or App Store Connect; Apple does not treat checked-in `.xcode-cloud/workflows/*.yml` as the current workflow source of truth.
+- TestFlight archive/distribution requires App Store Connect signing and tester configuration.
+
+---
+
 # Review Request -- Wave 2a Phase 12 iPad Orientation Posture Slice
 
 **Ready for Review:** YES for target/orientation posture. This does not claim a full iPad UX redesign.

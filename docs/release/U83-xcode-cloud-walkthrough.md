@@ -1,20 +1,34 @@
 # U83 — Xcode Cloud workflow walkthrough
 
 You've signed into Xcode with the Kolaleaf-authorised Apple ID and
-`ios/ci_scripts/ci_post_clone.sh` is committed. This doc covers the
-Xcode-UI workflow creation (Apple's only supported path for the
-first workflow — the ASC API can edit existing workflows but cannot
-bootstrap the GitHub OAuth + product registration step).
+`ios/ci_scripts/ci_post_clone.sh` is committed. The `asc` CLI handles
+the workflow creation programmatically (it hits the official ASC REST
+API at `/v1/ciWorkflows`); Apple still gates two prerequisites
+behind the UI because there's no official API for them:
 
-Two workflows to create:
+1. **App Store Connect app record creation** for `com.kolaleaf.app`
+   (browser, ≈3 min).
+2. **Xcode Cloud bootstrap** in Xcode — connects GitHub via OAuth
+   and registers the Xcode Cloud product (Xcode, ≈3 min).
 
-| Workflow        | Trigger                                                           | Actions                                       | Distribution          |
-| --------------- | ----------------------------------------------------------------- | --------------------------------------------- | --------------------- |
-| **pr-validate** | Pull Request → any branch                                         | Build + Test on iPhone 16 Pro + iPhone SE 3rd | None (validates only) |
-| **main-beta**   | Branch change → `main` (or `feat/ios-swiftui-app` for pre-launch) | Test → Archive                                | TestFlight Internal   |
+After those two clicks, **one command creates both workflows**:
 
-Estimated time: 15 minutes the first time, 5 minutes for the second
-workflow once Xcode Cloud is connected.
+```bash
+bash scripts/xcode-cloud-setup.sh
+```
+
+Two workflows the script creates:
+
+| Workflow        | Trigger                                                        | Actions                       | Distribution          |
+| --------------- | -------------------------------------------------------------- | ----------------------------- | --------------------- |
+| **pr-validate** | Pull Request → any branch                                      | Build + Test on iPhone 16 Pro | None (validates only) |
+| **main-beta**   | Branch change → `feat/ios-swiftui-app` (or `main` post-launch) | Test → Archive                | TestFlight Internal   |
+
+Total time: **≈8 minutes** (6 min for the two UI steps, plus the
+script run which takes seconds).
+
+The fallback at the bottom of this doc is the pure-UI walkthrough
+(no `asc` involvement) in case the CLI path breaks.
 
 ---
 
@@ -121,13 +135,9 @@ validator.
 6. **Actions:**
    - **+ Test:** same config as `pr-validate` (scheme Kolaleaf,
      iPhone 16 Pro + iPhone SE 3rd, Required to Pass).
-   - **+ Archive:**
-     - Scheme: `Kolaleaf`.
-     - Platform: `iOS`.
-     - **Deployment Preparation** → `TestFlight (Internal Testing
-Only)`.
-     - **Distribution Preparation** → ✅ Sign and Notarize (Xcode
-       Cloud manages the cert + provisioning).
+   - **+ Archive:** - Scheme: `Kolaleaf`. - Platform: `iOS`. - **Deployment Preparation** → `TestFlight (Internal Testing
+Only)`. - **Distribution Preparation** → ✅ Sign and Notarize (Xcode
+     Cloud manages the cert + provisioning).
 
 7. **Post-Actions:**
    - **TestFlight Internal Testing** is added automatically by the

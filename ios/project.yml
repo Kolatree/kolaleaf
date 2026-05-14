@@ -100,6 +100,13 @@ targets:
         Release:
           APP_ATTEST_ENVIRONMENT: production
           APS_ENVIRONMENT: production
+          # Manual signing for archive/distribution. Automatic signing in Xcode UI
+          # would resolve these via -allowProvisioningUpdates, but xcodebuild
+          # archive does not replicate Xcode UI's "Archive" identity override,
+          # so we pin the App Store profile and Distribution identity explicitly.
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: "Apple Distribution"
+          PROVISIONING_PROFILE_SPECIFIER: "Kolaleaf App Store 20260514"
     entitlements:
       path: Kolaleaf/Kolaleaf.entitlements
       properties:
@@ -151,6 +158,12 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kolaleaf.app.widgets
+      configs:
+        Release:
+          # Manual signing for archive/distribution (see main Kolaleaf target note).
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: "Apple Distribution"
+          PROVISIONING_PROFILE_SPECIFIER: "IOS_APP_STORE-20260514"
     entitlements:
       path: KolaleafWidgets/KolaleafWidgets.entitlements
       properties:

@@ -1660,11 +1660,9 @@
 					};
 					B107B0A9D1F14E757323FF9B = {
 						DevelopmentTeam = XV85Z6GMF7;
-						ProvisioningStyle = Automatic;
 					};
 					BE280CA1EC33F4567612CD68 = {
 						DevelopmentTeam = XV85Z6GMF7;
-						ProvisioningStyle = Automatic;
 					};
 				};
 			};
@@ -2193,7 +2191,8 @@
 				APS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Kolaleaf/Kolaleaf.entitlements;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Manual;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Kolaleaf/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -2201,6 +2200,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.kolaleaf.app;
+				PROVISIONING_PROFILE_SPECIFIER = "Kolaleaf App Store 20260514";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -2226,6 +2226,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = KolaleafWidgets/KolaleafWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Manual;
 				INFOPLIST_FILE = KolaleafWidgets/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -2233,6 +2235,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.kolaleaf.app.widgets;
+				PROVISIONING_PROFILE_SPECIFIER = "IOS_APP_STORE-20260514";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};

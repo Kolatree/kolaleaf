@@ -91,7 +91,7 @@ Do this once in Xcode (≈3 min):
   4. Grant Access → opens GitHub OAuth in a browser. Sign in with
      the Kolatree org owner account, approve the Xcode Cloud
      GitHub App for the Kolatree/Kolaleaf repository specifically.
-  5. Confirm App Store Connect team = Acuoos Pty Ltd (5VCH6937XM).
+  5. Confirm App Store Connect team = Kolatree Pty Ltd (XV85Z6GMF7).
   6. Click Next on the product-confirmation screen. Xcode creates
      a default workflow — you can leave it; this script replaces it.
 

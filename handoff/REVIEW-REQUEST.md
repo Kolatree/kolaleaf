@@ -1,3 +1,43 @@
+# Review Request -- Wave 2a Phase 11.6 Coordinator + Privacy-First Analytics Slice
+
+**Ready for Review:** YES for local first-party analytics capture and coordinator integration tests. Production dashboarding and retention policy remain Phase 12/ops scope.
+**Date:** 2026-05-14
+**Branch / worktree:** `feat/ios-swiftui-app` in `/Users/ao/Documents/projects/Kolaleaf`
+
+## Summary
+
+Adds the Phase 11.6 local scope: integration-style SendCoordinator coverage for terminal transfer pushes and a privacy-first KPI analytics pipeline. iOS records a bounded allowlist of non-PII events to Kolaleaf's own `/api/v1/analytics/events` route using system-origin requests, buffers offline events locally, and flushes on session/app activation. The backend stores only a keyed HMAC user hash plus sanitized allowlisted properties in a new `AnalyticsEvent` table. The route is registered in OpenAPI and exported from the schema barrel.
+
+## Files Changed In This Slice
+
+- `ios/Kolaleaf/Networking/Endpoints/AnalyticsEndpoints.swift` — mobile analytics event contract and property value encoding.
+- `ios/Kolaleaf/Domain/Services/AnalyticsService.swift` — first-party analytics client, PII scrubber, offline buffer, and flush.
+- `ios/Kolaleaf/App/{Environment+Kola.swift,KolaleafApp.swift}` — process-scoped analytics service injection and lifecycle flushes.
+- `ios/Kolaleaf/Features/{Onboarding/WelcomeView.swift,Send/SendView.swift,Send/ReceiptView.swift}` — initial KPI instrumentation on core flow screens/actions.
+- `ios/KolaleafTests/Domain/Services/AnalyticsServiceTests.swift` — verifies system-origin posting, scrubbing, and offline flush.
+- `ios/KolaleafTests/Features/Send/SendCoordinatorIntegrationTests.swift` — verifies terminal push routing and non-regression after receipt.
+- `src/app/api/v1/analytics/events/*` and `src/lib/analytics/events.ts` — authenticated analytics route, Zod/OpenAPI schema, hashing, sanitization, and insert path.
+- `prisma/schema.prisma` and `prisma/migrations/20260514083000_analytics_events/migration.sql` — `AnalyticsEvent` storage.
+- `src/app/api/v1/openapi/route.ts`, `src/lib/schemas/index.ts`, and `tests/e2e/openapi-endpoint.test.ts` — contract discovery/count updates.
+
+## Validation
+
+- `npm test -- --run tests/app/api/v1/analytics/events.test.ts tests/e2e/openapi-endpoint.test.ts tests/lib/obs/pii-scrubber.test.ts tests/lib/obs/logger.test.ts` — 4 files / 14 tests passed.
+- `npx tsc --noEmit` — passed.
+- `xcodebuild test -project ios/Kolaleaf.xcodeproj -scheme Kolaleaf -destination 'platform=iOS Simulator,id=8E29B537-7E71-44A8-BA8D-F221CF7CBC97' -only-testing:KolaleafTests/SendCoordinatorIntegrationTests -only-testing:KolaleafTests/AnalyticsServiceTests` — 6 tests passed.
+- `npm run build` — passed; route list includes `/api/v1/analytics/events`.
+- `xcodebuild -project ios/Kolaleaf.xcodeproj -scheme Kolaleaf -configuration Debug -destination 'platform=iOS,name=iPhone' -derivedDataPath ios/build/DerivedData build` — passed.
+- `xcrun devicectl device install app --device iPhone.coredevice.local /Users/ao/Documents/projects/Kolaleaf/ios/build/DerivedData/Build/Products/Debug-iphoneos/Kolaleaf.app` — installed `com.kolaleaf.app`.
+- `xcrun devicectl device process launch --device iPhone.coredevice.local com.kolaleaf.app` — launched.
+
+## Remaining Review Scope
+
+- Migration must run before production analytics writes are enabled.
+- Analytics retention, aggregation dashboards, and admin visibility are not included in this slice.
+- Current instrumentation intentionally starts with a small safe event set; more events should be added only with property allowlist review.
+
+---
+
 # Review Request -- Wave 2a Phase 11.5 Notification Preferences + PII Scrubber Slice
 
 **Ready for Review:** YES for local notification preference gating and reusable PII scrubber. Sentry package installation/DSN wiring remains Phase 12 production setup.

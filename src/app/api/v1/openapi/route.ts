@@ -20,6 +20,9 @@ import '@/app/api/v1/auth/request-password-reset/_schemas'
 import '@/app/api/v1/auth/reset-password/_schemas'
 import '@/app/api/v1/auth/resend-verification/_schemas'
 
+// analytics
+import '@/app/api/v1/analytics/events/_schemas'
+
 // account
 import '@/app/api/v1/account/me/_schemas'
 import '@/app/api/v1/account/change-email/_schemas'

@@ -61,6 +61,13 @@ private struct PushPermissionServiceKey: EnvironmentKey {
     )
 }
 
+private struct AnalyticsServiceKey: EnvironmentKey {
+    /// Nil by default so SwiftUI can read environment defaults from a
+    /// nonisolated context. Production injects the process-scoped
+    /// service from `KolaleafApp`.
+    static let defaultValue: AnalyticsService? = nil
+}
+
 // CA-002 (iteration-2): BankStore is session-scoped bank list cache. Default
 // value uses the same APIClientKey default so previews/tests render without
 // explicit injection. KolaleafApp wires the canonical instance in body.
@@ -115,6 +122,10 @@ public extension EnvironmentValues {
     var pushPermissionService: PushPermissionService {
         get { self[PushPermissionServiceKey.self] }
         set { self[PushPermissionServiceKey.self] = newValue }
+    }
+    var analyticsService: AnalyticsService? {
+        get { self[AnalyticsServiceKey.self] }
+        set { self[AnalyticsServiceKey.self] = newValue }
     }
     @MainActor
     var bankStore: BankStore {

@@ -149,6 +149,18 @@ model User {
   twoFactorChallenges     TwoFactorChallenge[]
 }
 
+model AnalyticsEvent {
+  id         String   @id
+  userHash   String
+  event      String
+  properties Json     @default("{}")
+  occurredAt DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([event, occurredAt])
+  @@index([userHash, occurredAt])
+}
+
 model UserIdentifier {
   id         String         @id @default(cuid())
   userId     String

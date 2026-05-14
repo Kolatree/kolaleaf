@@ -48,7 +48,11 @@ describe('GET /api/v1/openapi', () => {
     // admin/failed-emails (GET list + resolve) -> 43. Step 27 adds
     // kyc/retry -> 44. Step 28 adds admin/compliance/{id}/mark-reported
     // -> 45. Sumsub WebSDK token refresh adds kyc/access-token -> 46.
+    // Phase 11.5 adds auth/device-attestation -> 47.
+    // Phase 11.6 adds privacy-first analytics/events -> 48.
     // Exact match gates the contract.
-    expect(keys.length).toBe(46)
+    expect(keys.length).toBe(48)
+    expect(keys).toContain('/auth/device-attestation')
+    expect(keys).toContain('/analytics/events')
   })
 })

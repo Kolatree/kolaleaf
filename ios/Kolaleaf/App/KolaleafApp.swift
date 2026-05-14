@@ -20,6 +20,7 @@ struct KolaleafApp: App {
     @State private var referralCapture: ReferralCapture
     @State private var deviceAttestationService: DeviceAttestationService
     @State private var pushPermissionService: PushPermissionService
+    @State private var analyticsService: AnalyticsService
     /// CA-002 (iteration-2): session-scoped bank list cache. Wired here
     /// so a sheet re-open (or NavigationStack re-mount) doesn't refetch.
     @State private var bankStore: BankStore
@@ -74,6 +75,7 @@ struct KolaleafApp: App {
         ))
         let pps = PushPermissionService(api: initialClient)
         _pushPermissionService = State(initialValue: pps)
+        _analyticsService = State(initialValue: AnalyticsService(api: initialClient))
         // CA-002 (iteration-2): canonical BankStore wired against the
         // same APIClient so it shares the session cookie jar.
         _bankStore = State(initialValue: BankStore(api: initialClient))
@@ -117,6 +119,7 @@ struct KolaleafApp: App {
                 .environment(\.keychain, keychain)
                 .environment(\.referralCapture, referralCapture)
                 .environment(\.pushPermissionService, pushPermissionService)
+                .environment(\.analyticsService, analyticsService)
                 .environment(\.bankStore, bankStore)
                 .environment(\.swiftDataStack, swiftDataStack)
                 .environment(\.syncService, syncService)
@@ -129,6 +132,7 @@ struct KolaleafApp: App {
                 // device relative to prior authenticated devices.
                 .task(id: appState.currentUser?.id) {
                     await registerDeviceAttestationForSession()
+                    await analyticsService.flush()
                 }
                 // Phase 10C iter-1 · CA-2007 + ADV-P10B-C3: reconcile
                 // the persisted `transferId → activityId` map against
@@ -140,6 +144,7 @@ struct KolaleafApp: App {
                 // a `.task` on the WindowGroup body fires once per
                 // process lifetime.
                 .task { await liveActivityService.reconcileOnLaunch() }
+                .task { await analyticsService.flush() }
                 // Handle both the `kolaleaf://` custom scheme and the
                 // scoped HTTPS universal-link routes declared in AASA.
                 .onOpenURL { url in
@@ -231,6 +236,7 @@ struct KolaleafApp: App {
                 // app was suspended. Idempotent — upserts only.
                 Task { await syncService.syncAll() }
             }
+            Task { await analyticsService.flush() }
         case .inactive:
             // Scene resigning active — switcher snapshot moment.
             // SwitcherBlur installs the overlay. 4-lens review fix

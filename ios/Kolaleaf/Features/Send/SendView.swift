@@ -17,6 +17,7 @@ import SwiftUI
 public struct SendView: View {
 
     @Environment(AppState.self) private var appState
+    @Environment(\.analyticsService) private var analyticsService
     @State private var vm: SendViewModel
     @State private var pickerOpen: Bool = false
 
@@ -87,6 +88,7 @@ public struct SendView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(KolaColors.surface.ignoresSafeArea())
         .task {
+            await analyticsService?.track(.sendScreenViewed, properties: ["screen": .string("send")])
             vm.bind(appState: appState)
             if vm.selectedRecipient == nil {
                 vm.selectedRecipient = initialRecipient
@@ -107,6 +109,12 @@ public struct SendView: View {
         .onChange(of: vm.isSubmittingTransfer) { _, nowSubmitting in
             guard !nowSubmitting else { return }
             if let transfer = vm.consumeLastCreated() {
+                Task {
+                    await analyticsService?.track(
+                        .transferPostSucceeded,
+                        properties: ["screen": .string("send")]
+                    )
+                }
                 onCreated(transfer)
             }
         }
@@ -208,7 +216,13 @@ public struct SendView: View {
         SlidePill(
             isEnabled: vm.canSubmit,
             onConfirm: {
-                Task { await vm.confirmAndSubmit() }
+                Task {
+                    await analyticsService?.track(
+                        .slideInitiated,
+                        properties: ["screen": .string("send")]
+                    )
+                    await vm.confirmAndSubmit()
+                }
             }
         )
     }

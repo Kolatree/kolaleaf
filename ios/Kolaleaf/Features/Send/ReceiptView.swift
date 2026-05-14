@@ -21,6 +21,7 @@ import UIKit
 public struct ReceiptView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.analyticsService) private var analyticsService
     @State private var vm: ReceiptViewModel
     @State private var checkScale: CGFloat = 0.6
     @State private var checkOpacity: Double = 0.0
@@ -52,6 +53,12 @@ public struct ReceiptView: View {
         .onAppear {
             animateCheck()
             rebuildShareImage()
+        }
+        .task {
+            await analyticsService?.track(
+                .transferCompleted,
+                properties: ["screen": .string("receipt")]
+            )
         }
         .onChange(of: useFullNameOnShare) { _, _ in
             rebuildShareImage()
@@ -194,6 +201,17 @@ public struct ReceiptView: View {
                 )
             }
             .buttonStyle(.plain)
+            .simultaneousGesture(TapGesture().onEnded {
+                Task {
+                    await analyticsService?.track(
+                        .receiptShared,
+                        properties: [
+                            "screen": .string("receipt"),
+                            "method": .string("share_sheet"),
+                        ]
+                    )
+                }
+            })
         }
     }
 

@@ -61,3 +61,6 @@ export * from '@/app/api/v1/rates/public/_schemas'
 export * from '@/app/api/v1/banks/_schemas'
 export * from '@/app/api/v1/kyc/initiate/_schemas'
 export * from '@/app/api/v1/kyc/status/_schemas'
+
+// analytics
+export * from '@/app/api/v1/analytics/events/_schemas'

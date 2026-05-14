@@ -6,10 +6,10 @@ _Owned by Architect. Updated by Builder after each step._
 
 ## Current Status
 
-**Active step:** Wave 2a Phase 12 accessibility/Dynamic Type send-flow slice validating for commit.
-**Last cleared:** Web KYC recovery patch committed locally as `3e439c5`; Phase 11 iOS 2FA/security committed locally as `ac3b0d8`; Phase 11.5 privacy/deep-link slice committed locally as `90be9b2`; Phase 11.5 device-attestation slice committed locally as `d1717ce`; Phase 11.5 notification/Sentry-scrubber slice committed locally as `f0ac381`; Phase 11.6 privacy-first analytics/coordinator slice committed locally as `7099d96`; Phase 12 issue-PayID OpenAPI contract slice committed locally as `8e925fc`.
+**Active step:** Wave 2a Phase 12 Sentry production wiring validating for commit.
+**Last cleared:** Web KYC recovery patch committed locally as `3e439c5`; Phase 11 iOS 2FA/security committed locally as `ac3b0d8`; Phase 11.5 privacy/deep-link slice committed locally as `90be9b2`; Phase 11.5 device-attestation slice committed locally as `d1717ce`; Phase 11.5 notification/Sentry-scrubber slice committed locally as `f0ac381`; Phase 11.6 privacy-first analytics/coordinator slice committed locally as `7099d96`; Phase 12 issue-PayID OpenAPI contract slice committed locally as `8e925fc`; Phase 12 accessibility/Dynamic Type send-flow slice committed locally as `8f44ce4`.
 **Pending deploy:** All Pile B + Wave 1 commits local past 6d3db06, plus Wave 2a iOS/mobile commits. Production KYC 500 remains operationally blocked on Railway/Sumsub access.
-**Tests:** Latest validation: `xcodegen generate`; `xcodebuild test -project ios/Kolaleaf.xcodeproj -scheme Kolaleaf -destination 'platform=iOS Simulator,id=8E29B537-7E71-44A8-BA8D-F221CF7CBC97' -only-testing:KolaleafTests/SendFlowAccessibilityTests` (3/3, no missing-font logs); physical Debug build/install/launch succeeded on `iPhone.coredevice.local`. Latest web validation remains issue-payid/OpenAPI Vitest 13/13; `npx tsc --noEmit`; `npm run build`.
+**Tests:** Latest validation: `npx tsc --noEmit`; `npm test -- --run tests/lib/obs/pii-scrubber.test.ts tests/lib/obs/logger.test.ts` (6/6); `npm run build` on Next 16.2.6; `npm audit --omit=dev` has 0 high/critical, 5 moderate with only breaking/regressive suggested fixes. Latest iPhone cycle: Phase 12 accessibility slice physical Debug build/install/launch succeeded on `iPhone.coredevice.local`.
 
 ### Active recovery todo — 2026-05-14
 
@@ -32,7 +32,8 @@ _Owned by Architect. Updated by Builder after each step._
 - [x] Finish Phase 11.6 local scope: SendCoordinator integration coverage plus privacy-first first-party KPI analytics pipeline.
 - [x] Phase 12 next slice selected and implemented: OpenAPI contract hardening for `transfers/{id}/issue-payid`, including canonical error envelopes.
 - [x] Phase 12 accessibility/Dynamic Type send-flow slice: scalable Inter typography, bundled Inter font files through XcodeGen resources, VoiceOver labels on core send/PayID/receipt surfaces, and AX5 render smoke coverage.
-- [ ] Phase 12 next candidate: Sentry production wiring/source-map/release setup or broader whole-app accessibility sweep. Defer Xcode Cloud/TestFlight/provider checks until signing/App Store Connect/Railway access is confirmed.
+- [x] Phase 12 Sentry production wiring: Next.js SDK setup, server/client/edge initialization, global App Router error capture, PII scrubber in event hooks, source-map upload gated by `SENTRY_AUTH_TOKEN`, and dependency audit high/critical cleanup.
+- [ ] Phase 12 next candidate: broader whole-app accessibility/Reduce Motion sweep, localization, app icon/launch review, or Xcode Cloud/TestFlight prep. Defer provider checks until signing/App Store Connect/Railway access is confirmed.
 
 ### Remaining phase execution plan — 2026-05-14
 

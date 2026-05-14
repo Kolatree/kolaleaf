@@ -15,14 +15,24 @@
 // require a second deploy pipeline for minimal throughput benefit
 // at this stage.
 //
-// Edge runtime is skipped — BullMQ's Redis client needs Node.
-// Next.js invokes register() in every runtime; we branch on
-// NEXT_RUNTIME to avoid importing the worker module on the edge.
+// Edge runtime only loads Sentry's edge SDK. BullMQ's Redis client
+// needs Node, so workers stay behind the nodejs branch.
+
+import * as Sentry from '@sentry/nextjs'
 
 export async function register() {
+  if (process.env.NEXT_RUNTIME === 'edge') {
+    await import('./sentry.edge.config')
+    return
+  }
+
   if (process.env.NEXT_RUNTIME !== 'nodejs') return
+
+  await import('./sentry.server.config')
 
   // Dynamic import so edge-runtime bundles don't pull bullmq in.
   const { bootInProcessWorker } = await import('./workers/webhook-worker')
   bootInProcessWorker()
 }
+
+export const onRequestError = Sentry.captureRequestError

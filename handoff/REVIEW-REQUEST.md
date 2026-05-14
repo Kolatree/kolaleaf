@@ -1,3 +1,41 @@
+# Review Request -- Wave 2a Phase 12 Sentry Production Wiring Slice
+
+**Ready for Review:** YES for local Sentry wiring, PII scrubber enforcement, source-map build config, and dependency-audit cleanup. Real event delivery still requires production Sentry project credentials.
+**Date:** 2026-05-14
+**Branch / worktree:** `feat/ios-swiftui-app` in `/Users/ao/Documents/projects/Kolaleaf`
+
+## Summary
+
+Adds the Phase 12 web Sentry baseline for Next.js App Router. The setup follows the current Sentry Next.js manual setup for Next 15+ / Turbopack, while keeping remittance privacy constraints stricter than the docs example: `sendDefaultPii` stays false, Session Replay is disabled, no feedback widget is enabled, and the existing Kolaleaf PII scrubber is applied to error events, transaction events, and spans.
+
+Source-map upload is configured but gated by `SENTRY_AUTH_TOKEN`; builds without Sentry credentials still complete locally. Runtime event delivery requires setting `NEXT_PUBLIC_SENTRY_DSN` for browser capture and either `SENTRY_DSN` or `NEXT_PUBLIC_SENTRY_DSN` for server/edge capture. Release/source-map attribution uses `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`, and optional `SENTRY_RELEASE`.
+
+## Files Changed In This Slice
+
+- `package.json` / `package-lock.json` — adds `@sentry/nextjs` and updates safe audit remediations (`next` 16.2.6, Prisma 7.8.0, BullMQ 5.76.8, transitive axios/fast-uri fixes).
+- `next.config.ts` — wraps the existing config with `withSentryConfig`, disables Sentry telemetry, and gates source-map upload on `SENTRY_AUTH_TOKEN`.
+- `src/instrumentation.ts` — loads Sentry server/edge configs before existing Node worker boot and exports `onRequestError`.
+- `src/instrumentation-client.ts` — browser SDK initialization and router transition capture.
+- `src/sentry.server.config.ts` and `src/sentry.edge.config.ts` — server/edge SDK initialization.
+- `src/sentry.shared.ts` — shared DSN/environment/sample-rate helpers and PII-scrubbing hooks.
+- `src/app/global-error.tsx` — App Router global error capture.
+- `handoff/BUILD-LOG.md` and `handoff/REVIEW-REQUEST.md` — current Phase 12 status and validation evidence.
+
+## Validation
+
+- `npx tsc --noEmit` — passed.
+- `npm test -- --run tests/lib/obs/pii-scrubber.test.ts tests/lib/obs/logger.test.ts` — 2 files / 6 tests passed.
+- `npm run build` — passed on Next 16.2.6 with Sentry `runAfterProductionCompile`.
+- `npm audit --omit=dev --json` — 0 high / 0 critical remaining. Five moderate advisories remain because npm's suggested fixes downgrade to `next@9.3.3` or `prisma@6.19.3`, which is a regressive/breaking remediation path for this app.
+
+## Remaining Review Scope
+
+- Add production env vars in Railway/CI: `NEXT_PUBLIC_SENTRY_DSN`, optional server-only `SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`, optional `SENTRY_RELEASE`, and optional `SENTRY_TRACES_SAMPLE_RATE`.
+- Confirm real Sentry event ingestion and uploaded source maps from CI once credentials exist.
+- Moderate audit advisories require upstream Next/Prisma patches rather than local downgrades.
+
+---
+
 # Review Request -- Wave 2a Phase 12 Accessibility + Dynamic Type Send Flow Slice
 
 **Ready for Review:** YES for the focused money-path accessibility/Dynamic Type slice. This is not a claim that the whole app accessibility audit is complete.

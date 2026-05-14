@@ -51,6 +51,8 @@ targets:
         CFBundleVersion: "1"
         UILaunchScreen:
           UIColorName: launchBackground
+          UIImageName: LogoPrimary
+          UIImageRespectsSafeAreaInsets: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         # r2 fix #6: armv7 (32-bit) is invalid for iOS 17.2 (arm64-only). Removed key entirely;

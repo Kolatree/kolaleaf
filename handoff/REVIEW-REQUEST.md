@@ -1,3 +1,35 @@
+# Review Request -- Wave 2a Phase 12 App Icon + Launch Slice
+
+**Ready for Review:** YES for local app icon and launch-screen wiring. App Store Connect upload still requires the later TestFlight/signing pass.
+**Date:** 2026-05-14
+**Branch / worktree:** `feat/ios-swiftui-app` in `/Users/ao/Documents/projects/Kolaleaf`
+
+## Summary
+
+Closes the Phase 12 app icon / launch review slice. The app already had a valid 1024x1024 marketing icon and brand logo assets, but the generated launch screen only used the cream background color. `ios/project.yml` now wires `LogoPrimary` into `UILaunchScreen` and keeps it constrained by safe-area insets. XcodeGen regeneration confirmed the generated `Info.plist` contains the expected launch dictionary.
+
+## Files Changed In This Slice
+
+- `ios/project.yml` — canonical XcodeGen source now declares `UILaunchScreen.UIImageName = LogoPrimary` and `UIImageRespectsSafeAreaInsets = true`.
+- `ios/KolaleafTests/App/LaunchAssetsTests.swift` — validates launch configuration, 1024x1024 app icon dimensions, preserved-vector logo catalog metadata, and launch background token components.
+- `handoff/BUILD-LOG.md` and `handoff/REVIEW-REQUEST.md` — current Phase 12 status and validation evidence.
+
+## Validation
+
+- `xcodegen generate` — regenerated the ignored project and generated plist from `ios/project.yml`.
+- `plutil -p ios/Kolaleaf/Info.plist` — generated `UILaunchScreen` includes `UIColorName = launchBackground`, `UIImageName = LogoPrimary`, and `UIImageRespectsSafeAreaInsets = true`.
+- XcodeBuildMCP `test_sim` with `-only-testing:KolaleafTests/LaunchAssetsTests` — 4 tests passed.
+- `xcodebuild -project ios/Kolaleaf.xcodeproj -scheme Kolaleaf -configuration Debug -destination 'platform=iOS,name=iPhone' -derivedDataPath ios/build/DerivedData build` — passed; only the pre-existing orientation warning was emitted.
+- `xcrun devicectl device install app --device iPhone.coredevice.local /Users/ao/Documents/projects/Kolaleaf/ios/build/DerivedData/Build/Products/Debug-iphoneos/Kolaleaf.app` — installed `com.kolaleaf.app`.
+- `xcrun devicectl device process launch --device iPhone.coredevice.local com.kolaleaf.app` — launched.
+
+## Remaining Review Scope
+
+- App Store Connect metadata, TestFlight upload, and release asset review remain Phase 12.
+- The generated `.xcodeproj` and `Info.plist` remain intentionally ignored; reviewers should regenerate from `ios/project.yml`.
+
+---
+
 # Review Request -- Wave 2a Phase 12 Reduce Motion Accessibility Slice
 
 **Ready for Review:** YES for the broader iOS Reduce Motion hardening slice. This does not claim the full Phase 12 accessibility/localization/iPad pass is complete.

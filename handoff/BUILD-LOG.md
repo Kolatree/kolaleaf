@@ -6,10 +6,10 @@ _Owned by Architect. Updated by Builder after each step._
 
 ## Current Status
 
-**Active step:** Wave 2a iOS Phase 11.6 implementation validated locally; Phase 12 assessment next.
-**Last cleared:** Web KYC recovery patch committed locally as `3e439c5`; Phase 11 iOS 2FA/security committed locally as `ac3b0d8`; Phase 11.5 privacy/deep-link slice committed locally as `90be9b2`; Phase 11.5 device-attestation slice committed locally as `d1717ce`; Phase 11.5 notification/Sentry-scrubber slice committed locally as `f0ac381`; Phase 11.6 privacy-first analytics/coordinator slice validating for commit.
+**Active step:** Wave 2a Phase 12 OpenAPI contract hardening validating for commit.
+**Last cleared:** Web KYC recovery patch committed locally as `3e439c5`; Phase 11 iOS 2FA/security committed locally as `ac3b0d8`; Phase 11.5 privacy/deep-link slice committed locally as `90be9b2`; Phase 11.5 device-attestation slice committed locally as `d1717ce`; Phase 11.5 notification/Sentry-scrubber slice committed locally as `f0ac381`; Phase 11.6 privacy-first analytics/coordinator slice committed locally as `7099d96`.
 **Pending deploy:** All Pile B + Wave 1 commits local past 6d3db06, plus Wave 2a iOS/mobile commits. Production KYC 500 remains operationally blocked on Railway/Sumsub access.
-**Tests:** Latest validation: analytics/OpenAPI/logger Vitest 14/14; `npx tsc --noEmit`; targeted iOS `AnalyticsServiceTests` + `SendCoordinatorIntegrationTests` 6/6; `npm run build`; physical iPhone Debug build/install/launch succeeded.
+**Tests:** Latest validation: issue-payid/OpenAPI Vitest 13/13; `npx tsc --noEmit`; `npm run build`. Latest iPhone cycle: Phase 11.6 physical Debug build/install/launch succeeded on `iPhone.coredevice.local`.
 
 ### Active recovery todo — 2026-05-14
 
@@ -30,7 +30,8 @@ _Owned by Architect. Updated by Builder after each step._
 - [x] Start Phase 11.5 notification/privacy hardening: user-facing alert preferences gate new-device alerts and transfer push prompts; structured logs now pass through reusable PII scrubber suitable for Sentry `beforeSend`.
 - [x] Reconcile remaining Phase 11.5 scope against code already moved earlier (switcher blur, idle timeout primitives, referral capture primitives, Live Activity redaction). Remaining external/provider checks move to Phase 12/14 readiness.
 - [x] Finish Phase 11.6 local scope: SendCoordinator integration coverage plus privacy-first first-party KPI analytics pipeline.
-- [ ] Phase 12 next slice: choose and execute a contained production-readiness unit (OpenAPI contract hardening, accessibility/reduce-motion sweep, Sentry production wiring, app icon/launch screen, Xcode Cloud/TestFlight, or iPad/shake-to-report scope decision).
+- [x] Phase 12 next slice selected and implemented: OpenAPI contract hardening for `transfers/{id}/issue-payid`, including canonical error envelopes.
+- [ ] Phase 12 next candidate: accessibility/Dynamic Type/Reduce Motion sweep or Sentry production wiring. Defer Xcode Cloud/TestFlight/provider checks until signing/App Store Connect/Railway access is confirmed.
 
 ### Remaining phase execution plan — 2026-05-14
 

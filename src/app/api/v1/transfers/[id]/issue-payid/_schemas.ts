@@ -9,6 +9,7 @@ export const IssuePayIdResponse = z.object({
       status: z.string(),
       payidReference: z.string().nullable(),
       payidProviderRef: z.string().nullable(),
+      payidExpiresAt: z.string().datetime().optional(),
     })
     .passthrough(),
 })
@@ -32,6 +33,10 @@ registry.registerPath({
     404: { description: 'Transfer not found', content: { 'application/json': { schema: ErrorEnvelope } } },
     409: {
       description: 'Transfer is not in CREATED state',
+      content: { 'application/json': { schema: ErrorEnvelope } },
+    },
+    500: {
+      description: 'PayID issuance failed',
       content: { 'application/json': { schema: ErrorEnvelope } },
     },
   },

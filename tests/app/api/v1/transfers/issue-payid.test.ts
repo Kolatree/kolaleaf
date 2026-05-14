@@ -55,6 +55,10 @@ describe('POST /api/v1/transfers/[id]/issue-payid', () => {
     mockRequireEmail.mockRejectedValueOnce(new AuthError(401, 'Authentication required'))
     const res = await POST(req(), { params: Promise.resolve({ id: 't1' }) })
     expect(res.status).toBe(401)
+    await expect(res.json()).resolves.toMatchObject({
+      error: 'Authentication required',
+      reason: 'unauthenticated',
+    })
     expect(mockGenerate).not.toHaveBeenCalled()
   })
 
@@ -62,8 +66,10 @@ describe('POST /api/v1/transfers/[id]/issue-payid', () => {
     mockRequireEmail.mockRejectedValueOnce(new AuthError(403, 'email_unverified'))
     const res = await POST(req(), { params: Promise.resolve({ id: 't1' }) })
     expect(res.status).toBe(403)
-    const body = await res.json()
-    expect(body.error).toBe('email_unverified')
+    await expect(res.json()).resolves.toMatchObject({
+      error: 'Please verify your email before issuing a PayID.',
+      reason: 'email_unverified',
+    })
   })
 
   it('returns 404 when the transfer does not exist', async () => {
@@ -72,6 +78,10 @@ describe('POST /api/v1/transfers/[id]/issue-payid', () => {
     mockFindUnique.mockResolvedValueOnce(null)
     const res = await POST(req(), { params: Promise.resolve({ id: 't1' }) })
     expect(res.status).toBe(404)
+    await expect(res.json()).resolves.toMatchObject({
+      error: 'Transfer not found',
+      reason: 'transfer_not_found',
+    })
     expect(mockGenerate).not.toHaveBeenCalled()
   })
 
@@ -81,6 +91,10 @@ describe('POST /api/v1/transfers/[id]/issue-payid', () => {
     mockFindUnique.mockResolvedValueOnce({ userId: 'other' } as never)
     const res = await POST(req(), { params: Promise.resolve({ id: 't1' }) })
     expect(res.status).toBe(403)
+    await expect(res.json()).resolves.toMatchObject({
+      error: 'Forbidden',
+      reason: 'forbidden',
+    })
     expect(mockGenerate).not.toHaveBeenCalled()
   })
 
@@ -109,6 +123,9 @@ describe('POST /api/v1/transfers/[id]/issue-payid', () => {
     )
     const res = await POST(req(), { params: Promise.resolve({ id: 't1' }) })
     expect(res.status).toBe(409)
+    await expect(res.json()).resolves.toMatchObject({
+      reason: 'transfer_invalid_state',
+    })
   })
 
   it('returns 403 on KycNotVerifiedError', async () => {
@@ -118,6 +135,9 @@ describe('POST /api/v1/transfers/[id]/issue-payid', () => {
     mockGenerate.mockRejectedValueOnce(new KycNotVerifiedError('u1'))
     const res = await POST(req(), { params: Promise.resolve({ id: 't1' }) })
     expect(res.status).toBe(403)
+    await expect(res.json()).resolves.toMatchObject({
+      reason: 'kyc_not_verified',
+    })
   })
 
   it('returns 409 on ConcurrentModificationError', async () => {
@@ -127,5 +147,23 @@ describe('POST /api/v1/transfers/[id]/issue-payid', () => {
     mockGenerate.mockRejectedValueOnce(new ConcurrentModificationError('t1'))
     const res = await POST(req(), { params: Promise.resolve({ id: 't1' }) })
     expect(res.status).toBe(409)
+    await expect(res.json()).resolves.toMatchObject({
+      reason: 'concurrent_modification',
+    })
+  })
+
+  it('returns canonical 500 when PayID issuance fails unexpectedly', async () => {
+    mockRequireEmail.mockResolvedValueOnce({ userId: 'u1' })
+    mockRequireAuth.mockResolvedValueOnce({ userId: 'u1' } as never)
+    mockFindUnique.mockResolvedValueOnce({ userId: 'u1' } as never)
+    mockGenerate.mockRejectedValueOnce(new Error('provider unavailable'))
+
+    const res = await POST(req(), { params: Promise.resolve({ id: 't1' }) })
+
+    expect(res.status).toBe(500)
+    await expect(res.json()).resolves.toMatchObject({
+      error: 'provider unavailable',
+      reason: 'payid_issue_failed',
+    })
   })
 })

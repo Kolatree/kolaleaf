@@ -8,6 +8,7 @@ import {
   KycNotVerifiedError,
   ConcurrentModificationError,
 } from "@/lib/transfers/errors";
+import { jsonError } from "@/lib/http/json-error";
 import "./_schemas";
 
 // POST /api/v1/transfers/:id/issue-payid
@@ -40,13 +41,10 @@ export async function POST(
       select: { userId: true },
     });
     if (!existing) {
-      return NextResponse.json(
-        { error: "Transfer not found" },
-        { status: 404 },
-      );
+      return jsonError("transfer_not_found", "Transfer not found", 404);
     }
     if (existing.userId !== userId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return jsonError("forbidden", "Forbidden", 403);
     }
 
     const transfer = await generatePayIdForTransfer(
@@ -74,35 +72,34 @@ export async function POST(
   } catch (error) {
     if (error instanceof AuthError) {
       if (error.message === "email_unverified") {
-        return NextResponse.json(
-          {
-            error: "email_unverified",
-            message: "Please verify your email before issuing a PayID.",
-          },
-          { status: 403 },
+        return jsonError(
+          "email_unverified",
+          "Please verify your email before issuing a PayID.",
+          403,
         );
       }
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.statusCode },
+      return jsonError(
+        error.statusCode === 401 ? "unauthenticated" : "forbidden",
+        error.message,
+        error.statusCode,
       );
     }
 
     if (error instanceof TransferNotFoundError) {
-      return NextResponse.json({ error: error.message }, { status: 404 });
+      return jsonError("transfer_not_found", error.message, 404);
     }
     if (error instanceof KycNotVerifiedError) {
-      return NextResponse.json({ error: error.message }, { status: 403 });
+      return jsonError("kyc_not_verified", error.message, 403);
     }
     if (error instanceof ConcurrentModificationError) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
+      return jsonError("concurrent_modification", error.message, 409);
     }
     // "Transfer <id> is not in CREATED state" — state mismatch
     const message =
       error instanceof Error ? error.message : "PayID issuance failed";
     if (/is not in CREATED state/.test(message)) {
-      return NextResponse.json({ error: message }, { status: 409 });
+      return jsonError("transfer_invalid_state", message, 409);
     }
-    return NextResponse.json({ error: message }, { status: 500 });
+    return jsonError("payid_issue_failed", message, 500);
   }
 }

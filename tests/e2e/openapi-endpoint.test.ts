@@ -50,9 +50,11 @@ describe('GET /api/v1/openapi', () => {
     // -> 45. Sumsub WebSDK token refresh adds kyc/access-token -> 46.
     // Phase 11.5 adds auth/device-attestation -> 47.
     // Phase 11.6 adds privacy-first analytics/events -> 48.
+    // Phase 12 registers transfers/{id}/issue-payid -> 49.
     // Exact match gates the contract.
-    expect(keys.length).toBe(48)
+    expect(keys.length).toBe(49)
     expect(keys).toContain('/auth/device-attestation')
     expect(keys).toContain('/analytics/events')
+    expect(keys).toContain('/transfers/{id}/issue-payid')
   })
 })

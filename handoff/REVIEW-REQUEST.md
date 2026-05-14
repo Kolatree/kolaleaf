@@ -1,3 +1,35 @@
+# Review Request -- Wave 2a Phase 12 OpenAPI Contract Hardening Slice
+
+**Ready for Review:** YES for local contract registration and `issue-payid` canonical error envelopes.
+**Date:** 2026-05-14
+**Branch / worktree:** `feat/ios-swiftui-app` in `/Users/ao/Documents/projects/Kolaleaf`
+
+## Summary
+
+Closes the Phase 12 U84 bug called out in the plan: `POST /api/v1/transfers/{id}/issue-payid` had a colocated schema but was not imported by the OpenAPI registry or exported from the schema barrel. While wiring that route into the generated contract, review found the handler still returned ad hoc `{ error }` bodies even though the schema advertises `ErrorEnvelope`. The route now returns canonical `{ error, reason }` responses for unauthenticated, email-unverified, not-found, forbidden, KYC-blocked, concurrent-modification, invalid-state, and unexpected PayID issuance failures.
+
+## Files Changed In This Slice
+
+- `src/app/api/v1/openapi/route.ts` — imports `transfers/[id]/issue-payid/_schemas`.
+- `src/lib/schemas/index.ts` — exports the issue-PayID schema from the central contract barrel.
+- `src/app/api/v1/transfers/[id]/issue-payid/_schemas.ts` — documents `payidExpiresAt` and 500 `ErrorEnvelope`.
+- `src/app/api/v1/transfers/[id]/issue-payid/route.ts` — canonical `jsonError` envelopes.
+- `tests/app/api/v1/transfers/issue-payid.test.ts` — asserts stable reason codes.
+- `tests/e2e/openapi-endpoint.test.ts` — exact OpenAPI path count now includes `/transfers/{id}/issue-payid`.
+
+## Validation
+
+- `npm test -- --run tests/app/api/v1/transfers/issue-payid.test.ts tests/e2e/openapi-endpoint.test.ts` — 2 files / 13 tests passed.
+- `npx tsc --noEmit` — passed.
+- `npm run build` — passed; route list includes `/api/v1/transfers/[id]/issue-payid`.
+
+## Remaining Review Scope
+
+- This slice does not add Swift-side live OpenAPI schema decoding; it closes the missing route registration and canonical envelope mismatch first.
+- Full CI enforcement still belongs with Xcode Cloud/TestFlight setup once signing/App Store Connect access is available.
+
+---
+
 # Review Request -- Wave 2a Phase 11.6 Coordinator + Privacy-First Analytics Slice
 
 **Ready for Review:** YES for local first-party analytics capture and coordinator integration tests. Production dashboarding and retention policy remain Phase 12/ops scope.

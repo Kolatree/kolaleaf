@@ -62,10 +62,16 @@ public final class ExpiredTransferViewModel {
                 todaysRate = parsed
                 state = .loaded
             } else {
-                state = .error("Couldn't read today's rate.")
+                state = .error(String(
+                    localized: "expired.rate_read_failed",
+                    defaultValue: "Couldn't read today's rate."
+                ))
             }
         case .failure(let err):
-            state = .error(err.errorDescription ?? "Couldn't load today's rate.")
+            state = .error(err.errorDescription ?? String(
+                localized: "expired.rate_load_failed",
+                defaultValue: "Couldn't load today's rate."
+            ))
         }
     }
 

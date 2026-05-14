@@ -122,20 +122,52 @@ public final class EmailOTPViewModel {
         switch error {
         case .codeInvalid(let reason):
             switch reason {
-            case "wrong_code": return "That code didn't match. Please try again."
-            case "expired":    return "That code has expired. Tap Resend to get a new one."
-            case "used":       return "That code has already been used."
-            case "no_token":   return "Please request a new code first."
-            default:           return "Could not verify the code. Please try again."
+            case "wrong_code":
+                return String(
+                    localized: "common.otp.wrong_code",
+                    defaultValue: "That code didn't match. Please try again."
+                )
+            case "expired":
+                return String(
+                    localized: "common.otp.expired",
+                    defaultValue: "That code has expired. Tap Resend to get a new one."
+                )
+            case "used":
+                return String(
+                    localized: "common.otp.used",
+                    defaultValue: "That code has already been used."
+                )
+            case "no_token":
+                return String(
+                    localized: "common.otp.no_token",
+                    defaultValue: "Please request a new code first."
+                )
+            default:
+                return String(
+                    localized: "common.otp.verify_failed",
+                    defaultValue: "Could not verify the code. Please try again."
+                )
             }
         case .rateLimited(let retryAfter):
-            return "Too many attempts. Try again in \(Int(retryAfter)) seconds."
+            return String(
+                localized: "common.error.rate_limited",
+                defaultValue: "Too many attempts. Try again in \(Int(retryAfter)) seconds."
+            )
         case .transport:
-            return "Connection problem. Please check your network."
+            return String(
+                localized: "common.error.connection",
+                defaultValue: "Connection problem. Please check your network."
+            )
         case .validation:
-            return "Please enter the 6-digit code from your email."
+            return String(
+                localized: "onboarding.email_otp.validation",
+                defaultValue: "Please enter the 6-digit code from your email."
+            )
         default:
-            return error.errorDescription ?? "Something went wrong. Please try again."
+            return error.errorDescription ?? String(
+                localized: "common.error.unknown",
+                defaultValue: "Something went wrong. Please try again."
+            )
         }
     }
 }

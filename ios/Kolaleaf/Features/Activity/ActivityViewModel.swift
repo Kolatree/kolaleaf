@@ -59,10 +59,26 @@ public final class ActivityViewModel {
         /// `rawValue` and produced two disagreeing tests.
         public var displayName: String {
             switch self {
-            case .all:       return "All"
-            case .pending:   return "Pending"
-            case .completed: return "Completed"
-            case .failed:    return "Failed"
+            case .all:
+                return String(
+                    localized: "activity.filter.all",
+                    defaultValue: "All"
+                )
+            case .pending:
+                return String(
+                    localized: "activity.filter.pending",
+                    defaultValue: "Pending"
+                )
+            case .completed:
+                return String(
+                    localized: "activity.filter.completed",
+                    defaultValue: "Completed"
+                )
+            case .failed:
+                return String(
+                    localized: "activity.filter.failed",
+                    defaultValue: "Failed"
+                )
             }
         }
 
@@ -221,7 +237,10 @@ public final class ActivityViewModel {
                 // Keep cached rows visible if the network drops.
                 if case .loaded = state { return }
                 state = .failed(err.errorDescription
-                                ?? "Couldn't load your activity.")
+                                ?? String(
+                                    localized: "activity.load_failed",
+                                    defaultValue: "Couldn't load your activity."
+                                ))
             }
         }
     }

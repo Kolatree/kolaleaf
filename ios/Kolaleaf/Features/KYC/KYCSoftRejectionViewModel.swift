@@ -49,18 +49,33 @@ public final class KYCSoftRejectionViewModel {
     private func userFacingMessage(for error: APIError) -> String {
         switch error {
         case .unauthorized:
-            return "Your session expired. Please sign in again."
+            return String(
+                localized: "common.error.session_expired",
+                defaultValue: "Your session expired. Please sign in again."
+            )
         case .server(let status, let message) where status == 409:
             // 409: backend says retry isn't valid (status isn't REJECTED).
             // Surface the human message; the user is likely in IN_REVIEW or
             // VERIFIED already and the next /kyc/status poll will reconcile.
-            return message ?? "This isn't a retry-able state. Try refreshing."
+            return message ?? String(
+                localized: "kyc.soft_rejection.not_retryable",
+                defaultValue: "This isn't a retry-able state. Try refreshing."
+            )
         case .rateLimited(let after):
-            return "Too many attempts. Try again in \(Int(after)) seconds."
+            return String(
+                localized: "common.error.rate_limited",
+                defaultValue: "Too many attempts. Try again in \(Int(after)) seconds."
+            )
         case .transport:
-            return "Connection problem. Please check your network."
+            return String(
+                localized: "common.error.connection",
+                defaultValue: "Connection problem. Please check your network."
+            )
         default:
-            return error.errorDescription ?? "Couldn't start retry. Please try again."
+            return error.errorDescription ?? String(
+                localized: "kyc.soft_rejection.retry_failed",
+                defaultValue: "Couldn't start retry. Please try again."
+            )
         }
     }
 }

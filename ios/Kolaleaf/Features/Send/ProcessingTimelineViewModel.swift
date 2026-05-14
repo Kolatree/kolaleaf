@@ -74,7 +74,10 @@ public final class ProcessingTimelineViewModel {
                     break
                 }
                 if self.consecutiveErrors >= Self.maxConsecutiveErrors {
-                    self.lastError = "Couldn't refresh — please pull to retry."
+                    self.lastError = String(
+                        localized: "send.processing.refresh_failed",
+                        defaultValue: "Couldn't refresh — please pull to retry."
+                    )
                     break
                 }
                 let delay = self.nextPollDelay()

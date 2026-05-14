@@ -41,7 +41,10 @@ public final class EmailEntryViewModel {
     public func submit() async {
         let normalisedEmail = normalised(email)
         guard Self.isValidEmail(normalisedEmail) else {
-            inlineError = "Please enter a valid email."
+            inlineError = String(
+                localized: "onboarding.email.invalid",
+                defaultValue: "Please enter a valid email."
+            )
             return
         }
 
@@ -81,13 +84,25 @@ public final class EmailEntryViewModel {
         switch error {
         case .validation(let fields):
             if let first = fields["email"]?.first { return first }
-            return "Please check your email and try again."
+            return String(
+                localized: "onboarding.email.validation_failed",
+                defaultValue: "Please check your email and try again."
+            )
         case .rateLimited(let retryAfter):
-            return "Too many attempts. Try again in \(Int(retryAfter)) seconds."
+            return String(
+                localized: "common.error.rate_limited",
+                defaultValue: "Too many attempts. Try again in \(Int(retryAfter)) seconds."
+            )
         case .transport:
-            return "Connection problem. Please check your network."
+            return String(
+                localized: "common.error.connection",
+                defaultValue: "Connection problem. Please check your network."
+            )
         default:
-            return error.errorDescription ?? "Something went wrong. Please try again."
+            return error.errorDescription ?? String(
+                localized: "common.error.unknown",
+                defaultValue: "Something went wrong. Please try again."
+            )
         }
     }
 }

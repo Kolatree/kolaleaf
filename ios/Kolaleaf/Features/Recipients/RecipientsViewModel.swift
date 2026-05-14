@@ -75,7 +75,10 @@ public final class RecipientsViewModel {
                 // Keep cached rows visible on a network failure.
                 if case .loaded = state { return }
                 state = .failed(err.errorDescription
-                                ?? "Couldn't load recipients.")
+                                ?? String(
+                                    localized: "recipients.load_failed",
+                                    defaultValue: "Couldn't load recipients."
+                                ))
             }
         }
     }
@@ -130,7 +133,10 @@ public final class RecipientsViewModel {
             // Revert and surface the error.
             state = .loaded(snapshot)
             lastError = err.errorDescription
-                ?? "Couldn't delete recipient. Please try again."
+                ?? String(
+                    localized: "recipients.delete_failed",
+                    defaultValue: "Couldn't delete recipient. Please try again."
+                )
             return false
         }
     }

@@ -86,7 +86,10 @@ public final class SignInViewModel {
 
     public func submit() async {
         guard !password.isEmpty else {
-            inlineError = "Please enter your password."
+            inlineError = String(
+                localized: "onboarding.signin.password_required",
+                defaultValue: "Please enter your password."
+            )
             return
         }
 
@@ -102,7 +105,10 @@ public final class SignInViewModel {
         case .email:
             let normalisedEmail = identifierInput.trimmed().lowercased()
             guard !normalisedEmail.isEmpty else {
-                inlineError = "Please enter your email and password."
+                inlineError = String(
+                    localized: "onboarding.signin.email_password_required",
+                    defaultValue: "Please enter your email and password."
+                )
                 return
             }
             identifier = .email(normalisedEmail)
@@ -157,8 +163,16 @@ public final class SignInViewModel {
 
     private static func parseMessage(for err: PhoneNumber.ParseError) -> String {
         switch err {
-        case .empty:     return "Enter your phone number."
-        case .malformed: return "That doesn't look like a valid number."
+        case .empty:
+            return String(
+                localized: "common.phone.empty",
+                defaultValue: "Enter your phone number."
+            )
+        case .malformed:
+            return String(
+                localized: "common.phone.malformed",
+                defaultValue: "That doesn't look like a valid number."
+            )
         }
     }
 
@@ -166,17 +180,37 @@ public final class SignInViewModel {
         switch error {
         case .unauthorized:
             switch mode {
-            case .email: return "Email or password incorrect."
-            case .phone: return "Phone or password incorrect."
+            case .email:
+                return String(
+                    localized: "onboarding.signin.invalid_credentials_email",
+                    defaultValue: "Email or password incorrect."
+                )
+            case .phone:
+                return String(
+                    localized: "onboarding.signin.invalid_credentials_phone",
+                    defaultValue: "Phone or password incorrect."
+                )
             }
         case .validation:
-            return "Please check your details and try again."
+            return String(
+                localized: "onboarding.signin.validation_failed",
+                defaultValue: "Please check your details and try again."
+            )
         case .rateLimited(let retryAfter):
-            return "Too many attempts. Please try again in \(Int(retryAfter)) seconds."
+            return String(
+                localized: "common.error.rate_limited",
+                defaultValue: "Too many attempts. Please try again in \(Int(retryAfter)) seconds."
+            )
         case .transport:
-            return "Connection problem. Please check your network."
+            return String(
+                localized: "common.error.connection",
+                defaultValue: "Connection problem. Please check your network."
+            )
         default:
-            return error.errorDescription ?? "Something went wrong. Please try again."
+            return error.errorDescription ?? String(
+                localized: "common.error.unknown",
+                defaultValue: "Something went wrong. Please try again."
+            )
         }
     }
 }

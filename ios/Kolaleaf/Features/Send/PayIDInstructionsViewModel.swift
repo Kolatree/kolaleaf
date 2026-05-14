@@ -61,7 +61,10 @@ public final class PayIDInstructionsViewModel {
             // key). The user pastes `payidProviderRef` into their bank.
             let displayed = transfer.payidProviderRef
                 ?? transfer.payidReference
-                ?? "Unable to load PayID"
+                ?? String(
+                    localized: "send.payid.unable_to_load",
+                    defaultValue: "Unable to load PayID"
+                )
             let reference = transfer.payidReference ?? ""
             // S16 / ADV-P6-S5: capture server-supplied expiry if
             // present so the countdown isn't dependent on iOS clock
@@ -77,7 +80,10 @@ public final class PayIDInstructionsViewModel {
             case .kycRequired, .forbidden:
                 state = .kycBlocked
             default:
-                state = .failed(err.errorDescription ?? "Could not issue PayID.")
+                state = .failed(err.errorDescription ?? String(
+                    localized: "send.payid.issue_failed",
+                    defaultValue: "Could not issue PayID."
+                ))
             }
         }
     }

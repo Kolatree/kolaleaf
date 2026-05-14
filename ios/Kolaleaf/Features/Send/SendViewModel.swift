@@ -52,33 +52,75 @@ public enum SendError: Equatable, Sendable {
     public var message: String {
         switch self {
         case .kycBlocked:
-            return "We need to re-verify your identity before this transfer can go through."
+            return String(
+                localized: "send.error.kyc_blocked",
+                defaultValue: "We need to re-verify your identity before this transfer can go through."
+            )
         case .rateStale:
-            return "The exchange rate has refreshed. Tap to use the new rate."
+            return String(
+                localized: "send.error.rate_stale",
+                defaultValue: "The exchange rate has refreshed. Tap to use the new rate."
+            )
         case .recipientNotOwned:
-            return "This recipient is no longer available. Pick another."
+            return String(
+                localized: "send.error.recipient_not_owned",
+                defaultValue: "This recipient is no longer available. Pick another."
+            )
         case .amountOutOfRange:
-            return "That amount is outside today's limits."
+            return String(
+                localized: "send.error.amount_out_of_range",
+                defaultValue: "That amount is outside today's limits."
+            )
         case .dailyLimitExceeded:
-            return "You've reached today's transfer limit. Try again tomorrow."
+            return String(
+                localized: "send.error.daily_limit_exceeded",
+                defaultValue: "You've reached today's transfer limit. Try again tomorrow."
+            )
         case .invalidCorridor:
-            return "That currency corridor isn't available right now."
+            return String(
+                localized: "send.error.invalid_corridor",
+                defaultValue: "That currency corridor isn't available right now."
+            )
         case .emailUnverified:
-            return "Please verify your email before sending money."
+            return String(
+                localized: "send.error.email_unverified",
+                defaultValue: "Please verify your email before sending money."
+            )
         case .idempotencyKeyConflict:
-            return "We already received an earlier version of this transfer. Refresh and try again."
+            return String(
+                localized: "send.error.idempotency_conflict",
+                defaultValue: "We already received an earlier version of this transfer. Refresh and try again."
+            )
         case .biometricsLockedOut:
-            return "Face ID is locked. Sign in again to retry."
+            return String(
+                localized: "send.error.biometrics_locked_out",
+                defaultValue: "Face ID is locked. Sign in again to retry."
+            )
         case .biometricsNotEnrolled:
-            return "Set up Face ID in Settings to confirm transfers."
+            return String(
+                localized: "send.error.biometrics_not_enrolled",
+                defaultValue: "Set up Face ID in Settings to confirm transfers."
+            )
         case .biometricsCancelled:
-            return "Face ID confirmation was cancelled."
+            return String(
+                localized: "send.error.biometrics_cancelled",
+                defaultValue: "Face ID confirmation was cancelled."
+            )
         case .biometricsFailed:
-            return "Face ID didn't match. Try again."
+            return String(
+                localized: "send.error.biometrics_failed",
+                defaultValue: "Face ID didn't match. Try again."
+            )
         case .rateLoadFailed:
-            return "Couldn't load the latest exchange rate. Try again."
+            return String(
+                localized: "send.error.rate_load_failed",
+                defaultValue: "Couldn't load the latest exchange rate. Try again."
+            )
         case .sessionExpired:
-            return "Your session has expired. Please sign in again."
+            return String(
+                localized: "common.error.session_expired",
+                defaultValue: "Your session has expired. Please sign in again."
+            )
         case .unknown(let msg):
             return msg
         case .transport(let msg):

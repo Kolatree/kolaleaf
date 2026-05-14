@@ -138,7 +138,10 @@ public final class StatementsViewModel {
                 state = .sessionExpired
             default:
                 state = .failed(err.errorDescription
-                                ?? "Couldn't load statements.")
+                                ?? String(
+                                    localized: "statements.load_failed",
+                                    defaultValue: "Couldn't load statements."
+                                ))
             }
         }
     }

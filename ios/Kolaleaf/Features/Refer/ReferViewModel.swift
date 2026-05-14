@@ -69,7 +69,10 @@ public final class ReferViewModel {
                 state = .sessionExpired
             default:
                 state = .failed(err.errorDescription
-                                ?? "Couldn't load your referral code.")
+                                ?? String(
+                                    localized: "refer.load_failed",
+                                    defaultValue: "Couldn't load your referral code."
+                                ))
             }
         }
     }
@@ -90,11 +93,16 @@ public final class ReferViewModel {
     /// with an invitation. Returns a friendly placeholder when no
     /// code is loaded so the share sheet never opens blank.
     public var shareText: String {
-        let prefix = "Hey, send money to Nigeria with Kolaleaf — "
         guard let code, !code.isEmpty else {
-            return prefix + "try the app and we both earn rewards."
+            return String(
+                localized: "refer.share.no_code",
+                defaultValue: "Hey, send money to Nigeria with Kolaleaf — try the app and we both earn rewards."
+            )
         }
-        return prefix + "use my code \(code) for $10 off your first transfer."
+        return String(
+            localized: "refer.share.with_code",
+            defaultValue: "Hey, send money to Nigeria with Kolaleaf — use my code \(code) for $10 off your first transfer."
+        )
     }
 
     /// WhatsApp deep-link URL. iOS tries `whatsapp://send?text=…`

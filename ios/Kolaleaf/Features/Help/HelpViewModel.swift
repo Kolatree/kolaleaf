@@ -45,32 +45,58 @@ public final class HelpViewModel {
     /// The 4 quick-help cards. Stable IDs so the View ForEach has a
     /// deterministic identity and tests can assert against the list
     /// without binding to copy.
-    public let quickHelpCards: [QuickHelpCard] = [
-        QuickHelpCard(
-            id: "transfer-status",
-            title: "Where's my transfer?",
-            subtitle: "Track a transfer, refund or delay.",
-            url: URL(string: "https://www.kolaleaf.com/help/transfer-status")!
-        ),
-        QuickHelpCard(
-            id: "limits-fees",
-            title: "Limits and fees",
-            subtitle: "Daily limits, FX rates and service fees.",
-            url: URL(string: "https://www.kolaleaf.com/help/limits-fees")!
-        ),
-        QuickHelpCard(
-            id: "kyc",
-            title: "Identity verification",
-            subtitle: "Why we ask and what to upload.",
-            url: URL(string: "https://www.kolaleaf.com/help/kyc")!
-        ),
-        QuickHelpCard(
-            id: "security",
-            title: "Account security",
-            subtitle: "2FA, sign-in alerts and recovery.",
-            url: URL(string: "https://www.kolaleaf.com/help/security")!
-        ),
-    ]
+    public var quickHelpCards: [QuickHelpCard] {
+        [
+            QuickHelpCard(
+                id: "transfer-status",
+                title: String(
+                    localized: "help.card.transfer_status.title",
+                    defaultValue: "Where's my transfer?"
+                ),
+                subtitle: String(
+                    localized: "help.card.transfer_status.subtitle",
+                    defaultValue: "Track a transfer, refund or delay."
+                ),
+                url: URL(string: "https://www.kolaleaf.com/help/transfer-status")!
+            ),
+            QuickHelpCard(
+                id: "limits-fees",
+                title: String(
+                    localized: "help.card.limits_fees.title",
+                    defaultValue: "Limits and fees"
+                ),
+                subtitle: String(
+                    localized: "help.card.limits_fees.subtitle",
+                    defaultValue: "Daily limits, FX rates and service fees."
+                ),
+                url: URL(string: "https://www.kolaleaf.com/help/limits-fees")!
+            ),
+            QuickHelpCard(
+                id: "kyc",
+                title: String(
+                    localized: "help.card.kyc.title",
+                    defaultValue: "Identity verification"
+                ),
+                subtitle: String(
+                    localized: "help.card.kyc.subtitle",
+                    defaultValue: "Why we ask and what to upload."
+                ),
+                url: URL(string: "https://www.kolaleaf.com/help/kyc")!
+            ),
+            QuickHelpCard(
+                id: "security",
+                title: String(
+                    localized: "help.card.security.title",
+                    defaultValue: "Account security"
+                ),
+                subtitle: String(
+                    localized: "help.card.security.subtitle",
+                    defaultValue: "2FA, sign-in alerts and recovery."
+                ),
+                url: URL(string: "https://www.kolaleaf.com/help/security")!
+            ),
+        ]
+    }
 
     private let api: AuthAPI
     private let opener: WebOpener

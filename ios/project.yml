@@ -42,6 +42,7 @@ targets:
     resources:
       - Kolaleaf/Resources/Assets.xcassets
       - Kolaleaf/Resources/Inter-fonts
+      - Kolaleaf/Resources/Localizable.xcstrings
       - Kolaleaf/PrivacyInfo.xcprivacy
     info:
       path: Kolaleaf/Info.plist

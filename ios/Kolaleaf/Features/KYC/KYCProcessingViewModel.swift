@@ -164,10 +164,26 @@ public final class KYCProcessingViewModel {
 
     private func userFacingMessage(for error: APIError) -> String {
         switch error {
-        case .transport:              return "Reconnecting…"
-        case .unauthorized:           return "Your session expired. Please sign in again."
-        case .rateLimited(let after): return "Too many requests. Pausing for \(Int(after))s."
-        default:                      return error.errorDescription ?? "Couldn't reach Kolaleaf."
+        case .transport:
+            return String(
+                localized: "kyc.processing.reconnecting",
+                defaultValue: "Reconnecting…"
+            )
+        case .unauthorized:
+            return String(
+                localized: "common.error.session_expired",
+                defaultValue: "Your session expired. Please sign in again."
+            )
+        case .rateLimited(let after):
+            return String(
+                localized: "kyc.processing.rate_limited",
+                defaultValue: "Too many requests. Pausing for \(Int(after))s."
+            )
+        default:
+            return error.errorDescription ?? String(
+                localized: "kyc.processing.unreachable",
+                defaultValue: "Couldn't reach Kolaleaf."
+            )
         }
     }
 }

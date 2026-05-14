@@ -81,7 +81,10 @@ public final class RegistrationDetailsViewModel {
               Self.isValidAddressLine1(trimmedAddress1),
               Self.isValidCity(trimmedCity),
               Self.isValidPostcode(postcode) else {
-            inlineErrors["form"] = "Please complete all required fields."
+            inlineErrors["form"] = String(
+                localized: "onboarding.register.fields_required",
+                defaultValue: "Please complete all required fields."
+            )
             return
         }
 
@@ -140,14 +143,25 @@ public final class RegistrationDetailsViewModel {
                 }
             }
             if inlineErrors.isEmpty {
-                inlineErrors["form"] = "Some details need fixing."
+                inlineErrors["form"] = String(
+                    localized: "onboarding.register.details_need_fixing",
+                    defaultValue: "Some details need fixing."
+                )
             }
 
         case .server(let status, let message) where status == 409:
             let fallback: String
             switch identifier {
-            case .email: fallback = "This email is already registered."
-            case .phone: fallback = "This phone number is already registered."
+            case .email:
+                fallback = String(
+                    localized: "onboarding.register.email_taken",
+                    defaultValue: "This email is already registered."
+                )
+            case .phone:
+                fallback = String(
+                    localized: "onboarding.register.phone_taken",
+                    defaultValue: "This phone number is already registered."
+                )
             }
             inlineErrors[identifier.fieldKey] = message ?? fallback
 
@@ -159,13 +173,22 @@ public final class RegistrationDetailsViewModel {
             inlineErrors["form"] = recoverableMessage(forReason: reason)
 
         case .rateLimited(let retryAfter):
-            inlineErrors["form"] = "Too many attempts. Try again in \(Int(retryAfter)) seconds."
+            inlineErrors["form"] = String(
+                localized: "common.error.rate_limited",
+                defaultValue: "Too many attempts. Try again in \(Int(retryAfter)) seconds."
+            )
 
         case .transport:
-            inlineErrors["form"] = "Connection problem. Please check your network."
+            inlineErrors["form"] = String(
+                localized: "common.error.connection",
+                defaultValue: "Connection problem. Please check your network."
+            )
 
         default:
-            inlineErrors["form"] = error.errorDescription ?? "Something went wrong. Please try again."
+            inlineErrors["form"] = error.errorDescription ?? String(
+                localized: "common.error.unknown",
+                defaultValue: "Something went wrong. Please try again."
+            )
         }
     }
 
@@ -174,9 +197,21 @@ public final class RegistrationDetailsViewModel {
         // `LoginIdentifier.railNoun` so the rail→noun mapping has a
         // single source of truth.
         switch reason {
-        case "claim_expired":         return "Your verification expired. Please restart sign-up."
-        case "pending_not_verified":  return "Please verify your \(identifier.railNoun) before completing sign-up."
-        default:                       return "We couldn't complete sign-up. Please try again."
+        case "claim_expired":
+            return String(
+                localized: "onboarding.register.claim_expired",
+                defaultValue: "Your verification expired. Please restart sign-up."
+            )
+        case "pending_not_verified":
+            return String(
+                localized: "onboarding.register.pending_not_verified",
+                defaultValue: "Please verify your \(identifier.railNoun) before completing sign-up."
+            )
+        default:
+            return String(
+                localized: "onboarding.register.failed_generic",
+                defaultValue: "We couldn't complete sign-up. Please try again."
+            )
         }
     }
 

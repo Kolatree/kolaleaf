@@ -58,8 +58,12 @@ public final class MyPayIDViewModel {
 
     /// User-facing copy for the "coming soon" card. Kept short so the
     /// View can render without truncation.
-    public static let unavailableReason =
-        "Your PayID will be available shortly."
+    public static var unavailableReason: String {
+        String(
+            localized: "account.payid.unavailable_reason",
+            defaultValue: "Your PayID will be available shortly."
+        )
+    }
 
     private let api: AuthAPI
 
@@ -81,7 +85,10 @@ public final class MyPayIDViewModel {
                 fallback: Self.defaultFallbackBankAccount
             )
         case .failure(let err):
-            state = .failed(err.errorDescription ?? "Couldn't load PayID.")
+            state = .failed(err.errorDescription ?? String(
+                localized: "account.payid.load_failed",
+                defaultValue: "Couldn't load PayID."
+            ))
         }
     }
 

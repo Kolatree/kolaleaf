@@ -59,7 +59,10 @@ public final class AccountViewModel {
             let name = me.displayName
                 ?? me.fullName
                 ?? me.primaryEmail?.email
-                ?? "Your account"
+                ?? String(
+                    localized: "account.fallback_name",
+                    defaultValue: "Your account"
+                )
             state = .loaded(Profile(
                 displayName: name,
                 email: me.primaryEmail?.email,
@@ -72,7 +75,10 @@ public final class AccountViewModel {
                 state = .sessionExpired
             default:
                 state = .failed(err.errorDescription
-                                ?? "Couldn't load your account.")
+                                ?? String(
+                                    localized: "account.load_failed",
+                                    defaultValue: "Couldn't load your account."
+                                ))
             }
         }
     }

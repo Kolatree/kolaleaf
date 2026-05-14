@@ -79,8 +79,16 @@ public final class PhoneEntryViewModel {
 
     private static func message(for err: PhoneNumber.ParseError) -> String {
         switch err {
-        case .empty:     return "Enter your phone number."
-        case .malformed: return "That doesn't look like a valid number."
+        case .empty:
+            return String(
+                localized: "common.phone.empty",
+                defaultValue: "Enter your phone number."
+            )
+        case .malformed:
+            return String(
+                localized: "common.phone.malformed",
+                defaultValue: "That doesn't look like a valid number."
+            )
         }
     }
 
@@ -93,13 +101,25 @@ public final class PhoneEntryViewModel {
             // first available message.
             if let first = fields["value"]?.first { return first }
             if let first = fields["phone"]?.first { return first }
-            return "Please check your number and try again."
+            return String(
+                localized: "onboarding.phone.validation_failed",
+                defaultValue: "Please check your number and try again."
+            )
         case .rateLimited(let retryAfter):
-            return "Too many attempts. Try again in \(Int(retryAfter)) seconds."
+            return String(
+                localized: "common.error.rate_limited",
+                defaultValue: "Too many attempts. Try again in \(Int(retryAfter)) seconds."
+            )
         case .transport:
-            return "Connection problem. Please check your network."
+            return String(
+                localized: "common.error.connection",
+                defaultValue: "Connection problem. Please check your network."
+            )
         default:
-            return error.errorDescription ?? "Something went wrong. Please try again."
+            return error.errorDescription ?? String(
+                localized: "common.error.unknown",
+                defaultValue: "Something went wrong. Please try again."
+            )
         }
     }
 }

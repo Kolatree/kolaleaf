@@ -246,7 +246,10 @@ public final class AddRecipientViewModel {
         // ADV-002: double-save guard.
         guard !isSaving else { return nil }
         guard let bank = selectedBank else {
-            lastError = .unknown(message: "Pick a bank first.")
+            lastError = .unknown(message: String(
+                localized: "recipients.add.pick_bank",
+                defaultValue: "Pick a bank first."
+            ))
             return nil
         }
         // ADV-001: the resolved name MUST belong to the current
@@ -278,7 +281,10 @@ public final class AddRecipientViewModel {
         case .failure(let err):
             lastError = SaveError.from(
                 err,
-                fallback: "Couldn't save the recipient. Please try again."
+                fallback: String(
+                    localized: "recipients.add.save_failed",
+                    defaultValue: "Couldn't save the recipient. Please try again."
+                )
             )
             return nil
         }

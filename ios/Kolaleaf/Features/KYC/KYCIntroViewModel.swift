@@ -59,17 +59,32 @@ public final class KYCIntroViewModel {
     private func userFacingMessage(for error: APIError) -> String {
         switch error {
         case .unauthorized:
-            return "Your session expired. Please sign in again to verify your identity."
+            return String(
+                localized: "kyc.intro.session_expired",
+                defaultValue: "Your session expired. Please sign in again to verify your identity."
+            )
         case .server(let status, let message) where status == 409:
             // 409 covers "KYC already verified" and "KYC already in review" — both
             // mean the user shouldn't retry; the route up the stack should bounce them.
-            return message ?? "Your verification is already in progress."
+            return message ?? String(
+                localized: "kyc.intro.already_in_progress",
+                defaultValue: "Your verification is already in progress."
+            )
         case .rateLimited(let retryAfter):
-            return "Too many attempts. Try again in \(Int(retryAfter)) seconds."
+            return String(
+                localized: "common.error.rate_limited",
+                defaultValue: "Too many attempts. Try again in \(Int(retryAfter)) seconds."
+            )
         case .transport:
-            return "Connection problem. Please check your network and try again."
+            return String(
+                localized: "kyc.intro.transport",
+                defaultValue: "Connection problem. Please check your network and try again."
+            )
         default:
-            return error.errorDescription ?? "Couldn't start verification. Please try again."
+            return error.errorDescription ?? String(
+                localized: "kyc.intro.start_failed",
+                defaultValue: "Couldn't start verification. Please try again."
+            )
         }
     }
 }

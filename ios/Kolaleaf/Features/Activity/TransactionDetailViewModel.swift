@@ -83,11 +83,15 @@ public final class TransactionDetailViewModel {
                     payidProviderRef: transfer.payidProviderRef
                 ))
             } catch let decodeErr as TransferDecodeError {
-                state = .failed(
-                    "Couldn't read \(decodeErr.field) from the server response."
-                )
+                state = .failed(String(
+                    localized: "transaction.detail.decode_field_failed",
+                    defaultValue: "Couldn't read \(decodeErr.field) from the server response."
+                ))
             } catch {
-                state = .failed("Couldn't read the server response.")
+                state = .failed(String(
+                    localized: "transaction.detail.decode_failed",
+                    defaultValue: "Couldn't read the server response."
+                ))
             }
         case .failure(let err):
             switch err {
@@ -96,7 +100,10 @@ public final class TransactionDetailViewModel {
             case .unauthorized:
                 state = .sessionExpired
             default:
-                state = .failed(err.errorDescription ?? "Couldn't load that transfer.")
+                state = .failed(err.errorDescription ?? String(
+                    localized: "transaction.detail.load_failed",
+                    defaultValue: "Couldn't load that transfer."
+                ))
             }
         }
     }

@@ -73,7 +73,10 @@ public final class ConfirmProfileViewModel {
         case .failure(let err):
             lastError = SaveError.from(
                 err,
-                fallback: "Couldn't load your profile. Please try again."
+                fallback: String(
+                    localized: "postkyc.profile.load_failed",
+                    defaultValue: "Couldn't load your profile. Please try again."
+                )
             )
         }
     }
@@ -106,7 +109,10 @@ public final class ConfirmProfileViewModel {
         case .failure(let err):
             lastError = SaveError.from(
                 err,
-                fallback: "Couldn't save your profile. Please try again."
+                fallback: String(
+                    localized: "postkyc.profile.save_failed",
+                    defaultValue: "Couldn't save your profile. Please try again."
+                )
             )
             return false
         }

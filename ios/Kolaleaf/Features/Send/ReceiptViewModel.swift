@@ -88,9 +88,15 @@ public final class ReceiptViewModel {
     public var headline: String {
         switch transfer.status {
         case .completed:
-            return "Money's home"
+            return String(
+                localized: "receipt.headline.completed",
+                defaultValue: "Money's home"
+            )
         default:
-            return "On the way"
+            return String(
+                localized: "receipt.headline.on_the_way",
+                defaultValue: "On the way"
+            )
         }
     }
 
@@ -98,7 +104,10 @@ public final class ReceiptViewModel {
     /// S2 / OO-007: renamed `savingsLine` → `savingsLineCopy` to
     /// signal this is fixed copy, not a derivation.
     public var savingsLineCopy: String {
-        "Best available rate"
+        String(
+            localized: "receipt.savings.best_available",
+            defaultValue: "Best available rate"
+        )
     }
 
     // MARK: - Actions

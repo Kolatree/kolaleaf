@@ -217,7 +217,10 @@ public final class FloatPausedViewModel {
         case .success(let envelope):
             apply(envelope.transfer, generation: expected)
         case .failure(let err):
-            state = .error(err.errorDescription ?? "Couldn't refresh.")
+            state = .error(err.errorDescription ?? String(
+                localized: "float_paused.refresh_failed",
+                defaultValue: "Couldn't refresh."
+            ))
         }
     }
 

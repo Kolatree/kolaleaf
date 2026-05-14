@@ -125,7 +125,10 @@ public final class ConfirmAddressViewModel {
         case .failure(let err):
             lastError = SaveError.from(
                 err,
-                fallback: "Couldn't load your address. Please try again."
+                fallback: String(
+                    localized: "postkyc.address.load_failed",
+                    defaultValue: "Couldn't load your address. Please try again."
+                )
             )
         }
     }
@@ -194,7 +197,10 @@ public final class ConfirmAddressViewModel {
         case .failure(let err):
             lastError = SaveError.from(
                 err,
-                fallback: "Couldn't save your address. Please try again."
+                fallback: String(
+                    localized: "postkyc.address.save_failed",
+                    defaultValue: "Couldn't save your address. Please try again."
+                )
             )
             return false
         }
@@ -217,16 +223,25 @@ public final class ConfirmAddressViewModel {
         var errors: [Field: String] = [:]
         let line1 = addressLine1.trimmingCharacters(in: .whitespacesAndNewlines)
         if line1.isEmpty {
-            errors[.addressLine1] = "Street address is required"
+            errors[.addressLine1] = String(
+                localized: "postkyc.address.line1_required",
+                defaultValue: "Street address is required"
+            )
         }
         let trimmedCity = city.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedCity.isEmpty {
-            errors[.city] = "City is required"
+            errors[.city] = String(
+                localized: "postkyc.address.city_required",
+                defaultValue: "City is required"
+            )
         }
         let trimmedPostcode = postcode.trimmingCharacters(in: .whitespacesAndNewlines)
         let range = NSRange(trimmedPostcode.startIndex..., in: trimmedPostcode)
         if Self.postcodeRegex.firstMatch(in: trimmedPostcode, options: [], range: range) == nil {
-            errors[.postcode] = "Postcode must be 4 digits"
+            errors[.postcode] = String(
+                localized: "postkyc.address.postcode_invalid",
+                defaultValue: "Postcode must be 4 digits"
+            )
         }
         return errors
     }

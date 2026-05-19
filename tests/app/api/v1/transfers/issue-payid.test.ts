@@ -156,13 +156,13 @@ describe('POST /api/v1/transfers/[id]/issue-payid', () => {
     mockRequireEmail.mockResolvedValueOnce({ userId: 'u1' })
     mockRequireAuth.mockResolvedValueOnce({ userId: 'u1' } as never)
     mockFindUnique.mockResolvedValueOnce({ userId: 'u1' } as never)
-    mockGenerate.mockRejectedValueOnce(new Error('provider unavailable'))
+    mockGenerate.mockRejectedValueOnce(new Error('Monoova config missing in production: MONOOVA_API_URL, MONOOVA_API_KEY'))
 
     const res = await POST(req(), { params: Promise.resolve({ id: 't1' }) })
 
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toMatchObject({
-      error: 'provider unavailable',
+      error: 'PayID is temporarily unavailable. Please try again shortly.',
       reason: 'payid_issue_failed',
     })
   })

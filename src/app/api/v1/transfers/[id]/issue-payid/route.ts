@@ -9,6 +9,7 @@ import {
   ConcurrentModificationError,
 } from "@/lib/transfers/errors";
 import { jsonError } from "@/lib/http/json-error";
+import { log } from "@/lib/obs/logger";
 import "./_schemas";
 
 // POST /api/v1/transfers/:id/issue-payid
@@ -22,6 +23,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  let transferId: string | undefined;
   try {
     // Auth runs before the state-precondition + resource-existence
     // checks so an unauthenticated probe can't enumerate transfer
@@ -29,7 +31,8 @@ export async function POST(
     // calls `requireAuth` so a second call is redundant.
     const { userId } = await requireEmailVerified(request);
 
-    const { id: transferId } = await params;
+    const routeParams = await params;
+    transferId = routeParams.id;
 
     // Ownership check: the transfer must belong to the authenticated
     // user. Returning 403 (not 404) for a non-owned existing transfer
@@ -37,7 +40,7 @@ export async function POST(
     // can't discover whether the id is valid because every failure
     // above this point is 401 or 403.
     const existing = await prisma.transfer.findUnique({
-      where: { id: transferId },
+      where: { id: routeParams.id },
       select: { userId: true },
     });
     if (!existing) {
@@ -48,7 +51,7 @@ export async function POST(
     }
 
     const transfer = await generatePayIdForTransfer(
-      transferId,
+      routeParams.id,
       createMonoovaClient(),
     );
 
@@ -100,6 +103,14 @@ export async function POST(
     if (/is not in CREATED state/.test(message)) {
       return jsonError("transfer_invalid_state", message, 409);
     }
-    return jsonError("payid_issue_failed", message, 500);
+    log("error", "transfers.issue_payid.failed", {
+      transferId: typeof transferId === "string" ? transferId : undefined,
+      error,
+    });
+    return jsonError(
+      "payid_issue_failed",
+      "PayID is temporarily unavailable. Please try again shortly.",
+      500,
+    );
   }
 }

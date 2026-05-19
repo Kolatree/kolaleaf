@@ -111,6 +111,13 @@ public final class BiometricUnlockController {
         setFaceIDUnlockEnabled(true)
     }
 
+    /// Called after the local app passcode has been verified. Shares
+    /// the same per-session unlocked flag as Face ID so the root gate
+    /// does not care which local factor succeeded.
+    public func unlockWithVerifiedPasscode() {
+        unlockedThisSession = true
+    }
+
     /// Composite gate consumed by the lock view. Caller supplies
     /// the session flag so the controller doesn't need to know
     /// about AppState directly (testability + dependency direction).

@@ -156,4 +156,7 @@ public enum KeychainKeys {
     public static let referralToken = "referral.token"
     /// App Attest key ID (U76d). Per-device, generated once.
     public static let appAttestKeyId = "attest.keyId"
+    /// Salted local app-unlock passcode hash. App-private; never shared
+    /// with widgets or the backend.
+    public static let appUnlockPasscodeHash = "security.appUnlockPasscodeHash"
 }

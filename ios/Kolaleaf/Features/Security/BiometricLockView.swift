@@ -11,6 +11,7 @@ import SwiftUI
 public struct BiometricLockView: View {
     @Bindable private var controller: BiometricUnlockController
     private let service: any BiometricsService
+    private let passcodeService: AppPasscodeService
     /// Surfaced when the user chooses "Sign out" instead of retrying
     /// the biometric prompt — e.g. their face changed, they sold the
     /// phone, etc. The host wires this to `KolaleafApp.forceReauth`.
@@ -18,14 +19,21 @@ public struct BiometricLockView: View {
 
     @State private var lastResult: BiometricsResult?
     @State private var isAuthenticating: Bool = false
+    @State private var isPasscodeConfigured: Bool = false
+    @State private var passcode: String = ""
+    @State private var passcodeError: String?
+    @State private var isCheckingPasscode: Bool = false
+    @FocusState private var passcodeFocused: Bool
 
     public init(
         controller: BiometricUnlockController,
         service: any BiometricsService,
+        passcodeService: AppPasscodeService,
         onSignOut: @escaping () -> Void
     ) {
         self.controller = controller
         self.service = service
+        self.passcodeService = passcodeService
         self.onSignOut = onSignOut
     }
 
@@ -36,6 +44,7 @@ public struct BiometricLockView: View {
                 logo
                 heading
                 errorBanner
+                passcodeFallback
                 Spacer()
                 tryAgainButton
                 if showSignOut {
@@ -48,7 +57,10 @@ public struct BiometricLockView: View {
         }
         .kolaWallpaper()
         .sensitiveScreen()
-        .task { await authenticateIfIdle() }
+        .task {
+            isPasscodeConfigured = await passcodeService.isConfigured()
+            await authenticateIfIdle()
+        }
     }
 
     // MARK: - Subviews
@@ -115,6 +127,45 @@ public struct BiometricLockView: View {
         .disabled(isAuthenticating)
     }
 
+    @ViewBuilder
+    private var passcodeFallback: some View {
+        if isPasscodeConfigured {
+            VStack(alignment: .leading, spacing: KolaSpacing.s) {
+                Text("App passcode")
+                    .font(KolaFont.tagline)
+                    .foregroundStyle(KolaColors.whiteOnGradientMuted)
+                SecureField("6-digit passcode", text: $passcode)
+                    .keyboardType(.numberPad)
+                    .textContentType(.oneTimeCode)
+                    .focused($passcodeFocused)
+                    .onChange(of: passcode) { _, newValue in
+                        passcode = AppPasscodeService.normalized(newValue)
+                        passcodeError = nil
+                        if passcode.count == 6 {
+                            Task { await verifyPasscode() }
+                        }
+                    }
+                    .padding(.horizontal, KolaSpacing.m)
+                    .frame(minHeight: KolaSpacing.hitTarget + 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: KolaRadius.card, style: .continuous)
+                            .fill(Color.white.opacity(0.92))
+                    )
+                    .foregroundStyle(KolaColors.textPrimary)
+                    .disabled(isCheckingPasscode)
+
+                if let passcodeError {
+                    Text(passcodeError)
+                        .font(KolaFont.tagline)
+                        .foregroundStyle(KolaColors.coral)
+                        .accessibilityLabel("Passcode error: \(passcodeError)")
+                }
+            }
+            .padding(.top, KolaSpacing.m)
+            .task { passcodeFocused = true }
+        }
+    }
+
     private var signOutLink: some View {
         Button(action: onSignOut) {
             Text("Sign out instead")
@@ -152,7 +203,7 @@ public struct BiometricLockView: View {
         guard let lastResult else { return false }
         switch lastResult {
         case .lockedOut, .notEnrolled, .noHardware, .unknownError:
-            return true
+            return !isPasscodeConfigured
         default:
             return false
         }
@@ -167,5 +218,25 @@ public struct BiometricLockView: View {
         isAuthenticating = true
         defer { isAuthenticating = false }
         lastResult = await controller.unlock(using: service)
+    }
+
+    private func verifyPasscode() async {
+        guard passcode.count == 6, !isCheckingPasscode else { return }
+        isCheckingPasscode = true
+        defer { isCheckingPasscode = false }
+        switch await passcodeService.verify(passcode) {
+        case .success:
+            controller.unlockWithVerifiedPasscode()
+        case .invalid:
+            passcode = ""
+            passcodeError = "That passcode did not match."
+        case .notConfigured:
+            passcode = ""
+            passcodeError = "Set an app passcode from Security settings first."
+            isPasscodeConfigured = false
+        case .unavailable:
+            passcode = ""
+            passcodeError = "Couldn't check the app passcode. Try Face ID or sign out."
+        }
     }
 }

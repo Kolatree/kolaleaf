@@ -67,11 +67,13 @@
 		2547B8C5EA425E6EE5B1BE4E /* APIErrorPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 542F75837951B78D98D05CC8 /* APIErrorPresenter.swift */; };
 		2559F992A437EA831D0C9C4F /* QRCodeRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2FD91024354755E4D98631E /* QRCodeRenderer.swift */; };
 		25763D86F2819D6C23B6989C /* WidgetCookieIsolationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B6ABA2B8B5ECDBDED405188 /* WidgetCookieIsolationTests.swift */; };
+		25D217F2559B50418FA0CEDE /* AppPasscodeServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32F0230F04EEC9D629ED16BC /* AppPasscodeServiceTests.swift */; };
 		25FB62CF5DC7F95B3BE5DBC6 /* SendFlowAccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A097E0FF86F3BAA067FEFE5B /* SendFlowAccessibilityTests.swift */; };
 		266FD2AC3721F6A11DC70C9D /* RecipientChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85830688D22A8F82239311BC /* RecipientChip.swift */; };
 		26A7807C9785CE75F93BDEFB /* HelpViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 019750D00BF815BAC3D930DE /* HelpViewModelTests.swift */; };
 		26DB85A310D042CF57C7A526 /* TransfersEndpoints.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD42F85739C623CCD7470A9F /* TransfersEndpoints.swift */; };
 		278C92F7A5E273B99528C0F7 /* Inter-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = BFB8C836E5CBB0079A750589 /* Inter-SemiBold.ttf */; };
+		289C1BC3208982AA9A3DC192 /* AppPasscodeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A3B7CE5A5AE69DB94501DC8 /* AppPasscodeService.swift */; };
 		29F396B48F4957D5456EAFBC /* APIErrorMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02DC22E55793795881173CBE /* APIErrorMappingTests.swift */; };
 		2ADBBC0645D0038FAB717AFF /* ExpiredTransferViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 592DF3BE97A41E0178A8610B /* ExpiredTransferViewModelTests.swift */; };
 		2AF39233DF2C25B2B9362330 /* RecipientResolveServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 039843266622D9160E5B3F65 /* RecipientResolveServiceTests.swift */; };
@@ -422,6 +424,7 @@
 		2F1F904E32071B802B039779 /* KolaColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KolaColors.swift; sourceTree = "<group>"; };
 		2F6C7EBF7CC1A11A219374DD /* FloatPausedViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatPausedViewModelTests.swift; sourceTree = "<group>"; };
 		309E1209050076BF4FBC7128 /* SumsubProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SumsubProvider.swift; sourceTree = "<group>"; };
+		32F0230F04EEC9D629ED16BC /* AppPasscodeServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPasscodeServiceTests.swift; sourceTree = "<group>"; };
 		33125EB37DB3DFC8823B235B /* SumsubResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SumsubResult.swift; sourceTree = "<group>"; };
 		33547149BBB1F6F5DE55A762 /* KolaleafTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = KolaleafTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		33AF8267D34E1907399DCF4F /* PostKYCCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostKYCCoordinator.swift; sourceTree = "<group>"; };
@@ -503,6 +506,7 @@
 		86CC1FE8C3053497E014FD38 /* test_lockScreenCard_completed.1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = test_lockScreenCard_completed.1.png; sourceTree = "<group>"; };
 		8960806A421123130122BA23 /* KYCEndpoints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KYCEndpoints.swift; sourceTree = "<group>"; };
 		89A53D32FABBA897CB3CFAF5 /* SendViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendViewModelTests.swift; sourceTree = "<group>"; };
+		8A3B7CE5A5AE69DB94501DC8 /* AppPasscodeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPasscodeService.swift; sourceTree = "<group>"; };
 		8A59CC39D6DAB02F9F30B76B /* FloatPausedViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatPausedViewModel.swift; sourceTree = "<group>"; };
 		8B52B0E4D3E218B57245A108 /* SwitcherBlur.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherBlur.swift; sourceTree = "<group>"; };
 		8B73C55DDBB23B6171B0CAE1 /* BiometricUnlockController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiometricUnlockController.swift; sourceTree = "<group>"; };
@@ -964,6 +968,7 @@
 			isa = PBXGroup;
 			children = (
 				3657FAAE39EEF8C53C84D4D3 /* AnalyticsServiceTests.swift */,
+				32F0230F04EEC9D629ED16BC /* AppPasscodeServiceTests.swift */,
 				99658C7401543FDB5FA0C395 /* BankDownAutoRetryTests.swift */,
 				DD8554390AEF39C3821B0A47 /* BiometricsServiceTests.swift */,
 				1194C83CF15CDF751A9187F1 /* BoundedRetrierTests.swift */,
@@ -1169,6 +1174,7 @@
 			isa = PBXGroup;
 			children = (
 				2C029E6C7D74792EED282544 /* AnalyticsService.swift */,
+				8A3B7CE5A5AE69DB94501DC8 /* AppPasscodeService.swift */,
 				AD82E839A1E3291CCB842757 /* BankStore.swift */,
 				C38764F7F6B84D97DE3A6D98 /* BiometricsService.swift */,
 				8B73C55DDBB23B6171B0CAE1 /* BiometricUnlockController.swift */,
@@ -1815,6 +1821,7 @@
 				63F0E21E004E2AEEE4020F92 /* AmountStoreTests.swift in Sources */,
 				63BE9A022B25B05087BE5D6C /* AnalyticsServiceTests.swift in Sources */,
 				516A82F56824610B1E4AA5A6 /* AppLocaleTests.swift in Sources */,
+				25D217F2559B50418FA0CEDE /* AppPasscodeServiceTests.swift in Sources */,
 				4C25291A5342737A543894BD /* AppStateLaunchArgTests.swift in Sources */,
 				7A0398340D78502F316A5D84 /* AppStateTests.swift in Sources */,
 				E5F5E688C8F6E10F4A97FB5B /* BankBrandTableTests.swift in Sources */,
@@ -1917,6 +1924,7 @@
 				A9D80623D2597CB5A568F6A4 /* AnalyticsService.swift in Sources */,
 				01549BFA21B837E3E41526AA /* AppBackend.swift in Sources */,
 				AFABD0CF23ACB2F4B90A1ADA /* AppLocale.swift in Sources */,
+				289C1BC3208982AA9A3DC192 /* AppPasscodeService.swift in Sources */,
 				0343259E2D0BD8C084F0E517 /* AppState.swift in Sources */,
 				19F11EFDCFDD1270D6075BCC /* AustralianStatePicker.swift in Sources */,
 				D0186C75438669C6AF24C901 /* AuthAPI.swift in Sources */,

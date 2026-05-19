@@ -47,25 +47,53 @@ public struct SecurityMenuView: View {
 private struct SecurityMenuContent: View {
     @Bindable var vm: SecurityMenuViewModel
     @Bindable var controller: BiometricUnlockController
+    @Environment(\.keychain) private var keychain
     @AppStorage(NotificationPreferenceKeys.newDeviceAlerts)
     private var newDeviceAlertsEnabled = true
     @AppStorage(NotificationPreferenceKeys.transferPushAlerts)
     private var transferPushAlertsEnabled = true
+    @State private var passcodeConfigured = false
+    @State private var passcodeSheet: AppPasscodeSheet?
 
     var body: some View {
         List {
             Section("Sign-in") {
                 Toggle(isOn: $controller.faceIDUnlockEnabled) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Require Face ID to open Kolaleaf")
+                        Text("Require Face ID or app passcode")
                             .font(KolaFont.row)
-                        Text("Asks for Face ID every time you open the app.")
+                        Text("Locks Kolaleaf whenever you open the app.")
                             .font(KolaFont.tagline)
                             .foregroundStyle(.secondary)
                     }
                 }
                 .tint(KolaColors.greenLight)
                 .accessibilityIdentifier("security.faceIDToggle")
+
+                Button {
+                    passcodeSheet = .set
+                } label: {
+                    securityRow(
+                        title: passcodeConfigured ? "Change app passcode" : "Set app passcode",
+                        subtitle: passcodeConfigured
+                        ? "Used when Face ID is unavailable."
+                        : "Create a 6-digit fallback for app unlock.",
+                        systemImage: "keyboard.badge.ellipsis"
+                    )
+                }
+
+                if passcodeConfigured {
+                    Button(role: .destructive) {
+                        Task { await removePasscode() }
+                    } label: {
+                        securityRow(
+                            title: "Remove app passcode",
+                            subtitle: "Face ID remains available if enabled.",
+                            systemImage: "keyboard.badge.eye",
+                            destructive: true
+                        )
+                    }
+                }
             }
 
             twoFactorSection
@@ -78,6 +106,7 @@ private struct SecurityMenuContent: View {
                     .tint(KolaColors.trustGreen)
             }
         }
+        .task { await refreshPasscodeConfigured() }
         .refreshable { await vm.load() }
         .sheet(item: $vm.activeSheet) { sheet in
             switch sheet {
@@ -91,6 +120,22 @@ private struct SecurityMenuContent: View {
                 VerifySecurityActionSheet(vm: vm, action: action)
             }
         }
+        .sheet(item: $passcodeSheet) { _ in
+            AppPasscodeSetupSheet { passcode in
+                try await AppPasscodeService(keychain: keychain).setPasscode(passcode)
+                controller.setFaceIDUnlockEnabled(true)
+                await refreshPasscodeConfigured()
+            }
+        }
+    }
+
+    private func refreshPasscodeConfigured() async {
+        passcodeConfigured = await AppPasscodeService(keychain: keychain).isConfigured()
+    }
+
+    private func removePasscode() async {
+        await AppPasscodeService(keychain: keychain).clear()
+        await refreshPasscodeConfigured()
     }
 
     @ViewBuilder
@@ -255,6 +300,102 @@ private struct SecurityMenuContent: View {
         .contentShape(Rectangle())
     }
 
+}
+
+private enum AppPasscodeSheet: Identifiable {
+    case set
+
+    var id: String { "set" }
+}
+
+private struct AppPasscodeSetupSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var passcode = ""
+    @State private var confirmPasscode = ""
+    @State private var errorMessage: String?
+    @State private var isSaving = false
+    @FocusState private var focusedField: Field?
+
+    let onSave: (String) async throws -> Void
+
+    private enum Field {
+        case passcode
+        case confirm
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    SecureField("6-digit passcode", text: $passcode)
+                        .keyboardType(.numberPad)
+                        .textContentType(.oneTimeCode)
+                        .focused($focusedField, equals: .passcode)
+                        .onChange(of: passcode) { _, newValue in
+                            passcode = AppPasscodeService.normalized(newValue)
+                            errorMessage = nil
+                        }
+
+                    SecureField("Confirm passcode", text: $confirmPasscode)
+                        .keyboardType(.numberPad)
+                        .textContentType(.oneTimeCode)
+                        .focused($focusedField, equals: .confirm)
+                        .onChange(of: confirmPasscode) { _, newValue in
+                            confirmPasscode = AppPasscodeService.normalized(newValue)
+                            errorMessage = nil
+                        }
+                } footer: {
+                    Text("This passcode stays on this device and unlocks Kolaleaf when Face ID is unavailable.")
+                }
+
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .font(KolaFont.tagline)
+                            .foregroundStyle(KolaColors.coral)
+                            .accessibilityLabel("Passcode error: \(errorMessage)")
+                    }
+                }
+            }
+            .navigationTitle("App passcode")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(isSaving ? "Saving" : "Save") {
+                        Task { await save() }
+                    }
+                    .disabled(isSaving)
+                }
+            }
+            .task { focusedField = .passcode }
+        }
+    }
+
+    private func save() async {
+        guard AppPasscodeService.isValid(passcode) else {
+            errorMessage = "Enter a 6-digit passcode."
+            focusedField = .passcode
+            return
+        }
+        guard passcode == confirmPasscode else {
+            errorMessage = "The passcodes do not match."
+            confirmPasscode = ""
+            focusedField = .confirm
+            return
+        }
+
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            try await onSave(passcode)
+            dismiss()
+        } catch {
+            errorMessage = "Couldn't save the app passcode. Please try again."
+        }
+    }
 }
 
 @MainActor

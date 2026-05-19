@@ -51,6 +51,7 @@ struct KolaleafApp: App {
     /// drives BiometricLockView when the user comes back to a
     /// foreground after backgrounding the app.
     @State private var biometricUnlock: BiometricUnlockController
+    private let appPasscodeService: AppPasscodeService
     @State private var activeFeedbackDraft: FeedbackDraft?
     private let biometricsService: any BiometricsService = LABiometricsService()
     @AppStorage(AppLocale.storageKey) private var appLocaleRawValue = AppLocale.system.rawValue
@@ -66,6 +67,7 @@ struct KolaleafApp: App {
         // Build both in init so the wiring is single-source-of-truth.
         let kc = Keychain()
         _keychain = State(initialValue: kc)
+        appPasscodeService = AppPasscodeService(keychain: kc)
         _referralCapture = State(initialValue: ReferralCapture(keychain: kc))
         // PushPermissionService is wired against the same APIClient instance
         // so backend POST /account/push-tokens shares the session cookie jar.
@@ -214,6 +216,7 @@ struct KolaleafApp: App {
                 BiometricLockView(
                     controller: biometricUnlock,
                     service: biometricsService,
+                    passcodeService: appPasscodeService,
                     onSignOut: {
                         Task { await forceReauth() }
                     }

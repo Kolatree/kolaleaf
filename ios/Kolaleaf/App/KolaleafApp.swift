@@ -137,7 +137,7 @@ struct KolaleafApp: App {
                 // returns a user-facing alert only when this is a new
                 // device relative to prior authenticated devices.
                 .task(id: appState.currentUser?.id) {
-                    configureBiometricUnlockForSession()
+                    await configureBiometricUnlockForSession()
                     await registerDeviceAttestationForSession()
                     if appState.hasActiveSession {
                         await analyticsService.flush()
@@ -186,9 +186,12 @@ struct KolaleafApp: App {
         }
     }
 
-    private func configureBiometricUnlockForSession() {
+    private func configureBiometricUnlockForSession() async {
         guard appState.hasActiveSession else { return }
-        biometricUnlock.enableByDefaultIfUnsetAndAvailable(using: biometricsService)
+        let passcodeConfigured = await appPasscodeService.isConfigured()
+        if biometricUnlock.faceIDUnlockEnabled, !passcodeConfigured {
+            biometricUnlock.resetPrePasscodeLock()
+        }
     }
 
     // MARK: - Root content w/ Face ID gate

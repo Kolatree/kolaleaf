@@ -2,11 +2,10 @@
 //
 // Holds the "require Face ID at launch" user preference + the
 // session-level unlocked flag. The setting persists to UserDefaults
-// (kola.faceIDUnlockEnabled). The first authenticated session on a
-// Face-ID-capable device enables the preference automatically unless
-// the user has already made an explicit choice. The unlock flag is
-// in-memory only — every cold launch and every
-// foreground-after-background restart re-locks if the setting is on.
+// (kola.faceIDUnlockEnabled) only after the user explicitly enables
+// it from Security settings. The unlock flag is in-memory only —
+// every cold launch and every foreground-after-background restart
+// re-locks if the setting is on.
 //
 // Why a dedicated controller (vs folding into AppState):
 //   • The locked/unlocked state is orthogonal to session/KYC
@@ -47,10 +46,8 @@ public final class BiometricUnlockController {
         didSet { applyFaceIDPreferenceSideEffects() }
     }
 
-    /// True once the user has explicitly accepted the default or
-    /// changed the Security toggle. Keeps the product default
-    /// "protect logged-in sessions with Face ID when available" from
-    /// overriding a user who turned the feature off.
+    /// True once the user has changed the Security toggle. Retained
+    /// for migrations from earlier builds that auto-enabled Face ID.
     public private(set) var faceIDPreferenceConfigured: Bool
 
     /// Explicit setter — equivalent to assigning `faceIDUnlockEnabled`
@@ -101,14 +98,17 @@ public final class BiometricUnlockController {
             || defaults.object(forKey: Self.kFaceIDEnabled) != nil
     }
 
-    /// Enables app unlock by default once an authenticated session
-    /// exists on a device that can evaluate biometrics. This is
-    /// intentionally a no-op after the user has made an explicit
-    /// choice, so the Security toggle remains an opt-out.
-    public func enableByDefaultIfUnsetAndAvailable(using service: any BiometricsService) {
-        guard !faceIDPreferenceConfigured else { return }
-        guard case .available = service.availability() else { return }
-        setFaceIDUnlockEnabled(true)
+    /// Clears the persisted lock setting when an older build enabled
+    /// Face ID before a local app passcode existed. Without this
+    /// migration, a user who cannot complete Face ID has no fallback
+    /// path and cannot reach Account > Security to fix the setting.
+    public func resetPrePasscodeLock() {
+        faceIDUnlockEnabled = false
+        faceIDPreferenceConfigured = false
+        defaults.removeObject(forKey: Self.kFaceIDEnabled)
+        defaults.removeObject(forKey: Self.kFaceIDPreferenceConfigured)
+        unlockedThisSession = false
+        unlockGeneration &+= 1
     }
 
     /// Called after the local app passcode has been verified. Shares

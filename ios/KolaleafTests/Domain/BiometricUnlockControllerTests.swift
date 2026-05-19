@@ -45,7 +45,7 @@ final class BiometricUnlockControllerTests: XCTestCase {
 
         XCTAssertFalse(c.faceIDUnlockEnabled)
         XCTAssertTrue(c.faceIDPreferenceConfigured,
-                      "An explicit off choice must be remembered so the default-on bootstrap cannot override it")
+                      "An explicit off choice must be remembered across launches")
     }
 
     func test_enablingPreferenceResetsUnlockedFlag() async {
@@ -62,42 +62,36 @@ final class BiometricUnlockControllerTests: XCTestCase {
                        "Flipping the preference on must re-lock so the gate re-prompts")
     }
 
-    // MARK: - Default-on app unlock
+    // MARK: - Pre-passcode migration
 
-    func test_enableByDefaultIfUnsetAndAvailable_turnsOnFaceIDUnlock() {
+    func test_resetPrePasscodeLock_clearsPersistedPreference() {
         let c = BiometricUnlockController(defaults: defaults)
-        let fake = FakeBiometricsService(availability: .available)
+        c.setFaceIDUnlockEnabled(true)
 
-        c.enableByDefaultIfUnsetAndAvailable(using: fake)
-
-        XCTAssertTrue(c.faceIDUnlockEnabled)
-        XCTAssertTrue(c.faceIDPreferenceConfigured)
-        XCTAssertTrue(c.shouldShowGate(hasActiveSession: true))
-        XCTAssertEqual(fake.availabilityCallCount, 1)
-    }
-
-    func test_enableByDefaultIfUnsetAndUnavailable_leavesPreferenceUnset() {
-        let c = BiometricUnlockController(defaults: defaults)
-        let fake = FakeBiometricsService(availability: .notEnrolled)
-
-        c.enableByDefaultIfUnsetAndAvailable(using: fake)
+        c.resetPrePasscodeLock()
 
         XCTAssertFalse(c.faceIDUnlockEnabled)
         XCTAssertFalse(c.faceIDPreferenceConfigured)
         XCTAssertFalse(c.shouldShowGate(hasActiveSession: true))
+        let c2 = BiometricUnlockController(defaults: defaults)
+        XCTAssertFalse(c2.faceIDUnlockEnabled)
+        XCTAssertFalse(c2.faceIDPreferenceConfigured)
     }
 
-    func test_enableByDefaultIfExplicitlyDisabled_doesNotOverrideUserChoice() {
+    func test_resetPrePasscodeLock_invalidatesInFlightUnlock() async {
         let c = BiometricUnlockController(defaults: defaults)
-        c.setFaceIDUnlockEnabled(false)
-        let fake = FakeBiometricsService(availability: .available)
+        c.setFaceIDUnlockEnabled(true)
+        let pausable = PausableBiometricsService()
+        let unlockTask = Task { await c.unlock(using: pausable) }
+        await Task.yield()
+        await pausable.waitUntilAuthenticating()
 
-        c.enableByDefaultIfUnsetAndAvailable(using: fake)
+        c.resetPrePasscodeLock()
+        pausable.resume(with: .success)
+        _ = await unlockTask.value
 
         XCTAssertFalse(c.faceIDUnlockEnabled)
-        XCTAssertTrue(c.faceIDPreferenceConfigured)
-        XCTAssertEqual(fake.availabilityCallCount, 0,
-                       "Explicit user choice should skip even the availability probe")
+        XCTAssertFalse(c.unlockedThisSession)
     }
 
     // MARK: - isLocked composite

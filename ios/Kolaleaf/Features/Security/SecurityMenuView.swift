@@ -58,7 +58,7 @@ private struct SecurityMenuContent: View {
     var body: some View {
         List {
             Section("Sign-in") {
-                Toggle(isOn: $controller.faceIDUnlockEnabled) {
+                Toggle(isOn: faceIDToggleBinding) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Require Face ID or app passcode")
                             .font(KolaFont.row)
@@ -88,7 +88,7 @@ private struct SecurityMenuContent: View {
                     } label: {
                         securityRow(
                             title: "Remove app passcode",
-                            subtitle: "Face ID remains available if enabled.",
+                            subtitle: "Turns off the app lock until you set a new passcode.",
                             systemImage: "keyboard.badge.eye",
                             destructive: true
                         )
@@ -129,12 +129,26 @@ private struct SecurityMenuContent: View {
         }
     }
 
+    private var faceIDToggleBinding: Binding<Bool> {
+        Binding(
+            get: { controller.faceIDUnlockEnabled },
+            set: { enabled in
+                if enabled, !passcodeConfigured {
+                    passcodeSheet = .set
+                    return
+                }
+                controller.setFaceIDUnlockEnabled(enabled)
+            }
+        )
+    }
+
     private func refreshPasscodeConfigured() async {
         passcodeConfigured = await AppPasscodeService(keychain: keychain).isConfigured()
     }
 
     private func removePasscode() async {
         await AppPasscodeService(keychain: keychain).clear()
+        controller.setFaceIDUnlockEnabled(false)
         await refreshPasscodeConfigured()
     }
 

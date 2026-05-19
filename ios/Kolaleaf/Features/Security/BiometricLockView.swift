@@ -180,6 +180,10 @@ public struct BiometricLockView: View {
     // MARK: - Behaviour
 
     private var bannerMessage: String? {
+        guard isPasscodeConfigured else {
+            if lastResult == nil { return nil }
+            return "App passcode is not set up. Sign out and sign in again to continue."
+        }
         guard let lastResult else { return nil }
         switch lastResult {
         case .success:        return nil
@@ -200,10 +204,11 @@ public struct BiometricLockView: View {
     }
 
     private var showSignOut: Bool {
+        guard isPasscodeConfigured else { return lastResult != nil }
         guard let lastResult else { return false }
         switch lastResult {
         case .lockedOut, .notEnrolled, .noHardware, .unknownError:
-            return !isPasscodeConfigured
+            return true
         default:
             return false
         }

@@ -156,9 +156,6 @@ public struct SendView: View {
             .accessibilityLabel("Send amount \(vm.amountStore.displayString) Australian dollars")
             rateLine
             ngnPreviewLine
-            if vm.isRateStale && vm.rateEffectiveAt != nil {
-                staleRateBanner
-            }
         }
     }
 
@@ -189,43 +186,20 @@ public struct SendView: View {
         }
     }
 
-    private var staleRateBanner: some View {
-        Button(action: { Task { await vm.loadRate() } }) {
-            HStack(spacing: KolaSpacing.s) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                Text("Rate expired. Refresh before sending.")
-                    .font(KolaFont.tagline)
-            }
-            .foregroundStyle(KolaColors.warning)
-            .padding(.horizontal, KolaSpacing.m)
-            .padding(.vertical, KolaSpacing.s)
-            .background(
-                RoundedRectangle(cornerRadius: KolaRadius.chip, style: .continuous)
-                    .fill(KolaColors.warning.opacity(0.10))
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityHint("Reloads the latest exchange rate")
-    }
-
     private var slidePill: some View {
         SlidePill(
             label: slidePillLabel,
-            isEnabled: vm.canSubmit || vm.submitBlocker == .rateStale,
+            isEnabled: vm.canSubmit,
             onConfirm: {
                 Task {
-                    if vm.submitBlocker == .rateStale {
-                        await vm.refreshRateForSend()
-                    } else {
-                        Task {
-                            await analyticsService?.track(
-                                .slideInitiated,
-                                properties: ["screen": .string("send")]
-                            )
-                        }
-                        await vm.confirmAndSubmit()
-                        await routeCreatedTransferIfAvailable()
+                    Task {
+                        await analyticsService?.track(
+                            .slideInitiated,
+                            properties: ["screen": .string("send")]
+                        )
                     }
+                    await vm.confirmAndSubmit()
+                    await routeCreatedTransferIfAvailable()
                 }
             }
         )
@@ -247,8 +221,6 @@ public struct SendView: View {
         switch vm.submitBlocker {
         case nil:
             return "Slide to send"
-        case .rateStale:
-            return "Slide to refresh rate"
         case .missingRecipient:
             return "Pick recipient to send"
         case .missingRate:

@@ -27,9 +27,9 @@ final class SlidePillTests: XCTestCase {
         XCTAssertNotNil(mirror.descendant("isEnabled"))
     }
 
-    func test_staleRateRefreshLabel_canReuseSlidePillWithoutSubmitting() {
+    func test_customLabel_canReuseSlidePillWithoutSubmitting() {
         var fired = 0
-        _ = SlidePill(label: "Slide to refresh rate", onConfirm: { fired += 1 })
+        _ = SlidePill(label: "Slide to send", onConfirm: { fired += 1 })
         XCTAssertEqual(fired, 0)
     }
 

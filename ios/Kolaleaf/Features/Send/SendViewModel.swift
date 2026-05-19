@@ -110,7 +110,6 @@ public enum SendSubmitBlocker: Equatable, Sendable {
     case missingRecipient
     case missingRate
     case emptyAmount
-    case rateStale
 }
 
 @MainActor
@@ -206,7 +205,6 @@ public final class SendViewModel {
         guard selectedRecipient != nil else { return .missingRecipient }
         guard rateService.quote != nil else { return .missingRate }
         guard amountStore.cents > 0 else { return .emptyAmount }
-        guard !isRateStale else { return .rateStale }
         return nil
     }
 
@@ -240,6 +238,15 @@ public final class SendViewModel {
     public func confirmAndSubmit() async {
         guard canSubmit else { return }
         guard let recipient = selectedRecipient else { return }
+
+        if isRateStale {
+            await loadRate()
+            guard !isRateStale else {
+                if lastError == nil { lastError = .rateLoadFailed }
+                return
+            }
+        }
+
         guard let quote = rateService.quote else { return }
 
         // Capture the quote's effectiveAt at slide-start so the

@@ -105,7 +105,7 @@ final class SendViewModelTests: XCTestCase {
         XCTAssertTrue(vm.canSubmit)
     }
 
-    func test_canSubmit_false_whenRateIsStale() async {
+    func test_canSubmit_true_whenRateIsStale() async {
         let api = FakeAPIClient()
         await api.stageSuccess(
             RatesEndpoints.Quote.self,
@@ -116,8 +116,8 @@ final class SendViewModelTests: XCTestCase {
         vm.selectedRecipient = makeSampleRecipient()
         vm.amountStore.append(1); vm.amountStore.append(0); vm.amountStore.append(0); vm.amountStore.append(0)
         XCTAssertTrue(vm.isRateStale)
-        XCTAssertEqual(vm.submitBlocker, .rateStale)
-        XCTAssertFalse(vm.canSubmit)
+        XCTAssertNil(vm.submitBlocker)
+        XCTAssertTrue(vm.canSubmit)
     }
 
     func test_submitBlocker_describesMissingPreconditions() async {
@@ -214,6 +214,40 @@ final class SendViewModelTests: XCTestCase {
         await vm.confirmAndSubmit()
 
         XCTAssertEqual(vm.lastError, .rateStale)
+    }
+
+    func test_confirmAndSubmit_refreshesStaleRateAndRoutesTransfer() async {
+        let api = FakeAPIClient()
+        await api.stageSequence(
+            RatesEndpoints.Quote.self,
+            results: [
+                .success(makeRateResponse(ageSeconds: 13 * 60 * 60)),
+                .success(makeRateResponse(ageSeconds: 60, customerRate: "1042.65")),
+            ]
+        )
+        await api.stageSuccess(
+            TransfersEndpoints.Create.self,
+            CreateTransferResponse(transfer: sampleTransfer())
+        )
+        let appState = makeAppState()
+        let vm = SendViewModel(
+            api: api,
+            appState: appState
+        )
+        await vm.loadRate()
+        vm.selectedRecipient = makeSampleRecipient()
+        vm.amountStore.append(1); vm.amountStore.append(0); vm.amountStore.append(0); vm.amountStore.append(0)
+
+        XCTAssertTrue(vm.isRateStale)
+        XCTAssertTrue(vm.canSubmit)
+
+        await vm.confirmAndSubmit()
+
+        XCTAssertFalse(vm.isRateStale)
+        XCTAssertEqual(vm.customerRate, Decimal(string: "1042.65"))
+        XCTAssertEqual(appState.activeTransfer?.id, "txn_001")
+        XCTAssertEqual(vm.consumeLastCreated()?.id, "txn_001")
+        XCTAssertNil(vm.lastError)
     }
 
     // MARK: - W21 / ADV-P6-W4: session expired

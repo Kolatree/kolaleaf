@@ -5,19 +5,19 @@
 //
 // Invariants enforced here:
 //   1. (C2) Submission entry points are `internal`. No public API
-//      ever calls POST /transfers — that bypasses biometrics by
-//      definition. The View Model coordinates biometrics, then calls
-//      this service via its single `submit(...)` method.
+//      ever calls POST /transfers directly. The View Model coordinates
+//      the deliberate slide confirmation, then calls this service via
+//      its single `submit(...)` method.
 //   2. (C3) An idempotency UUID is generated per slide-confirm INTENT
 //      (i.e. per call to `submit(...)`), NOT per network attempt.
 //      The same UUID rides every transport retry of the same intent
 //      so a duplicate POST on a flaky network does not create a
 //      duplicate Transfer.
-//   3. (C5) After biometrics succeeds and before POST, the rate is
-//      re-checked. A 12h stale window at submit-time is refused —
-//      auto-refresh on tap is fine, silent stale-rate submit is not.
-//      A rate that REFRESHED between slide-start and submit (different
-//      `effectiveAt`) is also refused so the user explicitly re-confirms.
+//   3. (C5) Before POST, the rate is re-checked. A 12h stale window
+//      at submit-time is refused — auto-refresh on tap is fine, silent
+//      stale-rate submit is not. A rate that REFRESHED between
+//      slide-start and submit (different `effectiveAt`) is also refused
+//      so the user explicitly re-confirms.
 //   4. (C6) No fake "local-pending" Transfer id leaks into AppState.
 //      The optimistic flag is `AppState.isSubmittingTransfer`. The
 //      real `activeTransfer` is populated only on backend success.
@@ -74,8 +74,8 @@ public final class TransferSubmissionService {
     /// the in-VM service's current quote before POSTing (C5).
     /// `currentRateQuoteAt`: the `effectiveAt` of the VM's current
     /// quote at the moment of submit. If it differs from
-    /// `rateQuote.effectiveAt`, the rate refreshed mid-biometrics
-    /// and we refuse so the user re-confirms at the new rate.
+    /// `rateQuote.effectiveAt`, the rate refreshed mid-submit and we
+    /// refuse so the user re-confirms at the new rate.
     @discardableResult
     internal func submit(
         recipientId: String,

@@ -106,14 +106,8 @@ public struct SendView: View {
         // on the in-flight → idle edge.
         .onChange(of: vm.isSubmittingTransfer) { _, nowSubmitting in
             guard !nowSubmitting else { return }
-            if let transfer = vm.consumeLastCreated() {
-                Task {
-                    await analyticsService?.track(
-                        .transferPostSucceeded,
-                        properties: ["screen": .string("send")]
-                    )
-                }
-                onCreated(transfer)
+            Task {
+                await routeCreatedTransferIfAvailable()
             }
         }
         .onChange(of: vm.lastError == .sessionExpired) { _, expired in
@@ -223,15 +217,30 @@ public struct SendView: View {
                     if vm.submitBlocker == .rateStale {
                         await vm.refreshRateForSend()
                     } else {
-                        await analyticsService?.track(
-                            .slideInitiated,
-                            properties: ["screen": .string("send")]
-                        )
+                        Task {
+                            await analyticsService?.track(
+                                .slideInitiated,
+                                properties: ["screen": .string("send")]
+                            )
+                        }
                         await vm.confirmAndSubmit()
+                        await routeCreatedTransferIfAvailable()
                     }
                 }
             }
         )
+    }
+
+    @MainActor
+    private func routeCreatedTransferIfAvailable() async {
+        guard let transfer = vm.consumeLastCreated() else { return }
+        onCreated(transfer)
+        Task {
+            await analyticsService?.track(
+                .transferPostSucceeded,
+                properties: ["screen": .string("send")]
+            )
+        }
     }
 
     private var slidePillLabel: String {

@@ -1,4 +1,4 @@
-// SendViewModel.swift  (Phase 6 iter-2 · C1/C2/C5/C6 + W11/W21)
+// SendViewModel.swift  (Phase 6 iter-2 · C1/C2/C6 + W11/W21)
 // Thin coordinator. Delegates rate-quote management to
 // `RateQuoteService` and transfer submission to
 // `TransferSubmissionService`. All money-path invariants live in the
@@ -12,8 +12,6 @@
 //     only entry point is `confirmAndSubmit()`; the underlying submit
 //     is `internal` on `TransferSubmissionService` and gets exercised
 //     end-to-end.
-//   • C5 / ADV-P6-C3 — rate re-check + effectiveAt match are enforced
-//     inside `TransferSubmissionService.submit(...)` BEFORE the POST.
 //   • C6 / ADV-P6-C4 — no fake `local-pending` ActiveTransfer. The
 //     submission service flips `AppState.isSubmittingTransfer` for
 //     the idle window, and writes a real `activeTransfer` only on
@@ -55,7 +53,7 @@ public enum SendError: Equatable, Sendable {
         case .rateStale:
             return String(
                 localized: "send.error.rate_stale",
-                defaultValue: "The exchange rate has refreshed. Tap to use the new rate."
+                defaultValue: "The exchange rate changed before we could send. Slide again to retry."
             )
         case .recipientNotOwned:
             return String(
@@ -214,19 +212,11 @@ public final class SendViewModel {
         let result = await rateService.loadRate(base: base, target: target)
         switch result {
         case .success:
-            // Clear any prior stale-rate error now that we have a fresh quote.
             if lastError == .rateStale || lastError == .rateLoadFailed {
                 lastError = nil
             }
         case .failure:
             lastError = .rateLoadFailed
-        }
-    }
-
-    public func refreshRateForSend(base: String = "AUD", target: String = "NGN") async {
-        await loadRate(base: base, target: target)
-        if isRateStale {
-            lastError = .rateStale
         }
     }
 
@@ -238,29 +228,11 @@ public final class SendViewModel {
     public func confirmAndSubmit() async {
         guard canSubmit else { return }
         guard let recipient = selectedRecipient else { return }
-
-        if isRateStale {
-            await loadRate()
-            guard !isRateStale else {
-                if lastError == nil { lastError = .rateLoadFailed }
-                return
-            }
-        }
-
         guard let quote = rateService.quote else { return }
-
-        // Capture the quote's effectiveAt at slide-start so the
-        // submission service can detect a refresh before the POST.
-        let slideStartEffectiveAt = quote.effectiveAt
-
-        // Re-resolve current quote and let the submitter perform the
-        // final rate-staleness / quote-mismatch gate.
-        let currentEffectiveAt = rateService.quote?.effectiveAt ?? slideStartEffectiveAt
 
         let result = await submitter.submit(
             recipientId: recipient.id,
             rateQuote: quote,
-            currentRateQuoteAt: currentEffectiveAt,
             sendAmount: amountStore.decimalAmount
         )
         apply(result)
@@ -282,10 +254,6 @@ public final class SendViewModel {
         case .success(let transfer):
             pendingCreatedTransfer = transfer
             lastError = nil
-        case .refusedRateStale:
-            lastError = .rateStale
-        case .refusedRateRefreshed:
-            lastError = .rateStale
         case .refusedAlreadyInFlight:
             // No-op; either we're already submitting or there's a
             // live transfer in-flight. Don't overwrite an existing

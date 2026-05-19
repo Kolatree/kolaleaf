@@ -1,4 +1,4 @@
-// TransferSubmissionService.swift  (Phase 6 iter-2 · C1 / C3 / C5 / C6)
+// TransferSubmissionService.swift  (Phase 6 iter-2 · C1 / C3 / C6)
 // Owns the money-creating POST. Extracted from `SendViewModel` (per
 // OO-001) so the View Model is a thin coordinator and the
 // invariants that protect the money path live in one auditable file.
@@ -13,11 +13,9 @@
 //      The same UUID rides every transport retry of the same intent
 //      so a duplicate POST on a flaky network does not create a
 //      duplicate Transfer.
-//   3. (C5) Before POST, the rate is re-checked. A 12h stale window
-//      at submit-time is refused — auto-refresh on tap is fine, silent
-//      stale-rate submit is not. A rate that REFRESHED between
-//      slide-start and submit (different `effectiveAt`) is also refused
-//      so the user explicitly re-confirms.
+//   3. The backend is the authority for expired or invalid rates.
+//      The app submits the displayed quote rather than blocking the
+//      user on a client-side quote refresh path.
 //   4. (C6) No fake "local-pending" Transfer id leaks into AppState.
 //      The optimistic flag is `AppState.isSubmittingTransfer`. The
 //      real `activeTransfer` is populated only on backend success.
@@ -27,9 +25,6 @@ import Foundation
 public enum TransferSubmissionResult: Equatable, Sendable {
     /// Backend accepted the create. `Transfer` is the domain shape.
     case success(Transfer)
-    /// Pre-flight refused the request. Slide pill re-arms.
-    case refusedRateStale
-    case refusedRateRefreshed
     /// A submit was attempted while another is in flight.
     case refusedAlreadyInFlight
     /// The user's session is expired (HTTP 401). Caller routes to login.
@@ -69,20 +64,15 @@ public final class TransferSubmissionService {
     /// Submit a transfer. Idempotent at the `isSubmittingTransfer`
     /// guard; double-tap returns `.refusedAlreadyInFlight`.
     ///
-    /// `rateQuote`: the quote captured at slide-start. The service
-    /// re-validates freshness AND verifies the `effectiveAt` matches
-    /// the in-VM service's current quote before POSTing (C5).
-    /// `currentRateQuoteAt`: the `effectiveAt` of the VM's current
-    /// quote at the moment of submit. If it differs from
-    /// `rateQuote.effectiveAt`, the rate refreshed mid-submit and we
-    /// refuse so the user re-confirms at the new rate.
+    /// `rateQuote`: the quote currently displayed in the send screen.
+    /// Client-side stale checks are deliberately avoided here; the
+    /// transfer API remains the authority for accepting or rejecting
+    /// that quote.
     @discardableResult
     internal func submit(
         recipientId: String,
         rateQuote: RateQuote,
-        currentRateQuoteAt: Date,
-        sendAmount: Decimal,
-        now: Date = Date()
+        sendAmount: Decimal
     ) async -> TransferSubmissionResult {
         audit.log(.slideConfirmed)
         guard !isSubmittingTransfer else {
@@ -94,16 +84,6 @@ public final class TransferSubmissionService {
             // backend-tracked transfer already active.
             audit.log(.submitRefused("activeTransferExists"))
             return .refusedAlreadyInFlight
-        }
-
-        // C5 — rate freshness re-check at the very last gate.
-        if rateQuote.isStale(now: now) {
-            audit.log(.submitRefused("rateStale"))
-            return .refusedRateStale
-        }
-        if rateQuote.effectiveAt != currentRateQuoteAt {
-            audit.log(.submitRefused("rateRefreshed"))
-            return .refusedRateRefreshed
         }
 
         isSubmittingTransfer = true

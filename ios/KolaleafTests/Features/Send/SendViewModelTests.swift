@@ -137,21 +137,7 @@ final class SendViewModelTests: XCTestCase {
         XCTAssertNil(vm.submitBlocker)
     }
 
-    func test_refreshRateForSend_surfacesStaleRateWhenBackendStillHasOldQuote() async {
-        let api = FakeAPIClient()
-        await api.stageSuccess(
-            RatesEndpoints.Quote.self,
-            makeRateResponse(ageSeconds: 13 * 60 * 60)
-        )
-        let vm = SendViewModel(api: api)
-
-        await vm.refreshRateForSend()
-
-        XCTAssertEqual(vm.lastError, .rateStale)
-        XCTAssertEqual(vm.submitBlocker, .missingRecipient)
-    }
-
-    // MARK: - End-to-end submit (C1/C5/C6)
+    // MARK: - End-to-end submit (C1/C6)
 
     func test_confirmAndSubmit_success_routesTransfer() async {
         let api = FakeAPIClient()
@@ -216,14 +202,11 @@ final class SendViewModelTests: XCTestCase {
         XCTAssertEqual(vm.lastError, .rateStale)
     }
 
-    func test_confirmAndSubmit_refreshesStaleRateAndRoutesTransfer() async {
+    func test_confirmAndSubmit_submitsDisplayedStaleRateWithoutExtraRefresh() async {
         let api = FakeAPIClient()
-        await api.stageSequence(
+        await api.stageSuccess(
             RatesEndpoints.Quote.self,
-            results: [
-                .success(makeRateResponse(ageSeconds: 13 * 60 * 60)),
-                .success(makeRateResponse(ageSeconds: 60, customerRate: "1042.65")),
-            ]
+            makeRateResponse(ageSeconds: 13 * 60 * 60)
         )
         await api.stageSuccess(
             TransfersEndpoints.Create.self,
@@ -243,11 +226,13 @@ final class SendViewModelTests: XCTestCase {
 
         await vm.confirmAndSubmit()
 
-        XCTAssertFalse(vm.isRateStale)
-        XCTAssertEqual(vm.customerRate, Decimal(string: "1042.65"))
+        XCTAssertTrue(vm.isRateStale)
+        XCTAssertEqual(vm.customerRate, Decimal(string: "1050.25"))
         XCTAssertEqual(appState.activeTransfer?.id, "txn_001")
         XCTAssertEqual(vm.consumeLastCreated()?.id, "txn_001")
         XCTAssertNil(vm.lastError)
+        let rateCalls = await api.calls.filter { $0.path == "/api/v1/rates/public" }
+        XCTAssertEqual(rateCalls.count, 1, "Submit should not perform an extra quote refresh.")
     }
 
     // MARK: - W21 / ADV-P6-W4: session expired

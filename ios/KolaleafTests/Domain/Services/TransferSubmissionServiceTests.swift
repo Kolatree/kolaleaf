@@ -1,10 +1,10 @@
-// TransferSubmissionServiceTests.swift  (Phase 6 iter-2 · C1/C3/C5/C6)
+// TransferSubmissionServiceTests.swift  (Phase 6 iter-2 · C1/C3/C6)
 // Pins the money-path invariants extracted from `SendViewModel`.
 //
 // Covers:
 //   • C3 — idempotency key generated per submit-intent + sent as header.
-//   • C5 — rate freshness re-checked at submit; refresh-during-biometrics
-//     refused.
+//   • Displayed stale quotes are submitted to the backend instead of
+//     being blocked by a client-side rate refresh path.
 //   • C6 — no `local-pending` ActiveTransfer; `isSubmittingTransfer`
 //     flips on AppState; refuse-while-active.
 
@@ -46,7 +46,6 @@ final class TransferSubmissionServiceTests: XCTestCase {
         _ = await svc.submit(
             recipientId: "rcp_1",
             rateQuote: quote,
-            currentRateQuoteAt: quote.effectiveAt,
             sendAmount: Decimal(string: "10")!
         )
 
@@ -68,42 +67,26 @@ final class TransferSubmissionServiceTests: XCTestCase {
                        "00000000-0000-0000-0000-000000000001")
     }
 
-    // MARK: - C5: rate freshness + refresh detection
+    // MARK: - Backend-authoritative rate validation
 
-    func test_submit_refusesStaleQuote() async {
+    func test_submit_postsStaleQuoteForBackendValidation() async {
         let api = FakeAPIClient()
-        // No staging — should never be called.
+        await api.stageSuccess(
+            TransfersEndpoints.Create.self,
+            CreateTransferResponse(transfer: .fixture())
+        )
         let svc = TransferSubmissionService(api: api, appState: makeAppState())
 
         let stale = freshQuote(effectiveAt: Date().addingTimeInterval(-13 * 60 * 60))
         let result = await svc.submit(
             recipientId: "rcp_1",
             rateQuote: stale,
-            currentRateQuoteAt: stale.effectiveAt,
             sendAmount: Decimal(string: "10")!
         )
 
-        XCTAssertEqual(result, .refusedRateStale)
+        if case .success = result { /* ok */ } else { XCTFail("got \(result)") }
         let calls = await api.calls.filter { $0.path == "/api/v1/transfers" }
-        XCTAssertEqual(calls.count, 0)
-    }
-
-    func test_submit_refusesIfRateRefreshedDuringBiometrics() async {
-        let api = FakeAPIClient()
-        let svc = TransferSubmissionService(api: api, appState: makeAppState())
-
-        let slideStart = Date().addingTimeInterval(-120)
-        let now = Date().addingTimeInterval(-30) // newer effectiveAt
-        let quote = freshQuote(effectiveAt: slideStart)
-
-        let result = await svc.submit(
-            recipientId: "rcp_1",
-            rateQuote: quote,
-            currentRateQuoteAt: now,
-            sendAmount: Decimal(string: "10")!
-        )
-
-        XCTAssertEqual(result, .refusedRateRefreshed)
+        XCTAssertEqual(calls.count, 1)
     }
 
     // MARK: - C6: no local-pending + refuse-while-active
@@ -122,7 +105,6 @@ final class TransferSubmissionServiceTests: XCTestCase {
         let result = await svc.submit(
             recipientId: "rcp_1",
             rateQuote: quote,
-            currentRateQuoteAt: quote.effectiveAt,
             sendAmount: Decimal(string: "10")!
         )
         if case .success = result { /* ok */ } else { XCTFail("got \(result)") }
@@ -143,7 +125,6 @@ final class TransferSubmissionServiceTests: XCTestCase {
         let result = await svc.submit(
             recipientId: "rcp_1",
             rateQuote: quote,
-            currentRateQuoteAt: quote.effectiveAt,
             sendAmount: Decimal(string: "10")!
         )
         if case .failed(.kycRequired) = result { /* ok */ } else {
@@ -172,7 +153,6 @@ final class TransferSubmissionServiceTests: XCTestCase {
         let result = await svc.submit(
             recipientId: "rcp_1",
             rateQuote: quote,
-            currentRateQuoteAt: quote.effectiveAt,
             sendAmount: Decimal(string: "10")!
         )
 
@@ -192,7 +172,6 @@ final class TransferSubmissionServiceTests: XCTestCase {
         let result = await svc.submit(
             recipientId: "rcp_1",
             rateQuote: quote,
-            currentRateQuoteAt: quote.effectiveAt,
             sendAmount: Decimal(string: "10")!
         )
 

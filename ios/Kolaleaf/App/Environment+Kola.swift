@@ -31,10 +31,7 @@ import SwiftUI
 // `APIClient` instance so the placeholder remains a real network client.
 private struct APIClientKey: EnvironmentKey {
     static let defaultValue: AuthAPI = {
-        let urlString = ProcessInfo.processInfo.environment["KOLA_API_BASE_URL"]
-            ?? "https://www.kolaleaf.com"
-        let url = URL(string: urlString) ?? URL(string: "https://www.kolaleaf.com")!
-        return APIClient(baseURL: url)
+        APIClient(baseURL: AppBackend.baseURL)
     }()
 }
 

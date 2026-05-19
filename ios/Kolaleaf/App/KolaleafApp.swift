@@ -106,12 +106,7 @@ struct KolaleafApp: App {
     }
 
     private static func makeAPIClient() -> APIClient {
-        let urlString = ProcessInfo.processInfo.environment["KOLA_API_BASE_URL"]
-            ?? "https://www.kolaleaf.com"
-        guard let url = URL(string: urlString) else {
-            fatalError("KOLA_API_BASE_URL is invalid: \(urlString)")
-        }
-        return APIClient(baseURL: url)
+        APIClient(baseURL: AppBackend.baseURL)
     }
 
     var body: some Scene {

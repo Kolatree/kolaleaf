@@ -10,6 +10,7 @@
 		00116BC4F03BB2ECD017D8B8 /* DeepLinkURLTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57428281BAB450C6E1FCA09A /* DeepLinkURLTests.swift */; };
 		00DEB16D041DB8AEB3548CA4 /* KolaleafApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 926BAB69330999435EBA9B4A /* KolaleafApp.swift */; };
 		0104A552ADDEB33A91BCD25A /* SendPrefill.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDD9763233765130C850D2E3 /* SendPrefill.swift */; };
+		01549BFA21B837E3E41526AA /* AppBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EC71C309087151D92D05FBB /* AppBackend.swift */; };
 		0257B30E5659A8DBB61F3613 /* SwitcherBlur.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B52B0E4D3E218B57245A108 /* SwitcherBlur.swift */; };
 		0301FDFA8EC6DE7C3A95816A /* ReducedMotionRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79B4678EC0A51874F306544A /* ReducedMotionRenderTests.swift */; };
 		0343259E2D0BD8C084F0E517 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1B76BB7B8EEC5E28ABC5B86 /* AppState.swift */; };
@@ -417,6 +418,7 @@
 		2A5AE1A966D939CE179277D7 /* Recipient+Initials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Recipient+Initials.swift"; sourceTree = "<group>"; };
 		2B442B4B34CB5EB8A568B5ED /* CancelTransferViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CancelTransferViewModelTests.swift; sourceTree = "<group>"; };
 		2C029E6C7D74792EED282544 /* AnalyticsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsService.swift; sourceTree = "<group>"; };
+		2EC71C309087151D92D05FBB /* AppBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBackend.swift; sourceTree = "<group>"; };
 		2F1F904E32071B802B039779 /* KolaColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KolaColors.swift; sourceTree = "<group>"; };
 		2F6C7EBF7CC1A11A219374DD /* FloatPausedViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatPausedViewModelTests.swift; sourceTree = "<group>"; };
 		309E1209050076BF4FBC7128 /* SumsubProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SumsubProvider.swift; sourceTree = "<group>"; };
@@ -1335,6 +1337,7 @@
 		C5B8BC8ABA9D026AE9315206 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				2EC71C309087151D92D05FBB /* AppBackend.swift */,
 				5D4DAF3F4BC84BE6F28BB2C4 /* AppLocale.swift */,
 				D1B76BB7B8EEC5E28ABC5B86 /* AppState.swift */,
 				E683EB8A8FCB3EFBD6FD092D /* AUState.swift */,
@@ -1912,6 +1915,7 @@
 				0EE7BC1D74A8BE375D0A2EBA /* AmountStore.swift in Sources */,
 				928E34F015BAEE11678AF223 /* AnalyticsEndpoints.swift in Sources */,
 				A9D80623D2597CB5A568F6A4 /* AnalyticsService.swift in Sources */,
+				01549BFA21B837E3E41526AA /* AppBackend.swift in Sources */,
 				AFABD0CF23ACB2F4B90A1ADA /* AppLocale.swift in Sources */,
 				0343259E2D0BD8C084F0E517 /* AppState.swift in Sources */,
 				19F11EFDCFDD1270D6075BCC /* AustralianStatePicker.swift in Sources */,

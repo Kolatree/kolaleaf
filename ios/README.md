@@ -38,8 +38,13 @@ xcodebuild test \
 
 | Variable                | Purpose                                                     | Default                   |
 | ----------------------- | ----------------------------------------------------------- | ------------------------- |
-| `KOLA_API_BASE_URL`     | Backend base URL                                            | `https://kolaleaf.com.au` |
+| `KOLA_API_BASE_URL`     | Optional local/dev backend override                         | `https://www.kolaleaf.com` |
 | `KOLA_RECORD_SNAPSHOTS` | Set to `1` to overwrite snapshot references during a CI run | unset                     |
+
+Normal iPhone installs and TestFlight builds do not receive launch-time
+environment variables, so they use the hosted Railway backend at
+`https://www.kolaleaf.com`. Use `KOLA_API_BASE_URL` only when explicitly
+testing against a local or staging backend.
 
 ## Folder layout
 

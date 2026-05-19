@@ -65,7 +65,8 @@ targets:
         # iOS derives required architecture from the build slice.
         NSCameraUsageDescription: "Kolaleaf scans your photo ID and a selfie to verify your identity, as required for Australian money-transfer regulations. Images are processed by our identity provider Sumsub."
         NSMicrophoneUsageDescription: "Kolaleaf records a brief audio sample during identity verification (Sumsub liveness check)."
-        NSFaceIDUsageDescription: "Kolaleaf uses Face ID to confirm transfers."
+        NSFaceIDUsageDescription: "Kolaleaf uses Face ID to unlock the app."
+        NSLocalNetworkUsageDescription: "Kolaleaf connects to your Mac on the local network during development testing."
         NSPhotoLibraryAddUsageDescription: "Kolaleaf can save transfer receipts to your Photos."
         UIAppFonts:
           - Inter-Regular.ttf
@@ -79,6 +80,7 @@ targets:
         # Data Protection class is set via the entitlement instead (see Kolaleaf.entitlements).
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: false
+          NSAllowsLocalNetworking: true
         # ADV-P10A-C1 (Phase 10A iter-2): register the `kolaleaf://`
         # custom URL scheme that the Live Activity widget surfaces
         # (lock-screen + Dynamic Island) deep-link into. Without this,

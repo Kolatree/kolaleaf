@@ -196,7 +196,19 @@ describe('validateMonoovaConfig', () => {
     delete process.env.MONOOVA_API_URL
     delete process.env.MONOOVA_API_KEY
 
-    expect(() => validateMonoovaConfig()).toThrow(/Monoova config missing/)
+    expect(() => validateMonoovaConfig()).toThrow(
+      'Monoova config missing in production: MONOOVA_API_URL, MONOOVA_API_KEY',
+    )
+  })
+
+  it('reports only the missing production Monoova config value', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    process.env.MONOOVA_API_URL = 'https://api.m-pay.com.au'
+    delete process.env.MONOOVA_API_KEY
+
+    expect(() => validateMonoovaConfig()).toThrow(
+      'Monoova config missing in production: MONOOVA_API_KEY',
+    )
   })
 
   it('returns isMock=true in dev when creds are missing', () => {

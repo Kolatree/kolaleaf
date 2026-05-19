@@ -60,8 +60,12 @@ export function validateMonoovaConfig(): MonoovaConfig {
   const isProduction = process.env.NODE_ENV === 'production'
 
   if (isProduction && (!apiUrl || !apiKey)) {
+    const missing = [
+      !apiUrl ? 'MONOOVA_API_URL' : undefined,
+      !apiKey ? 'MONOOVA_API_KEY' : undefined,
+    ].filter(Boolean)
     throw new Error(
-      'Monoova config missing in production: MONOOVA_API_URL, MONOOVA_API_KEY',
+      `Monoova config missing in production: ${missing.join(', ')}`,
     )
   }
 

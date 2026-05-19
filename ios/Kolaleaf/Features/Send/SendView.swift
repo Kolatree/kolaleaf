@@ -201,7 +201,7 @@ public struct SendView: View {
         Button(action: { Task { await vm.loadRate() } }) {
             HStack(spacing: KolaSpacing.s) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                Text("Rate has refreshed. Tap to use the new rate.")
+                Text("Rate expired. Refresh before sending.")
                     .font(KolaFont.tagline)
             }
             .foregroundStyle(KolaColors.warning)
@@ -218,17 +218,39 @@ public struct SendView: View {
 
     private var slidePill: some View {
         SlidePill(
-            isEnabled: vm.canSubmit,
+            label: slidePillLabel,
+            isEnabled: vm.canSubmit || vm.submitBlocker == .rateStale,
             onConfirm: {
                 Task {
-                    await analyticsService?.track(
-                        .slideInitiated,
-                        properties: ["screen": .string("send")]
-                    )
-                    await vm.confirmAndSubmit()
+                    if vm.submitBlocker == .rateStale {
+                        await vm.refreshRateForSend()
+                    } else {
+                        await analyticsService?.track(
+                            .slideInitiated,
+                            properties: ["screen": .string("send")]
+                        )
+                        await vm.confirmAndSubmit()
+                    }
                 }
             }
         )
+    }
+
+    private var slidePillLabel: String {
+        switch vm.submitBlocker {
+        case nil:
+            return "Slide to send · Face ID"
+        case .rateStale:
+            return "Slide to refresh rate"
+        case .missingRecipient:
+            return "Pick recipient to send"
+        case .missingRate:
+            return vm.isLoadingRateInFlight ? "Loading rate…" : "Load rate to send"
+        case .emptyAmount:
+            return "Enter amount to send"
+        case .submitting:
+            return "Sending…"
+        }
     }
 
     @ViewBuilder

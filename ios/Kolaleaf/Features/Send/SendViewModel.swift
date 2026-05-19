@@ -129,6 +129,14 @@ public enum SendError: Equatable, Sendable {
     }
 }
 
+public enum SendSubmitBlocker: Equatable, Sendable {
+    case submitting
+    case missingRecipient
+    case missingRate
+    case emptyAmount
+    case rateStale
+}
+
 @MainActor
 @Observable
 public final class SendViewModel {
@@ -217,12 +225,16 @@ public final class SendViewModel {
 
     /// All preconditions for a transfer are met.
     public var canSubmit: Bool {
-        guard !isSubmittingTransfer else { return false }
-        guard selectedRecipient != nil else { return false }
-        guard rateService.quote != nil else { return false }
-        guard amountStore.cents > 0 else { return false }
-        guard !isRateStale else { return false }
-        return true
+        submitBlocker == nil
+    }
+
+    public var submitBlocker: SendSubmitBlocker? {
+        guard !isSubmittingTransfer else { return .submitting }
+        guard selectedRecipient != nil else { return .missingRecipient }
+        guard rateService.quote != nil else { return .missingRate }
+        guard amountStore.cents > 0 else { return .emptyAmount }
+        guard !isRateStale else { return .rateStale }
+        return nil
     }
 
     // MARK: - Rate loading
@@ -237,6 +249,13 @@ public final class SendViewModel {
             }
         case .failure:
             lastError = .rateLoadFailed
+        }
+    }
+
+    public func refreshRateForSend(base: String = "AUD", target: String = "NGN") async {
+        await loadRate(base: base, target: target)
+        if isRateStale {
+            lastError = .rateStale
         }
     }
 

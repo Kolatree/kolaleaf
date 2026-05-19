@@ -27,6 +27,12 @@ final class SlidePillTests: XCTestCase {
         XCTAssertNotNil(mirror.descendant("isEnabled"))
     }
 
+    func test_staleRateRefreshLabel_canReuseSlidePillWithoutSubmitting() {
+        var fired = 0
+        _ = SlidePill(label: "Slide to refresh rate", onConfirm: { fired += 1 })
+        XCTAssertEqual(fired, 0)
+    }
+
     // MARK: - Drag override (snapshot fixture hook)
 
     func test_dragOverride_clampsToTrackWidth() {

@@ -58,6 +58,8 @@ public struct SlidePill: View {
                 thumb
                     .offset(x: currentDragX)
             }
+            .contentShape(RoundedRectangle(cornerRadius: KolaRadius.pill, style: .continuous))
+            .gesture(thumbDragGesture)
             .onAppear { pillWidth = proxy.size.width }
             .onChange(of: proxy.size.width) { _, new in pillWidth = new }
         }
@@ -68,6 +70,7 @@ public struct SlidePill: View {
         .accessibilityLabel(label)
         .accessibilityHint("Slides right to confirm transfer with Face ID")
         .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("send.slidePill")
     }
 
     // MARK: - Subviews
@@ -140,7 +143,6 @@ public struct SlidePill: View {
         }
         .frame(width: Self.thumbWidth, height: Self.thumbWidth)
         .padding(.horizontal, 4)
-        .gesture(thumbDragGesture)
     }
 
     // MARK: - Gesture (U44)
@@ -161,6 +163,12 @@ public struct SlidePill: View {
                         dragX = maxDrag
                     }
                     onConfirm()
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 700_000_000)
+                        withAnimation(KolaMotion.snap(reduce: reduceMotion)) {
+                            dragX = 0
+                        }
+                    }
                 } else {
                     // Spring back.
                     withAnimation(KolaMotion.snap(reduce: reduceMotion)) {

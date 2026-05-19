@@ -119,7 +119,39 @@ final class SendViewModelTests: XCTestCase {
         vm.selectedRecipient = makeSampleRecipient()
         vm.amountStore.append(1); vm.amountStore.append(0); vm.amountStore.append(0); vm.amountStore.append(0)
         XCTAssertTrue(vm.isRateStale)
+        XCTAssertEqual(vm.submitBlocker, .rateStale)
         XCTAssertFalse(vm.canSubmit)
+    }
+
+    func test_submitBlocker_describesMissingPreconditions() async {
+        let api = FakeAPIClient()
+        await api.stageSuccess(RatesEndpoints.Quote.self, makeRateResponse())
+        let vm = SendViewModel(api: api, biometrics: FakeBiometricsService())
+
+        XCTAssertEqual(vm.submitBlocker, .missingRecipient)
+
+        vm.selectedRecipient = makeSampleRecipient()
+        XCTAssertEqual(vm.submitBlocker, .missingRate)
+
+        await vm.loadRate()
+        XCTAssertEqual(vm.submitBlocker, .emptyAmount)
+
+        vm.amountStore.append(5); vm.amountStore.append(0); vm.amountStore.append(0); vm.amountStore.append(0); vm.amountStore.append(0)
+        XCTAssertNil(vm.submitBlocker)
+    }
+
+    func test_refreshRateForSend_surfacesStaleRateWhenBackendStillHasOldQuote() async {
+        let api = FakeAPIClient()
+        await api.stageSuccess(
+            RatesEndpoints.Quote.self,
+            makeRateResponse(ageSeconds: 13 * 60 * 60)
+        )
+        let vm = SendViewModel(api: api, biometrics: FakeBiometricsService())
+
+        await vm.refreshRateForSend()
+
+        XCTAssertEqual(vm.lastError, .rateStale)
+        XCTAssertEqual(vm.submitBlocker, .missingRecipient)
     }
 
     // MARK: - End-to-end submit (C1/C5/C6)

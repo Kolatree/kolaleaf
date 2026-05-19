@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from '../src/generated/prisma/client.js'
 
@@ -24,7 +25,17 @@ async function main() {
     orderBy: { effectiveAt: 'desc' },
   })
 
-  if (!existingSeedRate) {
+  if (existingSeedRate) {
+    await prisma.rate.update({
+      where: { id: existingSeedRate.id },
+      data: {
+        wholesaleRate: 1050.00,
+        spread: 0.007,
+        customerRate: 1042.65,
+        effectiveAt: new Date(),
+      },
+    })
+  } else {
     await prisma.rate.create({
       data: {
         corridorId: corridor.id,

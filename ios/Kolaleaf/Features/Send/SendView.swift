@@ -3,7 +3,7 @@
 //   • RecipientChip + RecipientPickerSheet (U42) — top of screen
 //   • amount stack (large display + NGN preview + rate footer) — middle
 //   • FrostedNumpad (U41) — keypad
-//   • SlidePill (U43 + U44) — bottom, fires Face ID + transfer create
+//   • SlidePill (U43 + U44) — bottom, confirms transfer create
 //
 // Iter-2 closes:
 //   • C6 / ADV-P6-C4 — navigation forward via consumeLastCreated().
@@ -31,7 +31,6 @@ public struct SendView: View {
         recipients: [Recipient],
         initialRecipient: Recipient?,
         api: AuthAPI,
-        biometrics: BiometricsService = LABiometricsService(),
         prefill: SendPrefill? = nil,
         onAddRecipient: @escaping () -> Void,
         onCreated: @escaping (Transfer) -> Void,
@@ -64,7 +63,6 @@ public struct SendView: View {
         }()
         let model = SendViewModel(
             api: api,
-            biometrics: biometrics,
             amountStore: amountStore
         )
         model.selectedRecipient = resolvedRecipient
@@ -239,7 +237,7 @@ public struct SendView: View {
     private var slidePillLabel: String {
         switch vm.submitBlocker {
         case nil:
-            return "Slide to send · Face ID"
+            return "Slide to send"
         case .rateStale:
             return "Slide to refresh rate"
         case .missingRecipient:
@@ -261,7 +259,7 @@ public struct SendView: View {
                     .font(KolaFont.tagline)
                     .foregroundStyle(KolaColors.coral)
                     .multilineTextAlignment(.center)
-                if err == .sessionExpired || err == .biometricsLockedOut {
+                if err == .sessionExpired {
                     Button("Sign in again") { onSessionExpired() }
                         .font(KolaFont.cta)
                         .foregroundStyle(KolaColors.trustGreen)

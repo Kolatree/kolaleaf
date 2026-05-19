@@ -1,7 +1,7 @@
 // SendViewModelTests.swift  (Phase 6 · U46 + U47 → iter-2)
 // Exercises the rate-load, derived-state, and submission paths via
 // the iter-2 thin-coordinator surface. All API calls are staged on
-// the FakeAPIClient; biometrics is staged on FakeBiometricsService.
+// the FakeAPIClient. Face ID belongs to app unlock, not transfer submit.
 
 import XCTest
 @testable import Kolaleaf
@@ -48,8 +48,7 @@ final class SendViewModelTests: XCTestCase {
     func test_loadRate_success_populatesQuote() async {
         let api = FakeAPIClient()
         await api.stageSuccess(RatesEndpoints.Quote.self, makeRateResponse())
-        let bio = FakeBiometricsService()
-        let vm = SendViewModel(api: api, biometrics: bio)
+        let vm = SendViewModel(api: api)
 
         await vm.loadRate()
 
@@ -62,8 +61,7 @@ final class SendViewModelTests: XCTestCase {
     func test_loadRate_failure_setsError() async {
         let api = FakeAPIClient()
         await api.stageFailure(RatesEndpoints.Quote.self, .transport("offline"))
-        let bio = FakeBiometricsService()
-        let vm = SendViewModel(api: api, biometrics: bio)
+        let vm = SendViewModel(api: api)
 
         await vm.loadRate()
 
@@ -76,8 +74,7 @@ final class SendViewModelTests: XCTestCase {
     func test_ngnPreview_updatesAsAmountChanges() async {
         let api = FakeAPIClient()
         await api.stageSuccess(RatesEndpoints.Quote.self, makeRateResponse(customerRate: "1000"))
-        let bio = FakeBiometricsService()
-        let vm = SendViewModel(api: api, biometrics: bio)
+        let vm = SendViewModel(api: api)
 
         await vm.loadRate()
         XCTAssertNil(vm.ngnPreview, "Zero amount should produce nil preview.")
@@ -91,7 +88,7 @@ final class SendViewModelTests: XCTestCase {
     func test_canSubmit_false_whenAmountIsZero() async {
         let api = FakeAPIClient()
         await api.stageSuccess(RatesEndpoints.Quote.self, makeRateResponse())
-        let vm = SendViewModel(api: api, biometrics: FakeBiometricsService())
+        let vm = SendViewModel(api: api)
         await vm.loadRate()
         vm.selectedRecipient = makeSampleRecipient()
         XCTAssertFalse(vm.canSubmit)
@@ -100,7 +97,7 @@ final class SendViewModelTests: XCTestCase {
     func test_canSubmit_true_whenAllPreconditionsMet() async {
         let api = FakeAPIClient()
         await api.stageSuccess(RatesEndpoints.Quote.self, makeRateResponse())
-        let vm = SendViewModel(api: api, biometrics: FakeBiometricsService())
+        let vm = SendViewModel(api: api)
         await vm.loadRate()
         vm.selectedRecipient = makeSampleRecipient()
         vm.amountStore.append(1); vm.amountStore.append(0)
@@ -114,7 +111,7 @@ final class SendViewModelTests: XCTestCase {
             RatesEndpoints.Quote.self,
             makeRateResponse(ageSeconds: 13 * 60 * 60)
         )
-        let vm = SendViewModel(api: api, biometrics: FakeBiometricsService())
+        let vm = SendViewModel(api: api)
         await vm.loadRate()
         vm.selectedRecipient = makeSampleRecipient()
         vm.amountStore.append(1); vm.amountStore.append(0); vm.amountStore.append(0); vm.amountStore.append(0)
@@ -126,7 +123,7 @@ final class SendViewModelTests: XCTestCase {
     func test_submitBlocker_describesMissingPreconditions() async {
         let api = FakeAPIClient()
         await api.stageSuccess(RatesEndpoints.Quote.self, makeRateResponse())
-        let vm = SendViewModel(api: api, biometrics: FakeBiometricsService())
+        let vm = SendViewModel(api: api)
 
         XCTAssertEqual(vm.submitBlocker, .missingRecipient)
 
@@ -146,7 +143,7 @@ final class SendViewModelTests: XCTestCase {
             RatesEndpoints.Quote.self,
             makeRateResponse(ageSeconds: 13 * 60 * 60)
         )
-        let vm = SendViewModel(api: api, biometrics: FakeBiometricsService())
+        let vm = SendViewModel(api: api)
 
         await vm.refreshRateForSend()
 
@@ -166,7 +163,6 @@ final class SendViewModelTests: XCTestCase {
         let appState = makeAppState()
         let vm = SendViewModel(
             api: api,
-            biometrics: FakeBiometricsService(staged: .success),
             appState: appState
         )
         await vm.loadRate()
@@ -190,7 +186,6 @@ final class SendViewModelTests: XCTestCase {
         let appState = makeAppState()
         let vm = SendViewModel(
             api: api,
-            biometrics: FakeBiometricsService(staged: .success),
             appState: appState
         )
         await vm.loadRate()
@@ -210,7 +205,6 @@ final class SendViewModelTests: XCTestCase {
         await api.stageFailure(TransfersEndpoints.Create.self, .rateExpired)
         let vm = SendViewModel(
             api: api,
-            biometrics: FakeBiometricsService(staged: .success),
             appState: makeAppState()
         )
         await vm.loadRate()
@@ -222,55 +216,6 @@ final class SendViewModelTests: XCTestCase {
         XCTAssertEqual(vm.lastError, .rateStale)
     }
 
-    // MARK: - Face ID handoff
-
-    func test_confirmAndSubmit_biometricsCancel_doesNotSubmit() async {
-        let api = FakeAPIClient()
-        await api.stageSuccess(RatesEndpoints.Quote.self, makeRateResponse())
-        let bio = FakeBiometricsService(staged: .userCancel)
-        let vm = SendViewModel(api: api, biometrics: bio, appState: makeAppState())
-        await vm.loadRate()
-        vm.selectedRecipient = makeSampleRecipient()
-        vm.amountStore.append(1); vm.amountStore.append(0); vm.amountStore.append(0); vm.amountStore.append(0)
-
-        await vm.confirmAndSubmit()
-
-        XCTAssertEqual(vm.lastError, .biometricsCancelled)
-        let calls = await api.calls.filter { $0.path == "/api/v1/transfers" }
-        XCTAssertEqual(calls.count, 0,
-                       "Biometrics cancel must not fire the create call.")
-    }
-
-    func test_confirmAndSubmit_biometricsLockedOut_setsLockedError() async {
-        let api = FakeAPIClient()
-        await api.stageSuccess(RatesEndpoints.Quote.self, makeRateResponse())
-        let bio = FakeBiometricsService(staged: .lockedOut)
-        let vm = SendViewModel(api: api, biometrics: bio, appState: makeAppState())
-        await vm.loadRate()
-        vm.selectedRecipient = makeSampleRecipient()
-        vm.amountStore.append(1); vm.amountStore.append(0); vm.amountStore.append(0); vm.amountStore.append(0)
-
-        await vm.confirmAndSubmit()
-
-        XCTAssertEqual(vm.lastError, .biometricsLockedOut)
-    }
-
-    func test_confirmAndSubmit_biometricsAuthFailed_setsFailedError() async {
-        // W2 / OO-003: a single Face ID mismatch surfaces
-        // `.biometricsFailed`, not the silent cancel UX.
-        let api = FakeAPIClient()
-        await api.stageSuccess(RatesEndpoints.Quote.self, makeRateResponse())
-        let bio = FakeBiometricsService(staged: .authFailed)
-        let vm = SendViewModel(api: api, biometrics: bio, appState: makeAppState())
-        await vm.loadRate()
-        vm.selectedRecipient = makeSampleRecipient()
-        vm.amountStore.append(1); vm.amountStore.append(0); vm.amountStore.append(0); vm.amountStore.append(0)
-
-        await vm.confirmAndSubmit()
-
-        XCTAssertEqual(vm.lastError, .biometricsFailed)
-    }
-
     // MARK: - W21 / ADV-P6-W4: session expired
 
     func test_confirmAndSubmit_unauthorized_mapsToSessionExpired() async {
@@ -279,7 +224,6 @@ final class SendViewModelTests: XCTestCase {
         await api.stageFailure(TransfersEndpoints.Create.self, .unauthorized)
         let vm = SendViewModel(
             api: api,
-            biometrics: FakeBiometricsService(staged: .success),
             appState: makeAppState()
         )
         await vm.loadRate()
@@ -291,19 +235,4 @@ final class SendViewModelTests: XCTestCase {
         XCTAssertEqual(vm.lastError, .sessionExpired)
     }
 
-    func test_confirmAndSubmit_biometricsUserFallback_mapsToSessionExpired() async {
-        // W23 / ADV-P6-W6: userFallback routes to "Sign in again" via
-        // SendError.sessionExpired so the view surfaces a clear CTA.
-        let api = FakeAPIClient()
-        await api.stageSuccess(RatesEndpoints.Quote.self, makeRateResponse())
-        let bio = FakeBiometricsService(staged: .userFallback)
-        let vm = SendViewModel(api: api, biometrics: bio, appState: makeAppState())
-        await vm.loadRate()
-        vm.selectedRecipient = makeSampleRecipient()
-        vm.amountStore.append(1); vm.amountStore.append(0); vm.amountStore.append(0); vm.amountStore.append(0)
-
-        await vm.confirmAndSubmit()
-
-        XCTAssertEqual(vm.lastError, .sessionExpired)
-    }
 }

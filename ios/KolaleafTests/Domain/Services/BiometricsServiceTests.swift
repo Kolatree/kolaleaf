@@ -1,8 +1,8 @@
 // BiometricsServiceTests.swift  (Phase 6 · U45)
 // LAContext is impractical to drive from a unit test (real biometric
 // hardware required for live evaluation). What we CAN pin is the
-// LAError → BiometricsResult mapping that determines downstream UX,
-// plus the FakeBiometricsService contract used by SendViewModelTests.
+// LAError → BiometricsResult mapping that determines app-unlock UX,
+// plus the FakeBiometricsService contract used by lock-gate tests.
 
 import XCTest
 import LocalAuthentication
@@ -46,10 +46,9 @@ final class BiometricsServiceTests: XCTestCase {
         XCTAssertEqual(LABiometricsService.map(laError(.passcodeNotSet)), .noHardware)
     }
 
-    // Iter-2 (W2 / OO-003): authenticationFailed now maps to a distinct
-    // `.authFailed` so SendView surfaces "Face ID didn't match. Try
-    // again." instead of the silent `.userCancel` UX. See the new
-    // `test_map_authenticationFailed_treatedAsAuthFailed` below.
+    // Iter-2 (W2 / OO-003): authenticationFailed maps to a distinct
+    // `.authFailed` so the lock screen surfaces "Face ID didn't match.
+    // Try again." instead of the silent `.userCancel` UX.
 
     func test_map_unknownDomain_isUnknownError() {
         let error = NSError(domain: "com.example.weird", code: 99, userInfo: nil)
@@ -64,22 +63,22 @@ final class BiometricsServiceTests: XCTestCase {
 
     func test_fake_returnsStagedResult() async {
         let fake = FakeBiometricsService(staged: .userCancel)
-        let result = await fake.authenticate(intent: .confirmTransfer)
+        let result = await fake.authenticate(intent: .unlockApp)
         XCTAssertEqual(result, .userCancel)
     }
 
     func test_fake_recordsLastReason() async {
         let fake = FakeBiometricsService(staged: .success)
-        _ = await fake.authenticate(intent: .confirmTransfer)
-        XCTAssertEqual(fake.lastReason, "Confirm your transfer")
+        _ = await fake.authenticate(intent: .unlockApp)
+        XCTAssertEqual(fake.lastReason, "Unlock Kolaleaf")
     }
 
     func test_fake_canRestageMidTest() async {
         let fake = FakeBiometricsService(staged: .success)
-        let first = await fake.authenticate(intent: .confirmTransfer)
+        let first = await fake.authenticate(intent: .unlockApp)
         XCTAssertEqual(first, .success)
         fake.stage(.lockedOut)
-        let second = await fake.authenticate(intent: .confirmTransfer)
+        let second = await fake.authenticate(intent: .unlockApp)
         XCTAssertEqual(second, .lockedOut)
     }
 

@@ -8,10 +8,10 @@
 // Iter-2 closes (per the iter-1 review):
 //   • C1 / OO-001 — god-class decomposed; this VM no longer owns
 //     network calls or idempotency-key lifecycle.
-//   • C2 / API-001 — `submitTransfer(...)` is no longer a public
-//     bypass of biometrics. The only entry point is
-//     `confirmAndSubmit()`; the underlying submit is `internal` on
-//     `TransferSubmissionService` and gets exercised end-to-end.
+//   • C2 / API-001 — `submitTransfer(...)` is no longer public. The
+//     only entry point is `confirmAndSubmit()`; the underlying submit
+//     is `internal` on `TransferSubmissionService` and gets exercised
+//     end-to-end.
 //   • C5 / ADV-P6-C3 — rate re-check + effectiveAt match are enforced
 //     inside `TransferSubmissionService.submit(...)` BEFORE the POST.
 //   • C6 / ADV-P6-C4 — no fake `local-pending` ActiveTransfer. The
@@ -37,10 +37,6 @@ public enum SendError: Equatable, Sendable {
     case invalidCorridor
     case emailUnverified
     case idempotencyKeyConflict
-    case biometricsLockedOut
-    case biometricsNotEnrolled
-    case biometricsCancelled
-    case biometricsFailed
     case rateLoadFailed
     case sessionExpired
     /// Last-resort opaque bucket. Reserve for non-transport unknowns;
@@ -91,26 +87,6 @@ public enum SendError: Equatable, Sendable {
                 localized: "send.error.idempotency_conflict",
                 defaultValue: "We already received an earlier version of this transfer. Refresh and try again."
             )
-        case .biometricsLockedOut:
-            return String(
-                localized: "send.error.biometrics_locked_out",
-                defaultValue: "Face ID is locked. Sign in again to retry."
-            )
-        case .biometricsNotEnrolled:
-            return String(
-                localized: "send.error.biometrics_not_enrolled",
-                defaultValue: "Set up Face ID in Settings to confirm transfers."
-            )
-        case .biometricsCancelled:
-            return String(
-                localized: "send.error.biometrics_cancelled",
-                defaultValue: "Face ID confirmation was cancelled."
-            )
-        case .biometricsFailed:
-            return String(
-                localized: "send.error.biometrics_failed",
-                defaultValue: "Face ID didn't match. Try again."
-            )
         case .rateLoadFailed:
             return String(
                 localized: "send.error.rate_load_failed",
@@ -145,7 +121,6 @@ public final class SendViewModel {
 
     private let rateService: RateQuoteService
     private let submitter: TransferSubmissionService
-    private let biometrics: BiometricsService
     private weak var appState: AppState?
 
     // MARK: - Inputs
@@ -164,13 +139,11 @@ public final class SendViewModel {
 
     public init(
         api: AuthAPI,
-        biometrics: BiometricsService = LABiometricsService(),
         appState: AppState? = nil,
         amountStore: AmountStore = AmountStore(),
         rateService: RateQuoteService? = nil,
         submitter: TransferSubmissionService? = nil
     ) {
-        self.biometrics = biometrics
         self.appState = appState
         self.amountStore = amountStore
         self.rateService = rateService ?? RateQuoteService(api: api)
@@ -261,49 +234,20 @@ public final class SendViewModel {
 
     // MARK: - Transfer submission
 
-    /// End-to-end: Face ID → create transfer. Idempotent at the
-    /// `isSubmittingTransfer` guard. SendView calls this from the
-    /// SlidePill's onConfirm callback.
+    /// End-to-end: create transfer after the user completes the
+    /// deliberate slide confirmation. Face ID belongs to app unlock,
+    /// not the money-transfer submit path.
     public func confirmAndSubmit() async {
         guard canSubmit else { return }
         guard let recipient = selectedRecipient else { return }
         guard let quote = rateService.quote else { return }
 
         // Capture the quote's effectiveAt at slide-start so the
-        // submission service can detect a refresh during biometrics.
+        // submission service can detect a refresh before the POST.
         let slideStartEffectiveAt = quote.effectiveAt
 
-        // Face ID step.
-        let biometricsResult = await biometrics.authenticate(intent: .confirmTransfer)
-        switch biometricsResult {
-        case .success:
-            break
-        case .userCancel:
-            lastError = .biometricsCancelled
-            return
-        case .userFallback:
-            // W23 / ADV-P6-W6 — surface a clear "sign in again" CTA
-            // (mapped via .sessionExpired in SendView).
-            lastError = .sessionExpired
-            return
-        case .lockedOut:
-            lastError = .biometricsLockedOut
-            return
-        case .notEnrolled, .noHardware:
-            lastError = .biometricsNotEnrolled
-            return
-        case .authFailed:
-            // W2 / OO-003 — distinct from .userCancel so the banner
-            // tells the user to retry rather than re-arming silently.
-            lastError = .biometricsFailed
-            return
-        case .unknownError(let msg):
-            lastError = .unknown(msg)
-            return
-        }
-
-        // Re-resolve current quote (rate may have refreshed during
-        // biometrics) and let the submitter perform the final gate.
+        // Re-resolve current quote and let the submitter perform the
+        // final rate-staleness / quote-mismatch gate.
         let currentEffectiveAt = rateService.quote?.effectiveAt ?? slideStartEffectiveAt
 
         let result = await submitter.submit(

@@ -1,5 +1,5 @@
 // SlidePill.swift  (Phase 6 · U43 + U44)
-// "Slide to send · Face ID" pill at the bottom of the Send screen.
+// "Slide to send" pill at the bottom of the Send screen.
 // The gesture is intentionally heavyweight — confirming a money
 // transfer should feel deliberate, not a one-tap commit.
 //
@@ -37,7 +37,7 @@ public struct SlidePill: View {
     private static let confirmThreshold: CGFloat = 0.75
 
     public init(
-        label: String = "Slide to send · Face ID",
+        label: String = "Slide to send",
         isEnabled: Bool = true,
         dragOverride: CGFloat? = nil,
         onConfirm: @escaping OnConfirm
@@ -68,7 +68,7 @@ public struct SlidePill: View {
         .allowsHitTesting(isEnabled)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)
-        .accessibilityHint("Slides right to confirm transfer with Face ID")
+        .accessibilityHint("Slides right to confirm transfer")
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("send.slidePill")
     }

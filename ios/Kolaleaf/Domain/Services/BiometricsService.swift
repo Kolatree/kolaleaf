@@ -1,19 +1,17 @@
 // BiometricsService.swift  (Phase 6 · U45 → iter-2 hardened)
-// Face ID / Touch ID confirmation for money-path actions. Wraps
-// `LAContext` behind a `@MainActor` protocol so ViewModels can be
-// exercised against a `FakeBiometricsService` without spinning up
-// the real system prompt.
+// Face ID / Touch ID app-unlock support. Wraps `LAContext` behind a
+// `@MainActor` protocol so ViewModels can be exercised against a
+// `FakeBiometricsService` without spinning up the real system prompt.
 //
 // Policy: `.deviceOwnerAuthenticationWithBiometrics` (biometrics
-// only, no fallback to passcode). The Send flow handles
-// `.userFallback` separately; in iter-2 it surfaces as
-// `SendError.sessionExpired` so the UI shows "Sign in again".
+// only, no fallback to passcode). The app-unlock gate handles
+// cancellation / fallback explicitly.
 //
 // Iter-2 closes:
 //   • W2 / OO-003 — distinct `.authFailed` case; not collapsed into
 //     `.userCancel`. Single-attempt failure (Face ID didn't match)
-//     surfaces as `.authFailed` so the banner reads "Face ID didn't
-//     match. Try again." rather than the silent cancel UX.
+//     surfaces as `.authFailed` so the lock screen can tell the user
+//     to try again rather than treating it as a silent cancel.
 //   • W3 / OO-004 — `BiometricsService` is `@MainActor`. The fake is
 //     a `@MainActor final class` matching production isolation.
 //   • W14 / API-005 — `BiometricsIntent` enum drives the reason
@@ -31,18 +29,16 @@ public enum BiometricsResult: Equatable, Sendable {
     case success
     /// User tapped Cancel on the LAContext prompt.
     case userCancel
-    /// User tapped "Use Passcode" — we don't fall back automatically
-    /// because money-handling requires explicit policy alignment.
+    /// User tapped "Use Passcode" — the lock screen does not fall
+    /// back automatically.
     case userFallback
     /// Too many failed biometric attempts; device is locked out and
-    /// requires passcode to unlock. SendView surfaces "Sign in again
-    /// to retry" + escalation path.
+    /// requires passcode to unlock.
     case lockedOut
     /// Single Face ID mismatch. Distinct from `.userCancel` so the
     /// banner can encourage a retry (W2 / OO-003).
     case authFailed
-    /// No biometrics enrolled on device. SendView falls back to a
-    /// re-keyed transfer confirmation prompt (TODO Phase 7).
+    /// No biometrics enrolled on device.
     case notEnrolled
     /// Device has no biometric hardware OR biometrics are disabled
     /// in Settings → Face ID & Passcode. Same fallback as notEnrolled.
@@ -54,13 +50,11 @@ public enum BiometricsResult: Equatable, Sendable {
 /// Why the app is asking for biometrics. Resolved to a localised
 /// prompt string internally so call sites don't hand-roll English.
 public enum BiometricsIntent: Equatable, Sendable {
-    case confirmTransfer
     case unlockApp
 
     public var localizedReason: String {
         switch self {
-        case .confirmTransfer: return "Confirm your transfer"
-        case .unlockApp:       return "Unlock Kolaleaf"
+        case .unlockApp: return "Unlock Kolaleaf"
         }
     }
 }
@@ -75,7 +69,7 @@ public extension BiometricsService {
     /// keep compiling while we migrate to the intent-based API.
     func authenticate(reason: String) async -> BiometricsResult {
         _ = reason
-        return await authenticate(intent: .confirmTransfer)
+        return await authenticate(intent: .unlockApp)
     }
 }
 
@@ -138,8 +132,7 @@ public struct LABiometricsService: BiometricsService {
             return .noHardware
         case .authenticationFailed:
             // Iter-2 (W2 / OO-003): single mismatch is distinct from
-            // userCancel — SendView surfaces "Face ID didn't match"
-            // and re-arms the slide pill.
+            // userCancel so the lock screen can ask the user to try again.
             return .authFailed
         default:
             return .unknownError(nsError.localizedDescription)

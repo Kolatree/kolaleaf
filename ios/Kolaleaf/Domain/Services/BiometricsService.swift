@@ -47,6 +47,14 @@ public enum BiometricsResult: Equatable, Sendable {
     case unknownError(String)
 }
 
+public enum BiometricsAvailability: Equatable, Sendable {
+    case available
+    case lockedOut
+    case notEnrolled
+    case noHardware
+    case unknownError(String)
+}
+
 /// Why the app is asking for biometrics. Resolved to a localised
 /// prompt string internally so call sites don't hand-roll English.
 public enum BiometricsIntent: Equatable, Sendable {
@@ -61,6 +69,7 @@ public enum BiometricsIntent: Equatable, Sendable {
 
 @MainActor
 public protocol BiometricsService: Sendable {
+    func availability() -> BiometricsAvailability
     func authenticate(intent: BiometricsIntent) async -> BiometricsResult
 }
 
@@ -78,6 +87,20 @@ public extension BiometricsService {
 public struct LABiometricsService: BiometricsService {
 
     public init() {}
+
+    public func availability() -> BiometricsAvailability {
+        let context = LAContext()
+        var policyError: NSError?
+        let canEvaluate = context.canEvaluatePolicy(
+            .deviceOwnerAuthenticationWithBiometrics,
+            error: &policyError
+        )
+        if canEvaluate { return .available }
+        if let policyError {
+            return Self.availability(from: policyError)
+        }
+        return .unknownError("canEvaluatePolicy returned false")
+    }
 
     public func authenticate(intent: BiometricsIntent) async -> BiometricsResult {
         let context = LAContext()
@@ -138,6 +161,23 @@ public struct LABiometricsService: BiometricsService {
             return .unknownError(nsError.localizedDescription)
         }
     }
+
+    static func availability(from nsError: NSError) -> BiometricsAvailability {
+        switch map(nsError) {
+        case .success:
+            return .available
+        case .lockedOut:
+            return .lockedOut
+        case .notEnrolled:
+            return .notEnrolled
+        case .noHardware:
+            return .noHardware
+        case .unknownError(let message):
+            return .unknownError(message)
+        case .userCancel, .userFallback, .authFailed:
+            return .unknownError(nsError.localizedDescription)
+        }
+    }
 }
 
 #if DEBUG
@@ -148,15 +188,30 @@ public struct LABiometricsService: BiometricsService {
 @MainActor
 public final class FakeBiometricsService: BiometricsService {
     private var stagedResult: BiometricsResult
+    private var stagedAvailability: BiometricsAvailability
     private(set) public var callCount: Int = 0
+    private(set) public var availabilityCallCount: Int = 0
     private(set) public var lastIntent: BiometricsIntent?
 
-    public init(staged: BiometricsResult = .success) {
+    public init(
+        staged: BiometricsResult = .success,
+        availability: BiometricsAvailability = .available
+    ) {
         self.stagedResult = staged
+        self.stagedAvailability = availability
     }
 
     public func stage(_ result: BiometricsResult) {
         self.stagedResult = result
+    }
+
+    public func stageAvailability(_ availability: BiometricsAvailability) {
+        self.stagedAvailability = availability
+    }
+
+    public func availability() -> BiometricsAvailability {
+        availabilityCallCount += 1
+        return stagedAvailability
     }
 
     public func authenticate(intent: BiometricsIntent) async -> BiometricsResult {

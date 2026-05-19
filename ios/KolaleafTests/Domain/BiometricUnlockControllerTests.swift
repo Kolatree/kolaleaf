@@ -27,6 +27,7 @@ final class BiometricUnlockControllerTests: XCTestCase {
     func test_preferenceDefaultsToOff() {
         let c = BiometricUnlockController(defaults: defaults)
         XCTAssertFalse(c.faceIDUnlockEnabled)
+        XCTAssertFalse(c.faceIDPreferenceConfigured)
     }
 
     func test_preferencePersistsAcrossInstances() {
@@ -35,6 +36,16 @@ final class BiometricUnlockControllerTests: XCTestCase {
         let c2 = BiometricUnlockController(defaults: defaults)
         XCTAssertTrue(c2.faceIDUnlockEnabled,
                       "Setting must persist via UserDefaults so a re-init reads the prior value")
+        XCTAssertTrue(c2.faceIDPreferenceConfigured)
+    }
+
+    func test_setFaceIDUnlockEnabled_marksPreferenceConfigured() {
+        let c = BiometricUnlockController(defaults: defaults)
+        c.setFaceIDUnlockEnabled(false)
+
+        XCTAssertFalse(c.faceIDUnlockEnabled)
+        XCTAssertTrue(c.faceIDPreferenceConfigured,
+                      "An explicit off choice must be remembered so the default-on bootstrap cannot override it")
     }
 
     func test_enablingPreferenceResetsUnlockedFlag() async {
@@ -49,6 +60,44 @@ final class BiometricUnlockControllerTests: XCTestCase {
         c.faceIDUnlockEnabled = true
         XCTAssertFalse(c.unlockedThisSession,
                        "Flipping the preference on must re-lock so the gate re-prompts")
+    }
+
+    // MARK: - Default-on app unlock
+
+    func test_enableByDefaultIfUnsetAndAvailable_turnsOnFaceIDUnlock() {
+        let c = BiometricUnlockController(defaults: defaults)
+        let fake = FakeBiometricsService(availability: .available)
+
+        c.enableByDefaultIfUnsetAndAvailable(using: fake)
+
+        XCTAssertTrue(c.faceIDUnlockEnabled)
+        XCTAssertTrue(c.faceIDPreferenceConfigured)
+        XCTAssertTrue(c.shouldShowGate(hasActiveSession: true))
+        XCTAssertEqual(fake.availabilityCallCount, 1)
+    }
+
+    func test_enableByDefaultIfUnsetAndUnavailable_leavesPreferenceUnset() {
+        let c = BiometricUnlockController(defaults: defaults)
+        let fake = FakeBiometricsService(availability: .notEnrolled)
+
+        c.enableByDefaultIfUnsetAndAvailable(using: fake)
+
+        XCTAssertFalse(c.faceIDUnlockEnabled)
+        XCTAssertFalse(c.faceIDPreferenceConfigured)
+        XCTAssertFalse(c.shouldShowGate(hasActiveSession: true))
+    }
+
+    func test_enableByDefaultIfExplicitlyDisabled_doesNotOverrideUserChoice() {
+        let c = BiometricUnlockController(defaults: defaults)
+        c.setFaceIDUnlockEnabled(false)
+        let fake = FakeBiometricsService(availability: .available)
+
+        c.enableByDefaultIfUnsetAndAvailable(using: fake)
+
+        XCTAssertFalse(c.faceIDUnlockEnabled)
+        XCTAssertTrue(c.faceIDPreferenceConfigured)
+        XCTAssertEqual(fake.availabilityCallCount, 0,
+                       "Explicit user choice should skip even the availability probe")
     }
 
     // MARK: - isLocked composite
@@ -195,6 +244,10 @@ final class PausableBiometricsService: BiometricsService {
     private var continuation: CheckedContinuation<BiometricsResult, Never>?
     private var authenticatingContinuation: CheckedContinuation<Void, Never>?
     private var isAuthenticating: Bool = false
+
+    func availability() -> BiometricsAvailability {
+        .available
+    }
 
     func authenticate(intent: BiometricsIntent) async -> BiometricsResult {
         isAuthenticating = true

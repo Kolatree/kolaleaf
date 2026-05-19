@@ -2,9 +2,11 @@
 //
 // Holds the "require Face ID at launch" user preference + the
 // session-level unlocked flag. The setting persists to UserDefaults
-// (kola.faceIDUnlockEnabled). The unlock flag is in-memory only —
-// every cold launch and every foreground-after-background restart
-// re-locks if the setting is on.
+// (kola.faceIDUnlockEnabled). The first authenticated session on a
+// Face-ID-capable device enables the preference automatically unless
+// the user has already made an explicit choice. The unlock flag is
+// in-memory only — every cold launch and every
+// foreground-after-background restart re-locks if the setting is on.
 //
 // Why a dedicated controller (vs folding into AppState):
 //   • The locked/unlocked state is orthogonal to session/KYC
@@ -45,6 +47,12 @@ public final class BiometricUnlockController {
         didSet { applyFaceIDPreferenceSideEffects() }
     }
 
+    /// True once the user has explicitly accepted the default or
+    /// changed the Security toggle. Keeps the product default
+    /// "protect logged-in sessions with Face ID when available" from
+    /// overriding a user who turned the feature off.
+    public private(set) var faceIDPreferenceConfigured: Bool
+
     /// Explicit setter — equivalent to assigning `faceIDUnlockEnabled`
     /// but documents the side effects at the call site. Toggle UI
     /// can still use the binding; programmatic mutations (settings
@@ -57,6 +65,8 @@ public final class BiometricUnlockController {
 
     private func applyFaceIDPreferenceSideEffects() {
         defaults.set(faceIDUnlockEnabled, forKey: Self.kFaceIDEnabled)
+        faceIDPreferenceConfigured = true
+        defaults.set(true, forKey: Self.kFaceIDPreferenceConfigured)
         // Flipping the setting on resets `unlockedThisSession` so
         // the next foreground entry presents the lock screen
         // (otherwise enabling the setting mid-session would only
@@ -81,10 +91,24 @@ public final class BiometricUnlockController {
 
     private let defaults: UserDefaults
     private static let kFaceIDEnabled = "kola.faceIDUnlockEnabled"
+    private static let kFaceIDPreferenceConfigured = "kola.faceIDUnlockPreferenceConfigured"
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.faceIDUnlockEnabled = defaults.bool(forKey: Self.kFaceIDEnabled)
+        self.faceIDPreferenceConfigured =
+            defaults.bool(forKey: Self.kFaceIDPreferenceConfigured)
+            || defaults.object(forKey: Self.kFaceIDEnabled) != nil
+    }
+
+    /// Enables app unlock by default once an authenticated session
+    /// exists on a device that can evaluate biometrics. This is
+    /// intentionally a no-op after the user has made an explicit
+    /// choice, so the Security toggle remains an opt-out.
+    public func enableByDefaultIfUnsetAndAvailable(using service: any BiometricsService) {
+        guard !faceIDPreferenceConfigured else { return }
+        guard case .available = service.availability() else { return }
+        setFaceIDUnlockEnabled(true)
     }
 
     /// Composite gate consumed by the lock view. Caller supplies

@@ -87,4 +87,27 @@ final class BiometricsServiceTests: XCTestCase {
     func test_map_authenticationFailed_treatedAsAuthFailed() {
         XCTAssertEqual(LABiometricsService.map(laError(.authenticationFailed)), .authFailed)
     }
+
+    // MARK: - Availability mapping
+
+    func test_availabilityFromBiometryNotEnrolled() {
+        XCTAssertEqual(LABiometricsService.availability(from: laError(.biometryNotEnrolled)), .notEnrolled)
+    }
+
+    func test_availabilityFromBiometryNotAvailable() {
+        XCTAssertEqual(LABiometricsService.availability(from: laError(.biometryNotAvailable)), .noHardware)
+    }
+
+    func test_availabilityFromBiometryLockout() {
+        XCTAssertEqual(LABiometricsService.availability(from: laError(.biometryLockout)), .lockedOut)
+    }
+
+    func test_fake_returnsStagedAvailability() {
+        let fake = FakeBiometricsService(availability: .notEnrolled)
+        XCTAssertEqual(fake.availability(), .notEnrolled)
+        XCTAssertEqual(fake.availabilityCallCount, 1)
+        fake.stageAvailability(.available)
+        XCTAssertEqual(fake.availability(), .available)
+        XCTAssertEqual(fake.availabilityCallCount, 2)
+    }
 }

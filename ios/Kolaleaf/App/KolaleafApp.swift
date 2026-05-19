@@ -51,6 +51,7 @@ struct KolaleafApp: App {
     /// drives BiometricLockView when the user comes back to a
     /// foreground after backgrounding the app.
     @State private var biometricUnlock: BiometricUnlockController
+    @State private var activeFeedbackDraft: FeedbackDraft?
     private let biometricsService: any BiometricsService = LABiometricsService()
     @AppStorage(AppLocale.storageKey) private var appLocaleRawValue = AppLocale.system.rawValue
 
@@ -129,6 +130,10 @@ struct KolaleafApp: App {
                 .environment(\.biometricUnlock, biometricUnlock)
                 .environment(\.locale, AppLocale.normalized(appLocaleRawValue).locale)
                 .id(appLocaleRawValue)
+                .shakeToReport(activeDraft: $activeFeedbackDraft)
+                .sheet(item: $activeFeedbackDraft) { draft in
+                    FeedbackReportView(draft: draft)
+                }
                 .task { await wireAPIClientHooks() }
                 // Phase 11.5: after a session exists, register the
                 // current App Attest key with the backend. The backend

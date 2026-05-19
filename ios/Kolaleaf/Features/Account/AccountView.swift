@@ -1,7 +1,7 @@
 // AccountView.swift  (Phase 8 · U60)
 // Account-tab landing screen. Wires the navigation destinations
 // declared by `AccountDestination` (My PayID, Security & 2FA, Refer,
-// Help, Statements). Sign-out is a destructive alert that calls into
+// Help, Statements, Preferences). Sign-out is a destructive alert that calls into
 // `AppState.clearForLogout()` then revokes server-side via
 // `AuthEndpoints.Logout`.
 
@@ -143,6 +143,9 @@ public struct AccountView: View {
             menuRow("Statements & tax", systemImage: "doc.text.fill") {
                 path.append(.statements)
             }
+            menuRow("Preferences", systemImage: "slider.horizontal.3") {
+                path.append(.preferences)
+            }
             menuRow("Sign out", systemImage: "rectangle.portrait.and.arrow.right",
                     destructive: true) {
                 confirmSignOut = true
@@ -229,4 +232,5 @@ public enum AccountDestination: Hashable {
     case refer
     case help
     case statements
+    case preferences
 }

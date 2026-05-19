@@ -6,10 +6,10 @@ _Owned by Architect. Updated by Builder after each step._
 
 ## Current Status
 
-**Active step:** Wave 2a Phase 12 next candidate selection: localization, TestFlight workflow configuration in Xcode/App Store Connect, or shake-to-report decision.
-**Last cleared:** Web KYC recovery patch committed locally as `3e439c5`; Phase 11 iOS 2FA/security committed locally as `ac3b0d8`; Phase 11.5 privacy/deep-link slice committed locally as `90be9b2`; Phase 11.5 device-attestation slice committed locally as `d1717ce`; Phase 11.5 notification/Sentry-scrubber slice committed locally as `f0ac381`; Phase 11.6 privacy-first analytics/coordinator slice committed locally as `7099d96`; Phase 12 issue-PayID OpenAPI contract slice committed locally as `8e925fc`; Phase 12 accessibility/Dynamic Type send-flow slice committed locally as `8f44ce4`; Phase 12 Sentry production wiring committed locally as `55c9b0b`; Phase 12 Reduce Motion accessibility slice committed locally as `59a8a9b`; Phase 12 app icon/launch slice committed locally; Phase 12 iPad orientation posture committed locally; Phase 12 Xcode Cloud bootstrap committed locally.
-**Pending deploy:** All Pile B + Wave 1 commits local past 6d3db06, plus Wave 2a iOS/mobile commits. Production KYC 500 remains operationally blocked on Railway/Sumsub access.
-**Tests:** Latest validation: `ios/ci_scripts/ci_post_clone.sh` ran locally and regenerated the XcodeGen project; XcodeBuildMCP targeted simulator run `KolaleafTests/XcodeCloudScriptsTests` (2/2); physical Debug build/install/launch succeeded on `iPhone.coredevice.local`. Earlier iPad posture validation: generated `Info.plist` has iPhone portrait and iPad portrait/landscape orientations; targeted launch tests (5/5); prior orientation warning gone.
+**Active step:** Wave 2a Phase 12 local wrap-up, excluding Phases 13/14 per Ambrose. Current local slice: U81/U81c localization scaffold + Account → Preferences language override.
+**Last cleared:** Web KYC recovery patch committed locally as `3e439c5`; Phase 11 iOS 2FA/security committed locally as `ac3b0d8`; Phase 11.5 privacy/deep-link slice committed locally as `90be9b2`; Phase 11.5 device-attestation slice committed locally as `d1717ce`; Phase 11.5 notification/Sentry-scrubber slice committed locally as `f0ac381`; Phase 11.6 privacy-first analytics/coordinator slice committed locally as `7099d96`; Phase 12 issue-PayID OpenAPI contract slice committed locally as `8e925fc`; Phase 12 accessibility/Dynamic Type send-flow slice committed locally as `8f44ce4`; Phase 12 web Sentry production wiring committed locally as `55c9b0b`; Phase 12 Reduce Motion accessibility slice committed locally as `59a8a9b`; Phase 12 app icon/launch slice committed locally; Phase 12 iPad orientation posture committed locally; Phase 12 Xcode Cloud bootstrap committed locally; broader core-flow AX5 sweep committed locally as `0abd0fa`; TestFlight fastlane/walkthrough prep committed locally as `c2ff908`; ASC/Xcode Cloud workflow bootstrap follow-ups committed locally through `49d1928`.
+**Pending deploy / external access:** All Pile B + Wave 1 commits local past `6d3db06`, plus Wave 2a iOS/mobile commits. Production KYC 500 remains operationally blocked: `railway whoami --json` now fails with `invalid_grant` and this shell reports no linked Railway project, so Railway login/link must be restored before Sumsub env/log verification. TestFlight/Xcode Cloud UI steps still require App Store Connect membership/signing state to be healthy.
+**Tests:** Latest validation: XcodeBuildMCP targeted simulator run `KolaleafTests/AppLocaleTests`, `KolaleafTests/LocalizationCatalogTests`, and `KolaleafTests/CoreFlowsAX5Tests` passed (14/14). Release device build also passed for paired iPhone using `iPhone Distribution: Kolatree Pty Ltd (XV85Z6GMF7)`, app profile `Kolaleaf App Store 20260514`, and widget profile `IOS_APP_STORE-20260514`; direct local install of that Release `.app` failed because iOS rejected the embedded App Store/Beta profile for local install (`0xe800801f`). Earlier validation: `ios/ci_scripts/ci_post_clone.sh` ran locally and regenerated the XcodeGen project; `KolaleafTests/XcodeCloudScriptsTests` passed (2/2); physical Debug build/install/launch succeeded on `iPhone.coredevice.local`; generated `Info.plist` has iPhone portrait and iPad portrait/landscape orientations; targeted launch tests (5/5); prior orientation warning gone.
 
 ### Active recovery todo — 2026-05-14
 
@@ -20,8 +20,8 @@ _Owned by Architect. Updated by Builder after each step._
 - [x] Mark production `/api/v1/kyc/initiate` 500 as still unresolved and operationally blocked on Railway/Sumsub access.
 - [x] Bring local Postgres up, then run targeted KYC tests, `npx tsc --noEmit`, and `npm run build`.
 - [x] Build Debug iOS app for paired physical iPhone and install/launch `com.kolaleaf.app`.
-- [ ] Confirm production Sumsub env/logs on Railway and fix the real `/api/v1/kyc/initiate` 500 root cause.
-- [ ] Clean or intentionally commit the large untracked generated `CLAUDE.md` set and new KYC files.
+- [ ] Confirm production Sumsub env/logs on Railway and fix the real `/api/v1/kyc/initiate` 500 root cause. Blocked until `railway login` + project link are restored.
+- [x] Clean or intentionally ignore the generated local `CLAUDE.md` set, ASC workflow payload previews, XcodeBuildMCP local config, and private ASC key path via `.gitignore`. Remaining untracked files are user-supplied Kolaleaf vector/design assets in a trailing-space directory and need a naming/commit decision.
 - [x] Review and commit web KYC recovery changes; add canonical envelopes for KYC mock and existing 2FA routes.
 - [x] Finish Phase 11 proper: TOTP setup, TOTP verify, backup-code display/regeneration, SMS 2FA setup UI, and sign-in 2FA challenge.
 - [x] Reconcile Phase 11 status: U73-U76 implemented locally in `ac3b0d8`; Phase 11 is complete pending external review.
@@ -37,13 +37,16 @@ _Owned by Architect. Updated by Builder after each step._
 - [x] Phase 12 app icon/launch review: canonical launch screen now displays `LogoPrimary` on the existing cream launch background, app icon marketing PNG is guarded at 1024x1024, and source tests protect the launch/icon catalog wiring.
 - [x] Phase 12 iPad posture: app remains iPhone+iPad, keeps iPhone portrait-only, and declares all iPad orientations explicitly so release builds do not trip the orientation warning.
 - [x] Phase 12 Xcode Cloud repo bootstrap: `ios/ci_scripts/ci_post_clone.sh` installs XcodeGen when missing and regenerates the ignored `.xcodeproj` before Cloud build actions; executable/script contract guarded by tests.
-- [ ] Phase 12 next candidate: localization, TestFlight workflow configuration in Xcode/App Store Connect, or shake-to-report decision. Defer provider checks until signing/App Store Connect/Railway access is confirmed.
+- [x] Phase 12 TestFlight prep: fastlane internal/external/release lanes and operator walkthrough committed locally as `c2ff908`; actual upload remains blocked on App Store Connect membership/signing/API-key readiness.
+- [x] Phase 12 localization scaffold: `Localizable.xcstrings` now declares English + Yoruba + Igbo + Hausa with non-English strings explicitly marked `needs_review`; Account → Preferences language override routes through `AppLocale` and root `\.locale`.
+- [x] Build Release iOS app for paired physical iPhone using App Store distribution signing after Debug device signing failed on missing development profiles. Direct `devicectl` install of the Release `.app` is not locally installable with this profile (`0xe800801f`), so TestFlight/App Store Connect upload is the correct release validation path.
+- [ ] Phase 12 remaining local candidate: iOS-native Sentry crash reporting decision/implementation or shake-to-report. Defer provider checks until signing/App Store Connect/Railway access is confirmed.
 
 ### Remaining phase execution plan — 2026-05-14
 
-- **Phase 12 / Production polish, CI, beta:** work in small reversible slices. First reconcile already-landed universal-link and PII-scrubber work; then prioritize OpenAPI contract tests, accessibility/Dynamic Type/Reduce Motion sweep, Sentry SDK/DSN/source-map setup, app icon/launch screen assets, Xcode Cloud/TestFlight prep, and explicit decisions on iPad and shake-to-report.
-- **Phase 13 / Apple Watch companion:** defer until iOS beta path is stable. Requires a new watch target, Live Activity/transfer glance model decisions, WatchConnectivity sync, and complication design.
-- **Phase 14 / WhatsApp + AASA verification:** operational/provider phase. Verify deployed AASA paths and Meta/WhatsApp universal-link allowlist after the production domain and app identifiers are confirmed.
+- **Phase 12 / Production polish, CI, beta:** local code slices mostly landed. Remaining local work is a product/ops decision between iOS-native Sentry and shake-to-report. Remaining external checks: Railway/Sumsub KYC 500, Sentry DSN/event verification, Xcode Cloud workflow creation, TestFlight upload, and translation review.
+- **Phase 13 / Apple Watch companion:** paused by user direction.
+- **Phase 14 / WhatsApp + AASA verification:** paused by user direction.
 
 ### Wave 1 commit ledger (closes WAVE-1-AUDIT.md gaps)
 

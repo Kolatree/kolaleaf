@@ -52,6 +52,7 @@ struct KolaleafApp: App {
     /// foreground after backgrounding the app.
     @State private var biometricUnlock: BiometricUnlockController
     private let biometricsService: any BiometricsService = LABiometricsService()
+    @AppStorage(AppLocale.storageKey) private var appLocaleRawValue = AppLocale.system.rawValue
 
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -126,6 +127,8 @@ struct KolaleafApp: App {
                 .environment(\.syncService, syncService)
                 .environment(\.liveActivityService, liveActivityService)
                 .environment(\.biometricUnlock, biometricUnlock)
+                .environment(\.locale, AppLocale.normalized(appLocaleRawValue).locale)
+                .id(appLocaleRawValue)
                 .task { await wireAPIClientHooks() }
                 // Phase 11.5: after a session exists, register the
                 // current App Attest key with the backend. The backend

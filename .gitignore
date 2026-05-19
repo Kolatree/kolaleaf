@@ -50,6 +50,14 @@ next-env.d.ts
 .tldr/
 .tldrignore
 .expect/
+.xcodebuildmcp/
+.asc-workflow-payloads/
+docs/asc keys/
+
+# Generated local agent breadcrumbs. The repo-root CLAUDE.md is tracked and
+# remains authoritative; nested generated copies are local workspace noise.
+**/CLAUDE.md
+!/CLAUDE.md
 
 # Reference files (not source code)
 *.png

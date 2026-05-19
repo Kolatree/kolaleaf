@@ -130,6 +130,8 @@ public struct MainTabView: View {
                                 }
                         case .statements:
                             StatementsView()
+                        case .preferences:
+                            PreferencesView()
                         }
                     }
             }

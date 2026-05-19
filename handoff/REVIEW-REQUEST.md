@@ -1,3 +1,41 @@
+# Review Request -- Wave 2a Phase 12 Localization Preferences Slice
+
+**Ready for Review:** YES for localization scaffolding and user locale override. This does not claim reviewed Yoruba/Igbo/Hausa translations are production-ready.
+**Date:** 2026-05-19
+**Branch / worktree:** `feat/ios-swiftui-app` in `/Users/ao/Documents/projects/Kolaleaf`
+
+## Summary
+
+Adds the Phase 12 U81/U81c local scaffold: supported app locales, root `\.locale` override, Account → Preferences language picker, and a non-empty string catalog declaring English plus Yoruba, Igbo, and Hausa. Non-English catalog entries are deliberately marked `needs_review` and currently use English fallback copy so regulated financial/compliance text is not shipped as unreviewed translation.
+
+This slice also ignores generated local agent breadcrumbs, ASC workflow payload previews, XcodeBuildMCP config, and private ASC key material. Remaining untracked brand vector assets are left unstaged because they are user-supplied design source files in a trailing-space directory and need a naming decision.
+
+## Files Changed In This Slice
+
+- `.gitignore` — ignores generated nested `CLAUDE.md` files, `.asc-workflow-payloads/`, `.xcodebuildmcp/`, and `docs/asc keys/`.
+- `ios/Kolaleaf/App/AppLocale.swift` — supported locale model and persisted preference key.
+- `ios/Kolaleaf/App/KolaleafApp.swift` — applies the selected locale to the app root.
+- `ios/Kolaleaf/Features/Account/{AccountView,PreferencesView}.swift` and `ios/Kolaleaf/App/MainTabView.swift` — Account → Preferences route and language picker.
+- `ios/Kolaleaf/Resources/Localizable.xcstrings` — v1 catalog scaffold with `en`, `yo`, `ig`, and `ha`.
+- `ios/KolaleafTests/App/{AppLocaleTests,LocalizationCatalogTests}.swift` — supported-locale and catalog-state guards.
+- `handoff/BUILD-LOG.md` and `handoff/REVIEW-REQUEST.md` — current status and blocker record.
+
+## Validation
+
+- `xcodegen generate` — regenerated `ios/Kolaleaf.xcodeproj`.
+- XcodeBuildMCP `test_sim` with `-only-testing:KolaleafTests/AppLocaleTests -only-testing:KolaleafTests/LocalizationCatalogTests -only-testing:KolaleafTests/CoreFlowsAX5Tests` — 14 tests passed.
+- `xcodebuild -project ios/Kolaleaf.xcodeproj -scheme Kolaleaf -configuration Release -destination 'platform=iOS,name=iPhone' -derivedDataPath ios/build/DerivedData build` — passed for paired iPhone using `iPhone Distribution: Kolatree Pty Ltd (XV85Z6GMF7)`, app profile `Kolaleaf App Store 20260514`, and widget profile `IOS_APP_STORE-20260514`.
+- `xcrun devicectl device install app --device iPhone.coredevice.local .../Release-iphoneos/Kolaleaf.app` — failed because the App Store/Beta embedded profile is not valid for direct local install (`0xe800801f`, integrity could not be verified). No signing changes were made.
+
+## Remaining Review Scope
+
+- Translation vendor/community review is still required before Yoruba, Igbo, or Hausa can be marked translated.
+- Many existing UI strings still need full extraction before localization can be called complete across the whole app.
+- Production KYC 500 remains blocked until Railway auth/link is restored and Sumsub env/logs can be inspected.
+- Phases 13 and 14 are intentionally paused per Ambrose.
+
+---
+
 # Review Request -- Wave 2a Phase 12 Xcode Cloud Bootstrap Slice
 
 **Ready for Review:** YES for the repository-side Xcode Cloud bootstrap. Workflow creation still needs Xcode/App Store Connect access.

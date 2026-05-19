@@ -1,5 +1,123 @@
 {
   "sourceLanguage" : "en",
-  "strings" : {},
+  "strings" : {
+    "Account" : {
+      "comment" : "Account tab navigation title.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Account" } },
+        "ha" : { "stringUnit" : { "state" : "needs_review", "value" : "Account" } },
+        "ig" : { "stringUnit" : { "state" : "needs_review", "value" : "Account" } },
+        "yo" : { "stringUnit" : { "state" : "needs_review", "value" : "Account" } }
+      }
+    },
+    "Get started" : {
+      "comment" : "Primary onboarding call to action.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Get started" } },
+        "ha" : { "stringUnit" : { "state" : "needs_review", "value" : "Get started" } },
+        "ig" : { "stringUnit" : { "state" : "needs_review", "value" : "Get started" } },
+        "yo" : { "stringUnit" : { "state" : "needs_review", "value" : "Get started" } }
+      }
+    },
+    "Preferences" : {
+      "comment" : "Account menu row for user preferences.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Preferences" } },
+        "ha" : { "stringUnit" : { "state" : "needs_review", "value" : "Preferences" } },
+        "ig" : { "stringUnit" : { "state" : "needs_review", "value" : "Preferences" } },
+        "yo" : { "stringUnit" : { "state" : "needs_review", "value" : "Preferences" } }
+      }
+    },
+    "Security & 2FA" : {
+      "comment" : "Account menu row for security settings.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Security & 2FA" } },
+        "ha" : { "stringUnit" : { "state" : "needs_review", "value" : "Security & 2FA" } },
+        "ig" : { "stringUnit" : { "state" : "needs_review", "value" : "Security & 2FA" } },
+        "yo" : { "stringUnit" : { "state" : "needs_review", "value" : "Security & 2FA" } }
+      }
+    },
+    "Send money home with care." : {
+      "comment" : "Welcome screen headline.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Send money home with care." } },
+        "ha" : { "stringUnit" : { "state" : "needs_review", "value" : "Send money home with care." } },
+        "ig" : { "stringUnit" : { "state" : "needs_review", "value" : "Send money home with care." } },
+        "yo" : { "stringUnit" : { "state" : "needs_review", "value" : "Send money home with care." } }
+      }
+    },
+    "Send your AUD" : {
+      "comment" : "PayID instructions title.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Send your AUD" } },
+        "ha" : { "stringUnit" : { "state" : "needs_review", "value" : "Send your AUD" } },
+        "ig" : { "stringUnit" : { "state" : "needs_review", "value" : "Send your AUD" } },
+        "yo" : { "stringUnit" : { "state" : "needs_review", "value" : "Send your AUD" } }
+      }
+    },
+    "Sign out" : {
+      "comment" : "Account sign-out action.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sign out" } },
+        "ha" : { "stringUnit" : { "state" : "needs_review", "value" : "Sign out" } },
+        "ig" : { "stringUnit" : { "state" : "needs_review", "value" : "Sign out" } },
+        "yo" : { "stringUnit" : { "state" : "needs_review", "value" : "Sign out" } }
+      }
+    },
+    "Verify your identity" : {
+      "comment" : "KYC intro title and action copy.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Verify your identity" } },
+        "ha" : { "stringUnit" : { "state" : "needs_review", "value" : "Verify your identity" } },
+        "ig" : { "stringUnit" : { "state" : "needs_review", "value" : "Verify your identity" } },
+        "yo" : { "stringUnit" : { "state" : "needs_review", "value" : "Verify your identity" } }
+      }
+    },
+    "preferences.language.footer" : {
+      "comment" : "Footer explaining language override state.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Translations for Yoruba, Igbo, and Hausa are staged for review. Until reviewed, regulated copy remains in English." } },
+        "ha" : { "stringUnit" : { "state" : "needs_review", "value" : "Translations for Yoruba, Igbo, and Hausa are staged for review. Until reviewed, regulated copy remains in English." } },
+        "ig" : { "stringUnit" : { "state" : "needs_review", "value" : "Translations for Yoruba, Igbo, and Hausa are staged for review. Until reviewed, regulated copy remains in English." } },
+        "yo" : { "stringUnit" : { "state" : "needs_review", "value" : "Translations for Yoruba, Igbo, and Hausa are staged for review. Until reviewed, regulated copy remains in English." } }
+      }
+    },
+    "preferences.language.system" : {
+      "comment" : "Language picker option that follows device settings.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Use device language" } },
+        "ha" : { "stringUnit" : { "state" : "needs_review", "value" : "Use device language" } },
+        "ig" : { "stringUnit" : { "state" : "needs_review", "value" : "Use device language" } },
+        "yo" : { "stringUnit" : { "state" : "needs_review", "value" : "Use device language" } }
+      }
+    },
+    "preferences.language.system.subtitle" : {
+      "comment" : "Subtitle for system language picker option.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Follows iPhone settings" } },
+        "ha" : { "stringUnit" : { "state" : "needs_review", "value" : "Follows iPhone settings" } },
+        "ig" : { "stringUnit" : { "state" : "needs_review", "value" : "Follows iPhone settings" } },
+        "yo" : { "stringUnit" : { "state" : "needs_review", "value" : "Follows iPhone settings" } }
+      }
+    },
+    "preferences.language.title" : {
+      "comment" : "Language picker row title.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Language" } },
+        "ha" : { "stringUnit" : { "state" : "needs_review", "value" : "Language" } },
+        "ig" : { "stringUnit" : { "state" : "needs_review", "value" : "Language" } },
+        "yo" : { "stringUnit" : { "state" : "needs_review", "value" : "Language" } }
+      }
+    },
+    "preferences.title" : {
+      "comment" : "Preferences screen navigation title.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Preferences" } },
+        "ha" : { "stringUnit" : { "state" : "needs_review", "value" : "Preferences" } },
+        "ig" : { "stringUnit" : { "state" : "needs_review", "value" : "Preferences" } },
+        "yo" : { "stringUnit" : { "state" : "needs_review", "value" : "Preferences" } }
+      }
+    }
+  },
   "version" : "1.0"
 }

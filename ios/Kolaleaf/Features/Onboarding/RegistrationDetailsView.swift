@@ -20,6 +20,9 @@ public struct RegistrationDetailsView: View {
                 content
             }
             .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                stickySubmitArea
+            }
         }
         .kolaWallpaper()
         .sensitiveScreen()   // P1 fix (Phase 1 review): full PII (legal name + AU address)
@@ -54,11 +57,10 @@ public struct RegistrationDetailsView: View {
                     .foregroundStyle(KolaColors.coral)
                     .accessibilityLabel("Error: \(formError)")
             }
-            submitButton
         }
         .padding(.horizontal, KolaSpacing.xl)
         .padding(.top, KolaSpacing.xxxl)
-        .padding(.bottom, KolaSpacing.homeIndicator)
+        .padding(.bottom, KolaSpacing.xxxl + KolaSpacing.homeIndicator)
     }
 
     private var heading: some View {
@@ -83,15 +85,17 @@ public struct RegistrationDetailsView: View {
             sectionLabel("Identity")
 
             field(label: "Full name") {
-                TextField("Ada Lovelace", text: $vm.fullName)
+                TextField("Full legal name", text: $vm.fullName)
                     .textContentType(.name)
                     .textInputAutocapitalization(.words)
+                    .accessibilityValue(vm.fullName.isEmpty ? "Empty" : vm.fullName)
             }
             errorIfAny(forKey: "fullName")
 
             field(label: "Password") {
                 SecureField("At least 12 characters", text: $vm.password)
                     .textContentType(.newPassword)
+                    .accessibilityValue(vm.password.isEmpty ? "Empty" : "Entered")
             }
             errorIfAny(forKey: "password")
 
@@ -116,20 +120,23 @@ public struct RegistrationDetailsView: View {
             sectionLabel("Residential address")
 
             field(label: "Address line 1") {
-                TextField("12 Pitt Street", text: $vm.addressLine1)
+                TextField("Street address", text: $vm.addressLine1)
                     .textContentType(.streetAddressLine1)
+                    .accessibilityValue(vm.addressLine1.isEmpty ? "Empty" : vm.addressLine1)
             }
             errorIfAny(forKey: "addressLine1")
 
             field(label: "Address line 2 (optional)") {
-                TextField("Apt 4B", text: $vm.addressLine2)
+                TextField("Apartment, suite or unit", text: $vm.addressLine2)
                     .textContentType(.streetAddressLine2)
+                    .accessibilityValue(vm.addressLine2.isEmpty ? "Empty" : vm.addressLine2)
             }
 
             field(label: "City") {
-                TextField("Sydney", text: $vm.city)
+                TextField("Suburb or city", text: $vm.city)
                     .textContentType(.addressCity)
                     .textInputAutocapitalization(.words)
+                    .accessibilityValue(vm.city.isEmpty ? "Empty" : vm.city)
             }
             errorIfAny(forKey: "city")
 
@@ -150,7 +157,7 @@ public struct RegistrationDetailsView: View {
                 }
                 VStack(alignment: .leading, spacing: KolaSpacing.s) {
                     fieldLabel("Postcode")
-                    TextField("2000", text: $vm.postcode)
+                    TextField("Postcode", text: $vm.postcode)
                         .keyboardType(.numberPad)
                         .textContentType(.postalCode)
                         .font(KolaFont.row)
@@ -158,6 +165,7 @@ public struct RegistrationDetailsView: View {
                         .padding(.horizontal, KolaSpacing.xl)
                         .padding(.vertical, KolaSpacing.l)
                         .kolaFrosted(.card)
+                        .accessibilityValue(vm.postcode.isEmpty ? "Empty" : vm.postcode)
                         .onChange(of: vm.postcode) { _, newValue in
                             let digits = String(newValue.filter(\.isNumber).prefix(4))
                             if digits != newValue { vm.postcode = digits }
@@ -206,6 +214,42 @@ public struct RegistrationDetailsView: View {
                 .font(KolaFont.tagline)
                 .foregroundStyle(KolaColors.coral)
         }
+    }
+
+    private var stickySubmitArea: some View {
+        VStack(alignment: .leading, spacing: KolaSpacing.s) {
+            if !vm.canSubmit && !vm.isSubmitting {
+                Text(registrationSubmitGuidance)
+                    .font(KolaFont.tagline)
+                    .foregroundStyle(KolaColors.whiteOnGradientMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel(registrationSubmitGuidance)
+            }
+            submitButton
+        }
+        .padding(.horizontal, KolaSpacing.xl)
+        .padding(.top, KolaSpacing.m)
+        .padding(.bottom, KolaSpacing.homeIndicator)
+        .background(.ultraThinMaterial)
+    }
+
+    private var registrationSubmitGuidance: String {
+        if vm.fullName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Enter your full legal name."
+        }
+        if vm.password.isEmpty {
+            return "Create a password with at least 12 characters, including letters and numbers."
+        }
+        if vm.addressLine1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Enter your residential street address."
+        }
+        if vm.city.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Enter your suburb or city."
+        }
+        if vm.postcode.count != 4 {
+            return "Enter your 4-digit Australian postcode."
+        }
+        return "Check the highlighted fields."
     }
 
     private var submitButton: some View {

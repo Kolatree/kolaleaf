@@ -64,6 +64,7 @@ public struct PhoneOTPView: View {
             heading
             codeField
             resendRow
+            changePhoneButton
             Spacer(minLength: KolaSpacing.card)
             submitButton
         }
@@ -119,6 +120,19 @@ public struct PhoneOTPView: View {
             }
             Spacer()
         }
+    }
+
+    private var changePhoneButton: some View {
+        Button {
+            dismiss()
+        } label: {
+            Text("Change phone number")
+                .font(KolaFont.tagline)
+                .foregroundStyle(KolaColors.whiteOnGradient)
+                .underline()
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Return to the phone number screen.")
     }
 
     private var submitButton: some View {

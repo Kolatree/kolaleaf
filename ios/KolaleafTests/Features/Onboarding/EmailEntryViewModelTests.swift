@@ -34,6 +34,15 @@ final class EmailEntryViewModelTests: XCTestCase {
     func test_canSubmit_trueWhenValidEmail() {
         let vm = makeVM(api: FakeAPIClient())
         vm.email = "user@example.com"
+        vm.transactionalOptIn = true
+        XCTAssertTrue(vm.canSubmit)
+    }
+
+    func test_canSubmit_falseUntilEmailConsentConfirmed() {
+        let vm = makeVM(api: FakeAPIClient())
+        vm.email = "user@example.com"
+        XCTAssertFalse(vm.canSubmit)
+        vm.transactionalOptIn = true
         XCTAssertTrue(vm.canSubmit)
     }
 
@@ -42,6 +51,7 @@ final class EmailEntryViewModelTests: XCTestCase {
         await api.stageSuccess(AuthEndpoints.SendEmailCode.self, SendCodeResponse(ok: true))
         let vm = makeVM(api: api)
         vm.email = "user@example.com"
+        vm.transactionalOptIn = true
 
         // Kick off submit and immediately assert isSubmitting flips canSubmit off.
         let task = Task { await vm.submit() }
@@ -58,6 +68,7 @@ final class EmailEntryViewModelTests: XCTestCase {
         await api.stageSuccess(AuthEndpoints.SendEmailCode.self, SendCodeResponse(ok: true))
         let vm = makeVM(api: api)
         vm.email = "  USER@Example.COM  "
+        vm.transactionalOptIn = true
         await vm.submit()
 
         let body = await api.lastBody(
@@ -75,6 +86,7 @@ final class EmailEntryViewModelTests: XCTestCase {
         var captured: String?
         let vm = makeVM(api: api) { captured = $0 }
         vm.email = "  USER@Example.COM  "
+        vm.transactionalOptIn = true
         await vm.submit()
 
         XCTAssertEqual(captured, "user@example.com")
@@ -85,6 +97,7 @@ final class EmailEntryViewModelTests: XCTestCase {
         await api.stageSuccess(AuthEndpoints.SendEmailCode.self, SendCodeResponse(ok: true))
         let vm = makeVM(api: api)
         vm.email = "user@example.com"
+        vm.transactionalOptIn = true
         XCTAssertFalse(vm.isSubmitting)
         await vm.submit()
         XCTAssertFalse(vm.isSubmitting)
@@ -102,6 +115,7 @@ final class EmailEntryViewModelTests: XCTestCase {
         var called = false
         let vm = makeVM(api: api) { _ in called = true }
         vm.email = "user@example.com"
+        vm.transactionalOptIn = true
         await vm.submit()
 
         XCTAssertFalse(called)
@@ -116,6 +130,7 @@ final class EmailEntryViewModelTests: XCTestCase {
         )
         let vm = makeVM(api: api)
         vm.email = "user@example.com"
+        vm.transactionalOptIn = true
         await vm.submit()
 
         XCTAssertNotNil(vm.inlineError)
@@ -131,6 +146,7 @@ final class EmailEntryViewModelTests: XCTestCase {
         )
         let vm = makeVM(api: api)
         vm.email = "user@example.com"
+        vm.transactionalOptIn = true
         await vm.submit()
 
         XCTAssertNotNil(vm.inlineError)
@@ -140,16 +156,29 @@ final class EmailEntryViewModelTests: XCTestCase {
         let api = FakeAPIClient()
         let vm = makeVM(api: api)
         vm.email = "not-an-email"
+        vm.transactionalOptIn = true
         await vm.submit()
         let calls = await api.calls.count
         XCTAssertEqual(calls, 0)
         XCTAssertNotNil(vm.inlineError)
     }
 
+    func test_submit_withoutEmailConsent_doesNotCallAPI() async {
+        let api = FakeAPIClient()
+        let vm = makeVM(api: api)
+        vm.email = "user@example.com"
+
+        await vm.submit()
+
+        let calls = await api.calls.count
+        XCTAssertEqual(calls, 0)
+        XCTAssertEqual(vm.inlineError, "Confirm transactional email consent to continue.")
+    }
+
     // MARK: - opt-in checkbox default
 
-    func test_transactionalOptIn_defaultsToTrue() {
+    func test_transactionalOptIn_defaultsToFalse() {
         let vm = makeVM(api: FakeAPIClient())
-        XCTAssertTrue(vm.transactionalOptIn)
+        XCTAssertFalse(vm.transactionalOptIn)
     }
 }

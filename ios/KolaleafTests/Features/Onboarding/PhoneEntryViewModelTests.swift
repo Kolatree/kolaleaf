@@ -34,6 +34,15 @@ final class PhoneEntryViewModelTests: XCTestCase {
     func test_canSubmit_trueWhenValid() {
         let vm = makeVM(api: FakeAPIClient())
         vm.phoneInput = "0400000000"  // AU local, default +61 dial
+        vm.transactionalOptIn = true
+        XCTAssertTrue(vm.canSubmit)
+    }
+
+    func test_canSubmit_falseUntilSmsConsentConfirmed() {
+        let vm = makeVM(api: FakeAPIClient())
+        vm.phoneInput = "0400000000"
+        XCTAssertFalse(vm.canSubmit)
+        vm.transactionalOptIn = true
         XCTAssertTrue(vm.canSubmit)
     }
 
@@ -45,6 +54,7 @@ final class PhoneEntryViewModelTests: XCTestCase {
         var capturedSent: PhoneNumber?
         let vm = makeVM(api: api) { capturedSent = $0 }
         vm.phoneInput = "0400 000 000"
+        vm.transactionalOptIn = true
         await vm.submit()
 
         XCTAssertEqual(capturedSent?.e164, "+61400000000")
@@ -62,6 +72,7 @@ final class PhoneEntryViewModelTests: XCTestCase {
         let api = FakeAPIClient()
         let vm = makeVM(api: api)
         vm.phoneInput = "abc"
+        vm.transactionalOptIn = true
         await vm.submit()
 
         XCTAssertEqual(vm.inlineError, "That doesn't look like a valid number.")
@@ -72,8 +83,21 @@ final class PhoneEntryViewModelTests: XCTestCase {
     func test_submit_emptyPhone_setsInlineError() async {
         let api = FakeAPIClient()
         let vm = makeVM(api: api)
+        vm.transactionalOptIn = true
         await vm.submit()
         XCTAssertEqual(vm.inlineError, "Enter your phone number.")
+        let calls = await api.calls
+        XCTAssertEqual(calls.count, 0)
+    }
+
+    func test_submit_withoutSmsConsent_doesNotCallAPI() async {
+        let api = FakeAPIClient()
+        let vm = makeVM(api: api)
+        vm.phoneInput = "0400000000"
+
+        await vm.submit()
+
+        XCTAssertEqual(vm.inlineError, "Confirm transactional SMS consent to continue.")
         let calls = await api.calls
         XCTAssertEqual(calls.count, 0)
     }
@@ -88,6 +112,7 @@ final class PhoneEntryViewModelTests: XCTestCase {
         )
         let vm = makeVM(api: api)
         vm.phoneInput = "0400000000"
+        vm.transactionalOptIn = true
         await vm.submit()
         XCTAssertEqual(vm.inlineError, "Number invalid for region")
     }
@@ -97,6 +122,7 @@ final class PhoneEntryViewModelTests: XCTestCase {
         await api.stageFailure(AuthEndpoints.SendPhoneCode.self, .rateLimited(retryAfter: 42))
         let vm = makeVM(api: api)
         vm.phoneInput = "0400000000"
+        vm.transactionalOptIn = true
         await vm.submit()
         XCTAssertEqual(vm.inlineError, "Too many attempts. Try again in 42 seconds.")
     }
@@ -106,6 +132,7 @@ final class PhoneEntryViewModelTests: XCTestCase {
         await api.stageFailure(AuthEndpoints.SendPhoneCode.self, .transport("offline"))
         let vm = makeVM(api: api)
         vm.phoneInput = "0400000000"
+        vm.transactionalOptIn = true
         await vm.submit()
         XCTAssertEqual(vm.inlineError, "Connection problem. Please check your network.")
     }
@@ -130,8 +157,14 @@ final class PhoneEntryViewModelTests: XCTestCase {
             return XCTFail("expected NG + US in curated country list")
         }
         vm.country = ng
+        vm.transactionalOptIn = true
         XCTAssertTrue(vm.canSubmit, "NG dial code (+234) + 5 local digits = 8 total — should pass E.164 7-15 range")
         vm.country = us
         XCTAssertFalse(vm.canSubmit, "US dial code (+1) + 5 local digits = 6 total — should fail E.164 minimum")
+    }
+
+    func test_transactionalOptIn_defaultsToFalse() {
+        let vm = makeVM(api: FakeAPIClient())
+        XCTAssertFalse(vm.transactionalOptIn)
     }
 }

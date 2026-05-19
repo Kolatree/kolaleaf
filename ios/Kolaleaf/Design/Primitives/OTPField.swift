@@ -70,6 +70,10 @@ public final class OTPFieldModel: ObservableObject {
             .map { String($0) }
             .prefix(length)
 
+        if cleaned.count < length || String(cleaned.joined()) != value {
+            completionFiredForCurrentValue = false
+        }
+
         for (i, ch) in cleaned.enumerated() { digits[i] = ch }
         for i in cleaned.count..<length { digits[i] = "" }
 
@@ -136,7 +140,7 @@ public struct OTPField: View {
     @ObservedObject var model: OTPFieldModel
     public var disabled: Bool = false
 
-    @FocusState private var focusedBox: Int?
+    @FocusState private var fieldFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Wrap an existing model. Use this form when the parent view needs a binding
@@ -147,34 +151,46 @@ public struct OTPField: View {
     }
 
     public var body: some View {
-        ZStack(alignment: .topLeading) {
-            // Hidden one-time-code field. Catches SMS autofill from iOS keyboard
-            // and forwards the full code to the visible boxes via `paste()`.
-            // Sized to zero so it never receives taps; .accessibilityHidden keeps
-            // it out of VoiceOver.
-            TextField("", text: bridgeBinding)
-                .keyboardType(.numberPad)
-                .textContentType(.oneTimeCode)
-                .frame(width: 0, height: 0)
-                .opacity(0.001)
-                .accessibilityHidden(true)
-                .disabled(disabled)
-
+        ZStack {
             HStack(spacing: KolaSpacing.s) {
                 ForEach(0..<model.length, id: \.self) { i in
                     box(index: i)
                 }
             }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
             .modifier(ShakeEffect(amount: model.isError && !reduceMotion ? 1 : 0))
             .animation(model.isError && !reduceMotion
                        ? .default
                        : .none,
                        value: model.isError)
+
+            // Single real input over visual boxes. This makes paste, SMS
+            // autofill, VoiceOver, and UI automation all exercise the same
+            // code path instead of racing six independent TextFields.
+            TextField("", text: aggregateBinding)
+                .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
+                .focused($fieldFocused)
+                .submitLabel(.done)
+                .foregroundStyle(.clear)
+                .tint(.clear)
+                .frame(maxWidth: .infinity, minHeight: KolaSpacing.hitTarget + 10)
+                .contentShape(Rectangle())
+                .opacity(0.01)
+                .accessibilityLabel("Verification code")
+                .accessibilityValue(accessibilityValue)
+                .accessibilityHint("Enter the \(model.length)-digit code.")
+                .disabled(disabled)
         }
-        .onAppear { syncFocusFromModel() }
-        .onChange(of: model.focusedIndex) { _, new in focusedBox = new }
-        .onChange(of: focusedBox) { _, new in
-            if model.focusedIndex != new { model.focusedIndex = new }
+        .onAppear { fieldFocused = !disabled }
+        .onChange(of: model.focusedIndex) { _, new in
+            if new != nil && !disabled { fieldFocused = true }
+        }
+        .onChange(of: fieldFocused) { _, isFocused in
+            if isFocused && model.focusedIndex == nil && !model.isComplete {
+                model.beginEditing()
+            }
         }
     }
 
@@ -182,17 +198,15 @@ public struct OTPField: View {
 
     @ViewBuilder
     private func box(index i: Int) -> some View {
-        let isFocused = focusedBox == i
+        let isFocused = fieldFocused && model.focusedIndex == i
         let stroke = model.isError
             ? KolaColors.coral
             : (isFocused ? KolaColors.greenLight : KolaColors.Frosted.border)
 
-        TextField("", text: digitBinding(at: i))
-            .keyboardType(.numberPad)
+        Text(model.digits[i])
             .multilineTextAlignment(.center)
             .font(KolaFont.amountSmall)
             .foregroundStyle(KolaColors.whiteOnGradient)
-            .focused($focusedBox, equals: i)
             .frame(minWidth: KolaSpacing.hitTarget,
                    minHeight: KolaSpacing.hitTarget)
             .padding(.vertical, KolaSpacing.xs)
@@ -202,53 +216,21 @@ public struct OTPField: View {
                     .stroke(stroke, lineWidth: isFocused ? 1.5 : 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: KolaRadius.chip))
-            .disabled(disabled)
-            .accessibilityLabel(Text("Digit \(i + 1) of \(model.length)"))
     }
 
     // MARK: - Bindings
 
-    /// Bridges the hidden one-time-code TextField to `model.paste(_:)`. The
-    /// TextField sets its own text on autofill; we read on every set and forward.
-    private var bridgeBinding: Binding<String> {
+    private var aggregateBinding: Binding<String> {
         Binding(
-            get: { "" }, // always empty so the field stays invisible to subsequent autofill
+            get: { model.value },
             set: { newValue in
-                guard !newValue.isEmpty else { return }
                 model.paste(newValue)
             }
         )
     }
 
-    /// Per-box binding. SwiftUI calls `set` with the full string after a keystroke;
-    /// we route to `input()` (single char) or `backspace()` (cleared field).
-    private func digitBinding(at i: Int) -> Binding<String> {
-        Binding(
-            get: { model.digits[i] },
-            set: { newValue in
-                let prev = model.digits[i]
-                if newValue.count > 1 {
-                    // User pasted into a single box; treat as full paste.
-                    model.paste(newValue)
-                    return
-                }
-                if newValue.isEmpty {
-                    if !prev.isEmpty {
-                        // Cleared by user — keep the slot empty; backspace handler will
-                        // run on the next deletion if needed.
-                        model.digits[i] = ""
-                    } else {
-                        model.backspace()
-                    }
-                    return
-                }
-                model.input(newValue)
-            }
-        )
-    }
-
-    private func syncFocusFromModel() {
-        if focusedBox != model.focusedIndex { focusedBox = model.focusedIndex }
+    private var accessibilityValue: String {
+        model.value.isEmpty ? "Empty" : "\(model.value.count) of \(model.length) digits entered"
     }
 }
 

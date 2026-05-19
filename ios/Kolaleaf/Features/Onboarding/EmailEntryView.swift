@@ -48,6 +48,7 @@ public struct EmailEntryView: View {
             heading
             emailField
             optInRow
+            submitGuidance
             Spacer(minLength: KolaSpacing.card)
             submitButton
         }
@@ -88,6 +89,7 @@ public struct EmailEntryView: View {
                 .padding(.vertical, KolaSpacing.l)
                 .kolaFrosted(.card)
                 .accessibilityLabel("Email address")
+                .accessibilityValue(vm.email.isEmpty ? "Empty" : vm.email)
 
             if let error = vm.inlineError {
                 Text(error)
@@ -99,9 +101,7 @@ public struct EmailEntryView: View {
     }
 
     private var optInRow: some View {
-        Button {
-            vm.transactionalOptIn.toggle()
-        } label: {
+        Toggle(isOn: $vm.transactionalOptIn) {
             HStack(alignment: .top, spacing: KolaSpacing.m) {
                 Image(systemName: vm.transactionalOptIn ? "checkmark.square.fill" : "square")
                     .font(.system(size: 22, weight: .semibold))
@@ -113,8 +113,32 @@ public struct EmailEntryView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .toggleStyle(.button)
         .buttonStyle(.plain)
-        .accessibilityAddTraits(vm.transactionalOptIn ? .isSelected : [])
+        .accessibilityLabel("Transactional email consent")
+        .accessibilityValue(vm.transactionalOptIn ? "Selected" : "Not selected")
+        .accessibilityHint("Required before Kolaleaf can send verification and transfer status messages.")
+    }
+
+    @ViewBuilder
+    private var submitGuidance: some View {
+        if !vm.canSubmit && !vm.isSubmitting {
+            Text(emailSubmitGuidance)
+                .font(KolaFont.tagline)
+                .foregroundStyle(KolaColors.whiteOnGradientMuted)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel(emailSubmitGuidance)
+        }
+    }
+
+    private var emailSubmitGuidance: String {
+        if vm.email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Enter your email address to continue."
+        }
+        if !vm.transactionalOptIn {
+            return "Confirm transactional email consent to continue."
+        }
+        return "Check the email address and try again."
     }
 
     private var submitButton: some View {

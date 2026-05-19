@@ -117,7 +117,7 @@ public struct SignInView: View {
                     .frame(height: 28)
                     .background(KolaColors.whiteOnGradient.opacity(0.25))
                     .padding(.vertical, KolaSpacing.m)
-                TextField("400 000 000", text: $vm.identifierInput)
+                TextField("Mobile number", text: $vm.identifierInput)
                     .keyboardType(.phonePad)
                     .textContentType(.telephoneNumber)
                     .submitLabel(.next)
@@ -127,6 +127,9 @@ public struct SignInView: View {
                     .foregroundStyle(KolaColors.whiteOnGradient)
                     .padding(.horizontal, KolaSpacing.l)
                     .padding(.vertical, KolaSpacing.l)
+                    .accessibilityLabel("Phone number")
+                    .accessibilityValue(vm.identifierInput.isEmpty ? "Empty" : vm.identifierInput)
+                    .accessibilityHint("Enter your mobile number without the country code.")
             }
             .kolaFrosted(.card)
         }

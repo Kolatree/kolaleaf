@@ -173,4 +173,25 @@ final class OTPFieldTests: XCTestCase {
         m.paste("987654")
         XCTAssertEqual(fireCount, 2)
     }
+
+    func test_completion_firesAgainWhenAggregateInputChangesAfterFullEntry() {
+        var captured: [String] = []
+        let m = OTPFieldModel(length: 6, onComplete: { captured.append($0) })
+
+        m.paste("123456")
+        m.paste("654321")
+
+        XCTAssertEqual(captured, ["123456", "654321"])
+    }
+
+    func test_clearingAggregateInputResetsCompletionLatch() {
+        var captured: [String] = []
+        let m = OTPFieldModel(length: 6, onComplete: { captured.append($0) })
+
+        m.paste("123456")
+        m.paste("")
+        m.paste("222222")
+
+        XCTAssertEqual(captured, ["123456", "222222"])
+    }
 }

@@ -67,6 +67,7 @@ public struct PhoneEntryView: View {
             heading
             phoneField
             optInRow
+            submitGuidance
             Spacer(minLength: KolaSpacing.card)
             if let onUseEmailInstead {
                 useEmailLink(onUseEmailInstead)
@@ -102,7 +103,7 @@ public struct PhoneEntryView: View {
                     .frame(height: 28)
                     .background(KolaColors.whiteOnGradient.opacity(0.25))
                     .padding(.vertical, KolaSpacing.m)
-                TextField("400 000 000", text: $vm.phoneInput)
+                TextField("Mobile number", text: $vm.phoneInput)
                     .keyboardType(.phonePad)
                     .textContentType(.telephoneNumber)
                     .submitLabel(.continue)
@@ -113,6 +114,8 @@ public struct PhoneEntryView: View {
                     .padding(.horizontal, KolaSpacing.l)
                     .padding(.vertical, KolaSpacing.l)
                     .accessibilityLabel("Phone number")
+                    .accessibilityValue(vm.phoneInput.isEmpty ? "Empty" : vm.phoneInput)
+                    .accessibilityHint("Enter your mobile number without the country code.")
             }
             .kolaFrosted(.card)
 
@@ -148,9 +151,7 @@ public struct PhoneEntryView: View {
     }
 
     private var optInRow: some View {
-        Button {
-            vm.transactionalOptIn.toggle()
-        } label: {
+        Toggle(isOn: $vm.transactionalOptIn) {
             HStack(alignment: .top, spacing: KolaSpacing.m) {
                 Image(systemName: vm.transactionalOptIn ? "checkmark.square.fill" : "square")
                     .font(.system(size: 22, weight: .semibold))
@@ -162,8 +163,32 @@ public struct PhoneEntryView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .toggleStyle(.button)
         .buttonStyle(.plain)
-        .accessibilityAddTraits(vm.transactionalOptIn ? .isSelected : [])
+        .accessibilityLabel("Transactional SMS consent")
+        .accessibilityValue(vm.transactionalOptIn ? "Selected" : "Not selected")
+        .accessibilityHint("Required before Kolaleaf can send verification and transfer status messages.")
+    }
+
+    @ViewBuilder
+    private var submitGuidance: some View {
+        if !vm.canSubmit && !vm.isSubmitting {
+            Text(phoneSubmitGuidance)
+                .font(KolaFont.tagline)
+                .foregroundStyle(KolaColors.whiteOnGradientMuted)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel(phoneSubmitGuidance)
+        }
+    }
+
+    private var phoneSubmitGuidance: String {
+        if vm.phoneInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Enter your mobile number to continue."
+        }
+        if !vm.transactionalOptIn {
+            return "Confirm transactional SMS consent to continue."
+        }
+        return "Check the phone number and try again."
     }
 
     private func useEmailLink(_ action: @escaping () -> Void) -> some View {

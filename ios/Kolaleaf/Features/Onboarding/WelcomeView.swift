@@ -18,7 +18,6 @@ public struct WelcomeView: View {
     public var onSignIn: () -> Void
 
     @Environment(\.referralCapture) private var referralCapture
-    @Environment(\.analyticsService) private var analyticsService
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(onGetStarted: @escaping () -> Void,
@@ -60,7 +59,6 @@ public struct WelcomeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .kolaWallpaper()
         .task {
-            await analyticsService?.track(.welcomeShown, properties: ["screen": .string("welcome")])
             await scanPasteboardOnce()
         }
     }

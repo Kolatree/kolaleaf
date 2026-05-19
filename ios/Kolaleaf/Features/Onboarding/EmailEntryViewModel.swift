@@ -19,15 +19,16 @@ import Observation
 public final class EmailEntryViewModel {
 
     public var email: String = ""
-    /// Pre-checked per AUSTRAC-required transactional consent. Users may opt
-    /// out from the legal-comms screen later; payment-related notices still send.
-    public var transactionalOptIn: Bool = true
+    /// Required explicit consent before sending verification and
+    /// transfer-status emails. Starts off so the user makes an
+    /// affirmative choice instead of inheriting a pre-checked box.
+    public var transactionalOptIn: Bool = false
 
     public private(set) var isSubmitting: Bool = false
     public private(set) var inlineError: String?
 
     public var canSubmit: Bool {
-        !isSubmitting && Self.isValidEmail(normalised(email))
+        !isSubmitting && transactionalOptIn && Self.isValidEmail(normalised(email))
     }
 
     private let api: AuthAPI
@@ -40,6 +41,14 @@ public final class EmailEntryViewModel {
 
     public func submit() async {
         let normalisedEmail = normalised(email)
+        guard transactionalOptIn else {
+            inlineError = String(
+                localized: "onboarding.email.consent_required",
+                defaultValue: "Confirm transactional email consent to continue."
+            )
+            return
+        }
+
         guard Self.isValidEmail(normalisedEmail) else {
             inlineError = String(
                 localized: "onboarding.email.invalid",

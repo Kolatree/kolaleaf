@@ -27,16 +27,17 @@ public final class PhoneEntryViewModel {
 
     public var country: CountryDialCode = CountryDialCodes.default
     public var phoneInput: String = ""
-    /// Pre-checked per AUSTRAC-required transactional consent. Mirror
-    /// of EmailEntryViewModel.transactionalOptIn so the legal-comms
-    /// screen later can flip both opt-ins via a single control.
-    public var transactionalOptIn: Bool = true
+    /// Required explicit consent before sending verification and
+    /// transfer-status SMS. Starts off so the user makes an affirmative
+    /// choice instead of inheriting a pre-checked compliance box.
+    public var transactionalOptIn: Bool = false
 
     public private(set) var isSubmitting: Bool = false
     public private(set) var inlineError: String?
 
     public var canSubmit: Bool {
         guard !isSubmitting else { return false }
+        guard transactionalOptIn else { return false }
         if case .success = PhoneNumber.parse(dialCode: country.dialCode, localNumber: phoneInput) {
             return true
         }
@@ -52,6 +53,14 @@ public final class PhoneEntryViewModel {
     }
 
     public func submit() async {
+        guard transactionalOptIn else {
+            inlineError = String(
+                localized: "onboarding.phone.sms_consent_required",
+                defaultValue: "Confirm transactional SMS consent to continue."
+            )
+            return
+        }
+
         let parsed = PhoneNumber.parse(dialCode: country.dialCode, localNumber: phoneInput)
         let normalised: PhoneNumber
         switch parsed {

@@ -91,20 +91,20 @@ public struct ConfirmAddressView: View {
 
         VStack(alignment: .leading, spacing: KolaSpacing.m) {
             field(label: "Street address") {
-                TextField("12 Pitt Street", text: $vm.addressLine1)
+                TextField("Street address", text: $vm.addressLine1)
                     .textContentType(.streetAddressLine1)
                     .disabled(readOnly)
             }
             errorIfAny(.addressLine1)
 
             field(label: "Apt / Suite (optional)") {
-                TextField("Apt 4B", text: $vm.addressLine2)
+                TextField("Apartment, suite or unit", text: $vm.addressLine2)
                     .textContentType(.streetAddressLine2)
                     .disabled(readOnly)
             }
 
             field(label: "City") {
-                TextField("Sydney", text: $vm.city)
+                TextField("Suburb or city", text: $vm.city)
                     .textContentType(.addressCity)
                     .textInputAutocapitalization(.words)
                     .disabled(readOnly)
@@ -122,7 +122,7 @@ public struct ConfirmAddressView: View {
                 }
                 VStack(alignment: .leading, spacing: KolaSpacing.s) {
                     fieldLabel("Postcode")
-                    TextField("2000", text: $vm.postcode)
+                    TextField("Postcode", text: $vm.postcode)
                         .keyboardType(.numberPad)
                         .textContentType(.postalCode)
                         .font(KolaFont.row)
